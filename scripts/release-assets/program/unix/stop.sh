@@ -8,3 +8,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 program_validate_bundle
 program_stop_backend
+program_stop_relay

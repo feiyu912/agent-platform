@@ -215,3 +215,78 @@ func TestRawMessageToOpenAI_EmptyAssistantFiltered(t *testing.T) {
 		t.Errorf("expected assistant with tool_calls to pass, got Role=%q", msg3.Role)
 	}
 }
+
+func TestNormalizeOpenAIMessages_ReordersToolResultsAheadOfSyntheticSummary(t *testing.T) {
+	messages := []openAIMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "assistant", ToolCalls: []openAIToolCall{{
+			ID:   "tool-1",
+			Type: "function",
+			Function: openAIFunctionCall{
+				Name:      "_bash_",
+				Arguments: `{"command":"pwd"}`,
+			},
+		}}},
+		{Role: "user", Content: "[HITL] pwd -> approve"},
+		{Role: "tool", ToolCallID: "tool-1", Name: "_bash_", Content: "ok"},
+		{Role: "user", Content: "next prompt"},
+	}
+
+	normalized := normalizeOpenAIMessages(messages)
+
+	if len(normalized) != 5 {
+		t.Fatalf("expected 5 messages, got %#v", normalized)
+	}
+	if normalized[1].Role != "assistant" || len(normalized[1].ToolCalls) != 1 {
+		t.Fatalf("expected assistant tool-call message at index 1, got %#v", normalized[1])
+	}
+	if normalized[2].Role != "tool" || normalized[2].ToolCallID != "tool-1" {
+		t.Fatalf("expected tool result immediately after assistant, got %#v", normalized[2])
+	}
+	if normalized[3].Role != "user" || normalized[3].Content != "[HITL] pwd -> approve" {
+		t.Fatalf("expected synthetic summary to move after tool result, got %#v", normalized[3])
+	}
+}
+
+func TestNormalizeOpenAIMessages_DropsIncompleteToolCallBlocksAndOrphanTools(t *testing.T) {
+	messages := []openAIMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "assistant", ToolCalls: []openAIToolCall{
+			{
+				ID:   "tool-1",
+				Type: "function",
+				Function: openAIFunctionCall{
+					Name:      "_bash_",
+					Arguments: `{"command":"pwd"}`,
+				},
+			},
+			{
+				ID:   "tool-2",
+				Type: "function",
+				Function: openAIFunctionCall{
+					Name:      "_bash_",
+					Arguments: `{"command":"ls"}`,
+				},
+			},
+		}},
+		{Role: "tool", ToolCallID: "tool-1", Name: "_bash_", Content: "ok"},
+		{Role: "user", Content: "keep this context"},
+		{Role: "tool", ToolCallID: "orphan", Name: "_bash_", Content: "drop me"},
+		{Role: "user", Content: "current question"},
+	}
+
+	normalized := normalizeOpenAIMessages(messages)
+
+	if len(normalized) != 3 {
+		t.Fatalf("expected incomplete tool-call turn to be removed, got %#v", normalized)
+	}
+	if normalized[0].Role != "system" {
+		t.Fatalf("expected system message preserved, got %#v", normalized[0])
+	}
+	if normalized[1].Role != "user" || normalized[1].Content != "keep this context" {
+		t.Fatalf("expected buffered user context preserved, got %#v", normalized[1])
+	}
+	if normalized[2].Role != "user" || normalized[2].Content != "current question" {
+		t.Fatalf("expected current user message preserved, got %#v", normalized[2])
+	}
+}

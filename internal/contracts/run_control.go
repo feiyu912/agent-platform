@@ -69,13 +69,13 @@ type RunControl struct {
 	finished    atomic.Bool
 	observerCnt atomic.Int32
 
-	mu                    sync.Mutex
-	steerQueue            []api.SteerRequest
-	submitWaiters         map[string]*submitWaiter
-	pendingSubmits        map[string]SubmitResult
-	resolvedSubmits       map[string]SubmitResult
-	awaitingSubmits       map[string]AwaitingSubmitContext
-	state                 RunLoopState
+	mu              sync.Mutex
+	steerQueue      []api.SteerRequest
+	submitWaiters   map[string]*submitWaiter
+	pendingSubmits  map[string]SubmitResult
+	resolvedSubmits map[string]SubmitResult
+	awaitingSubmits map[string]AwaitingSubmitContext
+	state           RunLoopState
 
 	maxDisconnectedWait time.Duration
 	observerChanged     chan struct{}
@@ -362,6 +362,27 @@ func (c *RunControl) LookupAwaiting(awaitingID string) (AwaitingSubmitContext, b
 	return ctx.Clone(), true
 }
 
+func (c *RunControl) LookupResolvedSubmit(awaitingID string) (SubmitAck, bool) {
+	if c == nil || awaitingID == "" {
+		return SubmitAck{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	resolved, ok := c.resolvedSubmits[awaitingID]
+	if !ok {
+		return SubmitAck{}, false
+	}
+	detail := strings.TrimSpace(resolved.Detail)
+	if detail == "" {
+		detail = "Frontend submit already resolved"
+	}
+	return SubmitAck{
+		Accepted: false,
+		Status:   "already_resolved",
+		Detail:   detail,
+	}, true
+}
+
 func (c *RunControl) ExpectSubmit(ctx AwaitingSubmitContext) {
 	if c == nil || ctx.AwaitingID == "" {
 		return
@@ -606,6 +627,14 @@ func (m *InMemoryRunManager) LookupAwaiting(runID string, awaitingID string) (Aw
 		return AwaitingSubmitContext{}, false
 	}
 	return control.LookupAwaiting(awaitingID)
+}
+
+func (m *InMemoryRunManager) LookupResolvedSubmit(runID string, awaitingID string) (SubmitAck, bool) {
+	control, ok := m.lookupControl(runID)
+	if !ok {
+		return SubmitAck{}, false
+	}
+	return control.LookupResolvedSubmit(awaitingID)
 }
 
 func (m *InMemoryRunManager) Steer(req api.SteerRequest) SteerAck {

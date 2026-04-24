@@ -240,6 +240,7 @@ write_program_manifest() {
 ${error_log_json}
     "requiredPaths": [
       "$backend_entry",
+      "local-cli-acp-relay/relay.mjs",
       "$start_script",
       "$stop_script",
       "$deploy_script",

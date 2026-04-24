@@ -23,6 +23,9 @@ require_file "$PROGRAM_RELEASE_ASSETS_DIR/windows/stop.ps1"
 require_file "$PROGRAM_RELEASE_ASSETS_DIR/windows/program-common.ps1"
 require_file "$REPO_ROOT/.env.example"
 require_dir "$REPO_ROOT/configs"
+require_dir "$REPO_ROOT/local-cli-acp-relay"
+require_file "$REPO_ROOT/local-cli-acp-relay/relay.mjs"
+require_file "$REPO_ROOT/local-cli-acp-relay/.env.example"
 
 cd "$REPO_ROOT"
 
@@ -87,6 +90,7 @@ build_program_bundle() {
   backend_entry="backend/$binary_name"
 
   mkdir -p "$backend_dir" "$scripts_dir" "$bundle_root/configs"
+  mkdir -p "$bundle_root/local-cli-acp-relay"
 
   echo "[release] building program binary for $target_os..."
   CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
@@ -97,6 +101,9 @@ build_program_bundle() {
   echo "[release] assembling program bundle for $target_os..."
   cp "$REPO_ROOT/.env.example" "$bundle_root/.env.example"
   cp "$PROGRAM_RELEASE_ASSETS_DIR/README.txt" "$bundle_root/README.txt"
+  cp "$REPO_ROOT/local-cli-acp-relay/relay.mjs" "$bundle_root/local-cli-acp-relay/relay.mjs"
+  cp "$REPO_ROOT/local-cli-acp-relay/.env.example" "$bundle_root/local-cli-acp-relay/.env.example"
+  cp "$REPO_ROOT/local-cli-acp-relay/README.md" "$bundle_root/local-cli-acp-relay/README.md"
   write_program_manifest "$bundle_root/manifest.json" "$target_os" "$target_arch" "$backend_entry" "$(basename "$bundle_archive")"
   copy_config_templates "$bundle_root"
   create_runtime_tree "$bundle_root"

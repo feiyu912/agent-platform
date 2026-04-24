@@ -20,8 +20,8 @@ const defaultCwd = expandUserPath(pick("DEFAULT_CWD") || process.cwd());
 const config = {
   port: toNumber(pick("PORT"), DEFAULT_PORT),
   authToken: pick("AUTH_TOKEN"),
-  command: pick("CLAUDE_CODE_ACP_COMMAND") || "claude-code-acp",
-  commandArgs: splitArgs(pick("CLAUDE_CODE_ACP_ARGS")),
+  command: pick("CLAUDE_CODE_ACP_COMMAND") || "npx",
+  commandArgs: splitArgs(pick("CLAUDE_CODE_ACP_ARGS") || "-y @zed-industries/claude-code-acp"),
   defaultCwd,
   allowedCwdRoots: parseAllowedRoots(pick("ALLOWED_CWD_ROOTS"), defaultCwd),
   handshakeTimeoutMs: toNumber(pick("HANDSHAKE_TIMEOUT_MS"), DEFAULT_HANDSHAKE_TIMEOUT_MS),

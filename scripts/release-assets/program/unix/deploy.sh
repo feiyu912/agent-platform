@@ -7,8 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$SCRIPT_DIR"
 program_validate_bundle
+program_load_env
 program_prepare_runtime_dirs
 
 echo "[program-deploy] bundle validated"
 echo "[program-deploy] backend binary: $BACKEND_BIN"
+echo "[program-deploy] local relay entry: $RELAY_ENTRY"
 echo "[program-deploy] runtime directories prepared under $RUNTIME_ROOT and $RUN_DIR"

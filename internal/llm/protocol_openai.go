@@ -96,6 +96,8 @@ func (p *openAIProtocol) PrepareRequest(params protocolStreamParams) (preparedPr
 		return preparedProviderRequest{}, err
 	}
 
+	normalizedMessages := normalizeOpenAIMessages(params.messages)
+
 	effectiveToolChoice := "auto"
 	if params.toolChoice != "" {
 		effectiveToolChoice = params.toolChoice
@@ -105,7 +107,7 @@ func (p *openAIProtocol) PrepareRequest(params protocolStreamParams) (preparedPr
 	}
 	requestBody := map[string]any{
 		"model":          params.model.ModelID,
-		"messages":       params.messages,
+		"messages":       normalizedMessages,
 		"temperature":    0,
 		"stream":         true,
 		"stream_options": &streamOptions{IncludeUsage: true},
@@ -348,4 +350,68 @@ func mergeRawMessagesByMsgID(raw []map[string]any) []map[string]any {
 		cleaned = append(cleaned, entry)
 	}
 	return cleaned
+}
+
+// normalizeOpenAIMessages repairs historical tool-call ordering before sending
+// the transcript to OpenAI-compatible providers. Some persisted chats can
+// contain synthetic user messages (for example HITL summaries) inserted between
+// an assistant tool_call turn and its tool results, or incomplete tool-call
+// turns left behind by interrupted runs. OpenAI rejects both shapes.
+func normalizeOpenAIMessages(messages []openAIMessage) []openAIMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	out := make([]openAIMessage, 0, len(messages))
+	for index := 0; index < len(messages); {
+		current := messages[index]
+		if strings.TrimSpace(current.Role) != "assistant" || len(current.ToolCalls) == 0 {
+			if strings.TrimSpace(current.Role) != "tool" {
+				out = append(out, current)
+			}
+			index++
+			continue
+		}
+
+		expected := make(map[string]struct{}, len(current.ToolCalls))
+		for _, toolCall := range current.ToolCalls {
+			if id := strings.TrimSpace(toolCall.ID); id != "" {
+				expected[id] = struct{}{}
+			}
+		}
+		if len(expected) == 0 {
+			out = append(out, current)
+			index++
+			continue
+		}
+
+		matched := make([]openAIMessage, 0, len(expected))
+		buffered := make([]openAIMessage, 0, 2)
+		next := index + 1
+		for next < len(messages) {
+			candidate := messages[next]
+			role := strings.TrimSpace(candidate.Role)
+			if role == "assistant" && len(candidate.ToolCalls) > 0 {
+				break
+			}
+			if role == "tool" {
+				if _, ok := expected[strings.TrimSpace(candidate.ToolCallID)]; ok {
+					matched = append(matched, candidate)
+					delete(expected, strings.TrimSpace(candidate.ToolCallID))
+				}
+				next++
+				continue
+			}
+			buffered = append(buffered, candidate)
+			next++
+		}
+
+		if len(expected) == 0 {
+			out = append(out, current)
+			out = append(out, matched...)
+		}
+		out = append(out, buffered...)
+		index = next
+	}
+	return out
 }
