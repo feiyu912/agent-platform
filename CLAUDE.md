@@ -181,12 +181,12 @@ remember 根目录由 `MEMORY_DIR` 控制：
 - `ChatDetailResponse`
 - `UploadResponse` / `UploadTicket`
 
-### Agent sandboxConfig
+### Agent runtimeConfig
 
-`agent.yml` 当前可在 `sandboxConfig` 下声明 agent 级沙箱基础配置：
+`agent.yml` 当前可在 `runtimeConfig` 下声明 agent 级运行配置：
 
 ```yaml
-sandboxConfig:
+runtimeConfig:
   environmentId: shell
   level: RUN
   env:
@@ -199,8 +199,8 @@ sandboxConfig:
 
 - `env` 只接受字面量字符串 map；不支持 `${VAR}` 展开
 - key 必须非空，且不能包含空白字符或 `=`
-- value 必须是字符串；空字符串允许并原样传给 Container Hub
-- 最终合并顺序是 `agent.sandboxConfig.env < skill[i].SandboxEnv`，后声明的 skill 继续覆盖前者
+- value 必须是字符串；空字符串允许并原样注入 host bash 或 Container Hub
+- 最终合并顺序是 `agent.runtimeConfig.env < skill[i].RuntimeEnv`，后声明的 skill 继续覆盖前者
 - `/api/agents` 和 `/api/agent` 的 sandbox meta 不暴露 `env`，因为其中可能包含代理地址、凭据或私有 endpoint；`extraMounts` 仍继续对外暴露
 
 ## 6. API 定义
@@ -251,7 +251,7 @@ sandboxConfig:
 三态契约：
 
 - `mode=question`
-  - 来源：`_ask_user_question_`
+  - 来源：`ask_user_question`
   - `awaiting.ask`：`{"awaitingId":"...","mode":"question","timeout":...,"runId":"...","questions":[...]}`
   - question 不再携带 `viewportType` / `viewportKey`
   - `/api/submit.params`：`[{"id":"q1","answer":"..."},{"id":"q2","answers":[...]}]`（`id` 可省略，仅作审计字段）
@@ -273,14 +273,14 @@ sandboxConfig:
 
 - `mode=form`
   - 来源：Bash HITL html form
-  - `awaiting.ask`：`{"awaitingId":"...","mode":"form","viewportType":"html","viewportKey":"leave_form","timeout":...,"runId":"...","forms":[{"id":"form-1","html?":"...","initialPayload":{...}}],"viewportPayload":{"forms":[{"id":"form-1","command":"...","initialPayload":{...}}]}}`
+  - `awaiting.ask`：`{"awaitingId":"...","mode":"form","viewportType":"html","viewportKey":"leave_form","timeout":...,"runId":"...","forms":[{"id":"form-1","html?":"...","form":{...}}]}`
   - form 是唯一保留 `viewportType:"html"` + `viewportKey` 的形态
   - `/api/submit.params`：
-    - submit：`[{"id":"form-1","payload":{...}}]`（`id` 可省略，仅作审计字段）
-    - reject：`[{"id":"form-1","reason":"..."}]`（`id` 可省略，仅作审计字段）
-    - cancel：`[{"id":"form-1"}]`（`id` 可省略，仅作审计字段）
+    - submit：`[{"id":"form-1","action":"submit","form":{...}}]`（`id` 可省略，仅作审计字段）
+    - reject：`[{"id":"form-1","action":"reject"}]`（`id` 可省略，仅作审计字段）
+    - cancel：`[{"id":"form-1","action":"cancel"}]`（`id` 可省略，仅作审计字段）
   - `awaiting.answer`：
-    - answered：`{"awaitingId":"...","mode":"form","status":"answered","forms":[{"id":"form-1","command":"...","action":"submit|reject|cancel","payload?":{...},"reason?":"..."}]}`
+    - answered：`{"awaitingId":"...","mode":"form","status":"answered","forms":[{"id":"form-1","command":"...","action":"submit|reject|cancel","form?":{...}}]}`
     - error：`{"awaitingId":"...","mode":"form","status":"error","error":{"code":"user_dismissed|timeout|invalid_submit","message":"..."}}`
   - 整批取消：`params: []`，归一化为 `status:"error" + error.code:"user_dismissed"`
 
@@ -293,12 +293,13 @@ sandboxConfig:
 
 ### Agent 调度 task
 
-- `_agent_invoke_` 是批量调度原语，不走 `ToolExecutor.Invoke`；主 agent 识别到该 tool call 后，会先保留主时间线上的 `tool.start/args/end/snapshot`，再由 server 侧编排层并发启动 `1~3` 个子 agent。
+- `agent_invoke` 是显式配置的批量调度原语，不走 `ToolExecutor.Invoke`；只有 agent 在 `toolConfig.tools` 声明 `agent_invoke` 时才会暴露给模型，`mode: REACT/ONESHOT` 不再自动附加该能力。旧名 `_agent_invoke_` 不再作为兼容别名支持。
+- 主 agent 识别到该 tool call 后，会先保留主时间线上的 `tool.start/args/end/snapshot`，再由 server 侧编排层并发启动 `1~3` 个子 agent。
 - 编排层会先顺序 emit 每个 `task.start`，并为同一批任务附上相同 `groupId`；随后由多个 goroutine 并发消费子 stream，再汇聚回主 goroutine 发出带精确 `taskId` 的子流 delta。
 - 子 agent 复用现有 `task.start / task.complete / task.cancel / task.fail` 协议；`task.start` 额外携带 `groupId`、`subAgentKey` 和 `mainToolId`，终态 task 事件额外携带 `status`。
-- `runId` 始终保持主 RunID；前端通过 `taskId` 把子流事件归到子面板，通过 `mainToolId` 把主时间线上的 `_agent_invoke_` 节点和聚合卡片关联起来。
+- `runId` 始终保持主 RunID；前端通过 `taskId` 把子流事件归到子面板，通过 `mainToolId` 把主时间线上的 `agent_invoke` 节点和聚合卡片关联起来。
 - 全部子任务结束后，编排层会按输入顺序聚合子结果，并仅向主 `mainToolID` 单次 `InjectToolResult`；主上下文只消费这份聚合后的 `tool.result` 文本。
-- 当前版本严格禁止嵌套：`_agent_invoke_` 只对主 `REACT/ONESHOT` agent 可用，子 agent 也只能是 `REACT/ONESHOT`，且子 agent 的可用工具集中会滤掉 `_agent_invoke_`；`tasks` 长度必须满足 `1 ≤ n ≤ 3`。
+- 当前版本严格禁止嵌套：`agent_invoke` 只对显式配置该工具且 mode 为 `REACT/ONESHOT` 的主 agent 可用，子 agent 也只能是 `REACT/ONESHOT`，且子 agent 的可用工具集中会滤掉 `agent_invoke`；`tasks` 长度必须满足 `1 ≤ n ≤ 3`。
 - 三流分离是硬约束：子 agent 中间的 reasoning、tool 调用、content delta 只进入 SSE/events replay，不进入主 `llmRunStream.messages`，也不进入 `raw_messages`；主上下文只消费子 agent 的最终 `tool.result` 文本。
 - `dispatcher.activeTaskID` 仍然是单值；子流的 `content.start / reasoning.start / tool.start / action.start` 如果输入 `taskId` 为空，会自动兜底为当前活跃 taskId，因此不需要引入 task 栈。
 

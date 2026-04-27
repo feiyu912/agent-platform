@@ -59,6 +59,7 @@ func (s *Server) newWSHandler(hub *ws.Hub) *ws.Handler {
 
 func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/agents", s.wsAgents)
+	handler.RegisterRoute("/api/channels", s.wsChannels)
 	handler.RegisterRoute("/api/agent", s.wsAgent)
 	handler.RegisterRoute("/api/teams", s.wsTeams)
 	handler.RegisterRoute("/api/skills", s.wsSkills)
@@ -286,20 +287,26 @@ func validateDownloadedUpload(data []byte, expectedSize int64, expectedSHA256 st
 
 func (s *Server) wsAgents(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
 	payload, err := ws.DecodePayload[struct {
-		Tag string `json:"tag"`
+		Tag     string `json:"tag"`
+		Channel string `json:"channel"`
 	}](req)
 	if err != nil {
 		conn.SendError(req.ID, "invalid_request", 400, "invalid payload", nil)
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	items, listErr := s.listAgentSummaries(payload.Tag)
+	items, listErr := s.listAgentSummaries(payload.Tag, payload.Channel)
 	if listErr != nil {
 		conn.SendError(req.ID, "internal_error", 500, listErr.Error(), nil)
 		conn.CompleteRequest(req.ID)
 		return
 	}
 	conn.SendResponse(req.Type, req.ID, 0, "success", items)
+	conn.CompleteRequest(req.ID)
+}
+
+func (s *Server) wsChannels(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	conn.SendResponse(req.Type, req.ID, 0, "success", s.listChannelSummaries())
 	conn.CompleteRequest(req.ID)
 }
 
@@ -522,7 +529,7 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 		Registry:          s.deps.Registry,
 		Assembler:         assembler,
 		Mapper:            mapper,
-		SSE:               s.deps.Config.SSE,
+		Stream:            s.deps.Config.Stream,
 		StepWriter:        stepWriter,
 		EventBus:          eventBus,
 		Chats:             s.deps.Chats,
@@ -594,25 +601,13 @@ func (s *Server) wsSubmit(_ context.Context, conn *ws.Conn, req ws.RequestFrame)
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	if _, err := s.validateSubmitRequest(payload); err != nil {
+	response, code, msg, err := s.resolveSubmit(payload)
+	if err != nil {
 		conn.SendError(req.ID, "invalid_request", 400, err.Error(), nil)
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	ack := s.deps.Runs.Submit(payload)
-	code := 0
-	msg := "success"
-	if ack.Status == "already_resolved" {
-		code = 409
-		msg = "already_resolved"
-	}
-	conn.SendResponse(req.Type, req.ID, code, msg, api.SubmitResponse{
-		Accepted:   ack.Accepted,
-		Status:     ack.Status,
-		RunID:      payload.RunID,
-		AwaitingID: payload.AwaitingID,
-		Detail:     ack.Detail,
-	})
+	conn.SendResponse(req.Type, req.ID, code, msg, response)
 	conn.CompleteRequest(req.ID)
 }
 

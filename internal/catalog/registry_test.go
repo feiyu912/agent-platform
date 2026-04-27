@@ -169,7 +169,7 @@ func TestParseAgentFileNormalizesJavaContextTagsAndRuntimePrompts(t *testing.T) 
 	if err != nil {
 		t.Fatalf("parse agent file: %v", err)
 	}
-	if got := strings.Join(def.ContextTags, ","); got != "session,memory" {
+	if got := strings.Join(def.ContextTags, ","); got != "session" {
 		t.Fatalf("expected normalized context tags, got %q", got)
 	}
 	if def.RuntimePrompts.Skill.CatalogHeader != "skills-header-override" {
@@ -224,7 +224,8 @@ func TestNormalizeContextTagMapsLegacySessionTags(t *testing.T) {
 		"references":       "session",
 		"execution_policy": "session",
 		"skills":           "session",
-		"memory_context":   "memory",
+		"memory":           "",
+		"memory_context":   "",
 		"sandbox":          "",
 	}
 	for input, want := range cases {
@@ -263,7 +264,7 @@ func TestParseAgentFileDropsSandboxContextTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse agent file: %v", err)
 	}
-	if got := strings.Join(def.ContextTags, ","); got != "system,memory" {
+	if got := strings.Join(def.ContextTags, ","); got != "system" {
 		t.Fatalf("expected sandbox tag to be dropped, got %q", got)
 	}
 }
@@ -299,8 +300,22 @@ func TestLoadAgentsDoesNotExposeSandboxInContextTagsMeta(t *testing.T) {
 		t.Fatalf("loadAgents: %v", err)
 	}
 	def := agents["zenmi"]
-	if got := strings.Join(def.ContextTags, ","); got != "memory" {
+	if got := strings.Join(def.ContextTags, ","); got != "" {
 		t.Fatalf("expected sandbox tag to be removed from loaded agent, got %q", got)
+	}
+}
+
+func TestRuntimeSandboxSummaryMetaOmitsEnv(t *testing.T) {
+	meta := runtimeSandboxSummaryMeta(map[string]any{
+		"environmentId": "shell",
+		"level":         "run",
+		"env":           map[string]string{"HTTP_PROXY": "secret"},
+	})
+	if meta["environmentId"] != "shell" || meta["level"] != "RUN" {
+		t.Fatalf("unexpected sandbox summary meta: %#v", meta)
+	}
+	if _, ok := meta["env"]; ok {
+		t.Fatalf("expected runtime env to stay private, got %#v", meta)
 	}
 }
 
@@ -428,7 +443,7 @@ func TestLoadSkillsSkipsExampleDirectories(t *testing.T) {
 	}
 }
 
-func TestLoadSkillsLoadsBashHooksAndSandboxEnv(t *testing.T) {
+func TestLoadSkillsLoadsBashHooksAndRuntimeEnv(t *testing.T) {
 	root := t.TempDir()
 	skillDir := filepath.Join(root, "mock-skill")
 	if err := os.MkdirAll(filepath.Join(skillDir, ".bash-hooks"), 0o755); err != nil {
@@ -456,8 +471,8 @@ func TestLoadSkillsLoadsBashHooksAndSandboxEnv(t *testing.T) {
 	if got.BashHooksDir != wantHooksDir {
 		t.Fatalf("BashHooksDir = %q, want %q", got.BashHooksDir, wantHooksDir)
 	}
-	if got.SandboxEnv["NODE_ENV"] != "production" || got.SandboxEnv["DEBUG"] != "0" {
-		t.Fatalf("SandboxEnv = %#v", got.SandboxEnv)
+	if got.RuntimeEnv["NODE_ENV"] != "production" || got.RuntimeEnv["DEBUG"] != "0" {
+		t.Fatalf("RuntimeEnv = %#v", got.RuntimeEnv)
 	}
 }
 
@@ -566,8 +581,8 @@ func TestResolveSkillDefinitionPrefersAgentLocalSkillBeforeMarket(t *testing.T) 
 	if got.Name != "Local Skill" || got.Description != "Local Description" {
 		t.Fatalf("resolved local metadata = %#v", got)
 	}
-	if got.SandboxEnv["SOURCE"] != "local" {
-		t.Fatalf("SandboxEnv = %#v", got.SandboxEnv)
+	if got.RuntimeEnv["SOURCE"] != "local" {
+		t.Fatalf("RuntimeEnv = %#v", got.RuntimeEnv)
 	}
 	if got.BashHooksDir != filepath.Join(localSkillDir, ".bash-hooks") {
 		t.Fatalf("BashHooksDir = %q", got.BashHooksDir)

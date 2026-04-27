@@ -73,6 +73,45 @@ curl "http://127.0.0.1:11949/api/agent?agentKey=go_runner"
 curl http://127.0.0.1:11949/api/chats
 ```
 
+### Mobile Gateway 本地联调
+
+`agent-platform` 不会自行签发 gateway JWT。本地 mobile channel 联调时，需要先生成一对 RSA 密钥，并把预签名 token 写进 `.env`。
+
+```bash
+# 1. 在 agent-platform 根目录生成开发用密钥
+openssl genrsa -out configs/gateway-private-key.pem 2048
+openssl rsa -in configs/gateway-private-key.pem -pubout -out configs/gateway-public-key.pem
+
+# 2. 生成 platform -> gateway 使用的 RS256 JWT
+go run ./scripts/gen-gateway-token.go -key configs/gateway-private-key.pem -sub local
+```
+
+把输出的 token 填到 `.env`：
+
+```bash
+MOBILE_GATEWAY_JWT_TOKEN=<paste-token-here>
+```
+
+然后在本地忽略文件 `configs/channels.yml` 中加入 mobile channel：
+
+```yaml
+channels:
+  mobile:
+    name: 手机 App
+    type: gateway
+    default-agent: ""
+    agents: "*"
+    gateway:
+      url: ws://127.0.0.1:11945/ws/agent?userId=local&agentKey=personal&channel=mobile
+      jwt-token: ${MOBILE_GATEWAY_JWT_TOKEN}
+```
+
+注意事项：
+
+- `JWT.sub` 必须和 `gateway.url` 中的 `userId` 完全一致；上例要求 `sub=local`
+- `configs/gateway-private-key.pem` 和真实 `configs/channels.yml` 都是本地文件，不提交
+- `zenmind-gateway-server` 本地联调时请使用 `make run`，它会自动加载 `.env`
+
 ### 测试
 
 ```bash
@@ -99,11 +138,11 @@ RUN_SOCKET_TESTS=1 make test-integration
 - `AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE`
 - `AGENT_AUTH_JWKS_URI`
 - `AGENT_AUTH_ISSUER`
-- `CHAT_RESOURCE_TICKET_ENABLED`
-- `CHAT_IMAGE_TOKEN_SECRET`
+- `CHAT_RESOURCE_TICKET_SECRET`
+- `CHAT_RESOURCE_TICKET_TTL_SECONDS`
 - `AGENT_CONTAINER_HUB_*`
-- `AGENT_SSE_INCLUDE_TOOL_PAYLOAD_EVENTS`
-- `AGENT_SSE_INCLUDE_DEBUG_EVENTS`
+- `AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS`
+- `AGENT_STREAM_INCLUDE_DEBUG_EVENTS`
 - `AGENT_DEFAULT_*`
 - `REGISTRIES_DIR` / `OWNER_DIR` / `AGENTS_DIR` / `TEAMS_DIR` / `ROOT_DIR` / `SCHEDULES_DIR` / `CHATS_DIR` / `MEMORY_DIR` / `SKILLS_MARKET_DIR` / `PAN_DIR`
 - `PROVIDER_APIKEY_KEY_PART`
@@ -133,10 +172,12 @@ Provider `apiKey` 支持两种写法：
 - `configs/container-hub.example.yml`
 - `configs/cors.example.yml`
 - `configs/local-public-key.example.pem`
+- `configs/channels.example.yml`
 
 当前 Go runner 实际会读取：
 
 - `configs/bash.yml`
+- `configs/channels.yml`
 - `configs/container-hub.yml`
 - `configs/cors.yml`
 - `configs/local-public-key.pem`
@@ -202,7 +243,7 @@ Container Hub 默认基础挂载当前固定为 7 个：
 - `/owner` -> `OWNER_DIR`（`ro`，目录缺失时自动创建）
 - `/memory` -> `MEMORY_DIR/<agentKey>`（`ro`，目录缺失时自动创建）
 
-`sandboxConfig.extraMounts` 会真实影响 Container Hub session mounts：
+`runtimeConfig.extraMounts` 会真实影响 Container Hub session mounts：
 
 - `platform + mode`：恢复按需平台挂载，或覆盖默认 `/agent`、`/owner`、`/memory` 模式
 - `destination + mode`：覆盖默认基础挂载模式
@@ -210,7 +251,7 @@ Container Hub 默认基础挂载当前固定为 7 个：
 
 `context tags` 不是全局默认集合，而是每个 agent 从 `contextConfig.tags` 或 `contextTags` 读取。当前支持/归一化后的标签有 `system`、`context`、`owner`、`auth`、`all-agents`、`memory`；其中 `agent_identity`、`run_session`、`scene`、`references`、`execution_policy`、`skills` 会归一化为 `context`，`memory_context` 会归一化为 `memory`。
 
-`sandbox` 不再属于 `context tags`。只要 agent 声明了 `sandboxConfig`，运行时就会自动注入 sandbox context。
+`sandbox` 不再属于 `context tags`。只要 agent 声明了 `runtimeConfig.environmentId`，运行时就会自动注入 sandbox context。
 
 部署时的敏感信息应通过环境变量或 Secret 注入，不要写入仓库文件。
 
@@ -234,7 +275,7 @@ docker compose logs -f
 - 若 provider 使用 `apiKey: AES(...)`：确认 `.env` 或进程环境中已提供 `PROVIDER_APIKEY_KEY_PART`，且与当前密文匹配；旧 `AES(v1:...)` 需先重生成。
 - Schedule 看起来没有触发：先确认服务进程本身正在运行；如果是本地 `make run`，日志不会出现在 `docker compose logs` 里。随后检查 stdout 中是否有 `schedule orchestrator started`、`[schedule] registered ...`、`[schedule] dispatch ...`。
 - Query 看起来不像真流式：先检查是否启用了 `AGENT_H2A_RENDER_FLUSH_INTERVAL_MS`、`AGENT_H2A_RENDER_MAX_BUFFERED_CHARS` 或 `AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS` 这类传输层缓冲参数；默认 SSE writer 会逐事件 flush。
-- `_bash_` 执行失败：检查 `AGENT_CONTAINER_HUB_BASE_URL`、`default-environment-id`，以及 `.env` 中的目录变量是否为宿主机真实路径。
+- `bash` 执行失败：检查 `AGENT_CONTAINER_HUB_BASE_URL`、`default-environment-id`，以及 `.env` 中的目录变量是否为宿主机真实路径。
 - chat 没有持久化：检查 `CHATS_DIR` 是否可写。
 - remember 没有输出文件：确认请求体里同时传了 `requestId` 和 `chatId`。
 - 上传后无法下载：确认文件已落到 `CHATS_DIR/<chatId>/`，并检查 `/api/resource?file=...` 是否原样使用。

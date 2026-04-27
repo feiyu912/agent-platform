@@ -319,6 +319,15 @@ type AgentDetailResponse struct {
 	Meta        map[string]any   `json:"meta"`
 }
 
+type ChannelSummary struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	DefaultAgent string   `json:"defaultAgent,omitempty"`
+	Agents       []string `json:"agents"`
+	Connected    bool     `json:"connected"`
+}
+
 type TeamSummary struct {
 	TeamID    string         `json:"teamId"`
 	Name      string         `json:"name"`
@@ -401,7 +410,7 @@ type MarkChatReadResponse struct {
 type ChatDetailResponse struct {
 	ChatID         string             `json:"chatId"`
 	ChatName       string             `json:"chatName"`
-	ChatImageToken string             `json:"chatImageToken,omitempty"`
+	ResourceTicket string             `json:"resourceTicket,omitempty"`
 	RawMessages    []map[string]any   `json:"rawMessages,omitempty"`
 	Events         []stream.EventData `json:"events"`
 	ActiveRun      *ActiveRunInfo     `json:"activeRun,omitempty"`

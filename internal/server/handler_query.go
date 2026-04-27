@@ -11,7 +11,9 @@ import (
 
 	"agent-platform-runner-go/internal/api"
 	"agent-platform-runner-go/internal/catalog"
+	"agent-platform-runner-go/internal/channel"
 	"agent-platform-runner-go/internal/chat"
+	"agent-platform-runner-go/internal/config"
 	"agent-platform-runner-go/internal/contracts"
 	"agent-platform-runner-go/internal/llm"
 	"agent-platform-runner-go/internal/memory"
@@ -96,6 +98,7 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 		teamID = existingSummary.TeamID
 	}
 	agentKey := strings.TrimSpace(req.AgentKey)
+	usedGlobalDefault := false
 	if agentKey == "" && existingSummary != nil {
 		agentKey = existingSummary.AgentKey
 	}
@@ -106,10 +109,23 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	}
 	if agentKey == "" {
 		agentKey = s.deps.Registry.DefaultAgentKey()
+		usedGlobalDefault = agentKey != ""
+	}
+	channelID := channel.ChannelForChatID(chatID)
+	if usedGlobalDefault && channelID != "" && s.deps.Channels != nil {
+		if channelDefault := s.deps.Channels.DefaultAgent(channelID); channelDefault != "" {
+			agentKey = channelDefault
+		}
 	}
 	agentDef, ok := s.deps.Registry.AgentDefinition(agentKey)
 	if !ok {
 		return preparedQuery{}, &statusError{status: http.StatusBadRequest, message: "agent not found"}
+	}
+	if channelID != "" && s.deps.Channels != nil && !s.deps.Channels.IsAgentAllowed(channelID, agentKey) {
+		return preparedQuery{}, &statusError{
+			status:  http.StatusForbidden,
+			message: "agent " + `"` + agentKey + `" is not allowed on channel "` + channelID + `"`,
+		}
 	}
 
 	req.ChatID = chatID
@@ -317,7 +333,7 @@ func minInt(a int, b int) int {
 	return b
 }
 
-func sandboxAgentEnv(value any) map[string]string {
+func runtimeAgentEnv(value any) map[string]string {
 	switch env := value.(type) {
 	case map[string]string:
 		return contracts.CloneStringMap(env)
@@ -327,9 +343,9 @@ func sandboxAgentEnv(value any) map[string]string {
 }
 
 func resolveSkillRuntimeSettings(agentEnv map[string]string, agentDir string, marketDir string, skillKeys []string) ([]string, map[string]string) {
-	sandboxEnv := contracts.CloneStringMap(agentEnv)
+	runtimeEnv := contracts.CloneStringMap(agentEnv)
 	if len(skillKeys) == 0 {
-		return nil, sandboxEnv
+		return nil, runtimeEnv
 	}
 	seen := map[string]struct{}{}
 	var hookDirs []string
@@ -354,14 +370,14 @@ func resolveSkillRuntimeSettings(agentEnv map[string]string, agentDir string, ma
 		if strings.TrimSpace(def.BashHooksDir) != "" {
 			hookDirs = append(hookDirs, def.BashHooksDir)
 		}
-		for key, value := range def.SandboxEnv {
-			if sandboxEnv == nil {
-				sandboxEnv = make(map[string]string, len(agentEnv)+len(def.SandboxEnv))
+		for key, value := range def.RuntimeEnv {
+			if runtimeEnv == nil {
+				runtimeEnv = make(map[string]string, len(agentEnv)+len(def.RuntimeEnv))
 			}
-			sandboxEnv[key] = value
+			runtimeEnv[key] = value
 		}
 	}
-	return hookDirs, sandboxEnv
+	return hookDirs, runtimeEnv
 }
 
 func sortedStringKeys(values map[string]string) []string {
@@ -396,9 +412,20 @@ func (s *Server) newAssemblerAndMapper(prepared preparedQuery) (*stream.StreamEv
 			}
 		}
 	}
-	toolTimeoutMs := int64(contracts.NormalizeBudget(prepared.session.ResolvedBudget).Tool.TimeoutMs)
+	toolTimeoutMs := resolveHITLTimeoutFromBudget(prepared.session.ResolvedBudget, &s.deps.Config)
 	mapper := llm.NewDeltaMapper(prepared.req.RunID, prepared.req.ChatID, toolTimeoutMs, s.toolLookupWithOverrides(prepared.session.ToolOverrides), s.deps.FrontendTools)
 	return assembler, mapper
+}
+
+func resolveHITLTimeoutFromBudget(budget contracts.Budget, cfg *config.Config) int64 {
+	normalized := contracts.NormalizeBudget(budget)
+	if normalized.Hitl.TimeoutMs > 0 {
+		return int64(normalized.Hitl.TimeoutMs)
+	}
+	if cfg != nil && cfg.BashHITL.DefaultTimeoutMs > 0 {
+		return int64(cfg.BashHITL.DefaultTimeoutMs)
+	}
+	return 120000
 }
 
 func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepared preparedQuery) {
@@ -450,7 +477,7 @@ func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepar
 		Registry:          s.deps.Registry,
 		Assembler:         assembler,
 		Mapper:            mapper,
-		SSE:               s.deps.Config.SSE,
+		Stream:            s.deps.Config.Stream,
 		StepWriter:        stepWriter,
 		EventBus:          eventBus,
 		Chats:             s.deps.Chats,
@@ -536,7 +563,7 @@ func (s *Server) handleQuerySync(w http.ResponseWriter, ctx context.Context, pre
 	processor := &runEventProcessor{
 		assistantText: &assistantText,
 		stepWriter:    chat.NewStepWriter(s.deps.Chats, prepared.req.ChatID, prepared.req.RunID, prepared.agentDef.Mode, isHiddenRequest(prepared.req)),
-		sse:           s.deps.Config.SSE,
+		stream:        s.deps.Config.Stream,
 		chatUsage:     chatUsage,
 		runUsage:      &runUsage,
 	}
@@ -669,18 +696,12 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.Success(response))
 		return
 	}
-	if _, err := s.validateSubmitRequest(req); err != nil {
+	response, _, _, err := s.resolveSubmit(req)
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
 		return
 	}
-	ack := s.deps.Runs.Submit(req)
-	writeJSON(w, http.StatusOK, api.Success(api.SubmitResponse{
-		Accepted:   ack.Accepted,
-		Status:     ack.Status,
-		RunID:      req.RunID,
-		AwaitingID: req.AwaitingID,
-		Detail:     ack.Detail,
-	}))
+	writeJSON(w, http.StatusOK, api.Success(response))
 }
 
 func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {

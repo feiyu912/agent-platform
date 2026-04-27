@@ -23,7 +23,7 @@ func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[strin
 	if len(command) > maxInt(t.cfg.Bash.MaxCommandChars, 16000) {
 		return ToolExecutionResult{Output: "Command is too long", Error: "command_too_long", ExitCode: -1}, nil
 	}
-	securityReview := bashsec.ReviewBashSecurity(command)
+	securityReview := bashsec.ReviewBashSecurityWithKnownVariables(command, bashSecurityKnownVariables(execCtx))
 	switch securityReview.Decision {
 	case bashsec.ReviewAllow:
 	case bashsec.ReviewRequiresApproval:
@@ -97,6 +97,13 @@ func consumeBashSecurityApproval(execCtx *ExecutionContext, fingerprint string) 
 	return true
 }
 
+func bashSecurityKnownVariables(execCtx *ExecutionContext) map[string]string {
+	if execCtx == nil || len(execCtx.RuntimeEnvOverrides) == 0 {
+		return nil
+	}
+	return execCtx.RuntimeEnvOverrides
+}
+
 var unsupportedBashCommands = map[string]bool{
 	".": true, "source": true, "eval": true, "exec": true,
 	"coproc": true, "fg": true, "bg": true, "jobs": true,
@@ -106,7 +113,7 @@ const maxBashOutputChars = 8000
 
 func validateStrictCommand(command string, cfg config.BashConfig, workingDirectory string) error {
 	if strings.ContainsAny(command, "\n;&|<>(){}") {
-		return fmt.Errorf("Unsupported syntax for _bash_")
+		return fmt.Errorf("Unsupported syntax for bash")
 	}
 	fields := strings.Fields(command)
 	if len(fields) == 0 {
@@ -193,10 +200,10 @@ func stringMapArg(args map[string]any, key string) map[string]string {
 
 func mergeCommandEnv(execCtx *ExecutionContext) []string {
 	env := append([]string(nil), os.Environ()...)
-	if execCtx == nil || len(execCtx.SandboxEnvOverrides) == 0 {
+	if execCtx == nil || len(execCtx.RuntimeEnvOverrides) == 0 {
 		return env
 	}
-	for key, value := range execCtx.SandboxEnvOverrides {
+	for key, value := range execCtx.RuntimeEnvOverrides {
 		found := false
 		prefix := key + "="
 		for idx, item := range env {

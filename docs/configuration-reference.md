@@ -42,9 +42,8 @@
 | `AGENT_AUTH_JWKS_URI` | 空 | `End user` | JWKS 模式的公钥地址 |
 | `AGENT_AUTH_ISSUER` | 空 | `End user` | JWT issuer 校验值 |
 | `AGENT_AUTH_JWKS_CACHE_SECONDS` | `0` | `Advanced / operator` | JWKS 缓存秒数，仅在 JWKS 模式下生效 |
-| `CHAT_IMAGE_TOKEN_SECRET` | 空 | `End user` | chat image token 的签名密钥 |
-| `CHAT_IMAGE_TOKEN_TTL_SECONDS` | `86400` | `Advanced / operator` | token 过期时间 |
-| `CHAT_RESOURCE_TICKET_ENABLED` | `true` | `End user` | `/api/resource` 是否允许 resource ticket 访问 |
+| `CHAT_RESOURCE_TICKET_SECRET` | 空 | `End user` | resource ticket 签名密钥；设置后启用 `/api/resource` ticket 校验 |
+| `CHAT_RESOURCE_TICKET_TTL_SECONDS` | `86400` | `Advanced / operator` | resource ticket 过期时间；未设置 secret 时不生效 |
 
 本地 JWT 公钥规则：
 
@@ -95,7 +94,7 @@ Container Hub 默认基础挂载为：
 说明：
 
 - `/memory` 当前只影响沙箱挂载与 prompt 中的路径暴露；runner 自身 memory store 仍保持现有 `MEMORY_DIR` 存储布局
-- `sandboxConfig.extraMounts` 会真实影响 Container Hub session payload，并在基础挂载生成后应用覆盖规则
+- `runtimeConfig.extraMounts` 会真实影响 Container Hub session payload，并在基础挂载生成后应用覆盖规则
 - `platform: agent` / `platform: owner` / `platform: memory` 主要用于覆盖默认 `/agent` / `/owner` / `/memory` 的只读模式，不会新增第二个挂载
 - `destination + mode` 是覆盖默认基础挂载模式的唯一合法写法
 - `source + destination + mode` 只能新增非默认目标路径挂载；若目标是默认基础挂载路径会直接报错
@@ -132,7 +131,7 @@ Container Hub 默认基础挂载为：
 
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `AGENT_BASH_WORKING_DIRECTORY` | `.` | `Advanced / operator` | `_bash_` 默认工作目录 |
+| `AGENT_BASH_WORKING_DIRECTORY` | `.` | `Advanced / operator` | `bash` 默认工作目录 |
 | `AGENT_BASH_ALLOWED_PATHS` | `.,/tmp` | `Advanced / operator` | 允许访问的路径白名单 |
 | `AGENT_BASH_ALLOWED_COMMANDS` | `ls,pwd,cat,head,tail,top,free,df,git,rg,find` | `Advanced / operator` | 允许执行的命令白名单 |
 | `AGENT_BASH_PATH_CHECKED_COMMANDS` | `ls,cat,head,tail,git,rg,find` | `Advanced / operator` | 开启路径校验的命令 |
@@ -172,14 +171,14 @@ agent definition 侧另有 `memoryConfig`：
 
 ## 排障变量
 
-### SSE / H2A Render
+### Stream / SSE / H2A Render
 
-`AGENT_SSE_INCLUDE_TOOL_PAYLOAD_EVENTS` 和 `AGENT_SSE_INCLUDE_DEBUG_EVENTS` 会出现在 `.env.example` 中，方便最终用户发现和按需启用 payload/debug 实时事件；其余 `AGENT_SSE_*` / `AGENT_H2A_RENDER_*` 调优项仍只保留在本参考文档中。
+`AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS` 和 `AGENT_STREAM_INCLUDE_DEBUG_EVENTS` 会出现在 `.env.example` 中，方便最终用户发现和按需启用 payload/debug 实时事件；这些开关同时影响 SSE 与 WebSocket stream。其余 `AGENT_SSE_*` / `AGENT_H2A_RENDER_*` 调优项仍只保留在本参考文档中。
 
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `AGENT_SSE_INCLUDE_TOOL_PAYLOAD_EVENTS` | `true` | `Debug / troubleshooting` | 是否把工具 payload 事件直接透传到 SSE |
-| `AGENT_SSE_INCLUDE_DEBUG_EVENTS` | `false` | `Debug / troubleshooting` | 是否把 `debug.preCall` / `debug.postCall` 暴露给实时流客户端 |
+| `AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS` | `true` | `Debug / troubleshooting` | 是否把工具 payload 事件直接透传到实时流客户端 |
+| `AGENT_STREAM_INCLUDE_DEBUG_EVENTS` | `false` | `Debug / troubleshooting` | 是否把 `debug.preCall` / `debug.postCall` 暴露给实时流客户端 |
 | `AGENT_SSE_HEARTBEAT_INTERVAL_MS` | `15000` | `Debug / troubleshooting` | SSE heartbeat 间隔 |
 | `AGENT_H2A_RENDER_FLUSH_INTERVAL_MS` | `0` | `Debug / troubleshooting` | H2A render 定时 flush 间隔；`0` 表示逐事件 flush |
 | `AGENT_H2A_RENDER_MAX_BUFFERED_CHARS` | `0` | `Debug / troubleshooting` | H2A render 最大缓冲字符数 |
@@ -250,6 +249,29 @@ agent definition 侧另有 `memoryConfig`：
 - 建连成功后，网关端会先收到一条 `push.connected`
 - 断线重连期间的 `broadcast` 为有损投递，当前不提供离线缓冲
 - `AGENT_WS_WRITE_TIMEOUT_MS`、`AGENT_WS_WRITE_QUEUE_SIZE`、`AGENT_WS_MAX_MESSAGE_SIZE`、`AGENT_WS_MAX_OBSERVES_PER_CONN` 这些现有 `AGENT_WS_*` 参数同样适用于反向连接
+
+### Channel 配置
+
+多渠道部署优先使用 `configs/channels.yml`。这个文件只描述 platform 侧关心的 channel 元数据、反向 WS 入口和 agent 准入，不存放 bridge 的外部平台凭证，也不存放 gateway 的客户端认证策略。
+
+字段约定：
+
+- `channels.<id>`：channel ID，同时也是 `chatId` 前缀路由键，例如 `wecom#user123` 的 channel 是 `wecom`
+- `name`：展示名称
+- `type`：`bridge` 或 `gateway`
+- `default-agent`：仅在请求最终回退到全局默认 agent 时，才会被这个 channel 默认值覆盖
+- `agents`：`"*"` 表示允许全部 agent；数组表示白名单
+- `gateway.url`：platform 主动连出的完整反向 WS 地址
+- `gateway.jwt-token`：用于反向 WS 握手和旁路 HTTP 请求的 Bearer token
+- `gateway.base-url`：可选；未配置时从 `gateway.url` 自动派生
+- `gateway.handshake-timeout-ms`、`gateway.reconnect-min-ms`、`gateway.reconnect-max-ms`：可选；未配置时复用全局 gateway 默认值
+
+行为说明：
+
+- `configs/channels.yml` 缺失时，仍保持 legacy 单 gateway 配置兼容
+- `channels.yml` 中的 gateway entry 会在启动时合成为 `config.Gateways`
+- 若 `channels.yml` 与现有 gateway 配置出现重复 channel 或重复 gateway ID，启动会直接失败
+- `configs/channels.example.yml` 提供了 bridge 与 gateway 两种 channel 形态示例
 
 ## 不建议公开暴露的变量
 
@@ -338,7 +360,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 以下变量族当前都已接入 Go runner；其中只有一部分会默认出现在 `.env.example` 中：
 
 - `AGENT_AUTH_*`
-- `CHAT_IMAGE_TOKEN_*`
+- `CHAT_RESOURCE_TICKET_*`
 - `AGENT_CONTAINER_HUB_*`
 - `AGENT_DEFAULT_*`
 - `AGENT_SCHEDULE_*`
@@ -347,6 +369,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 - `AGENT_MEMORY_*`
 - `CHAT_STORAGE_*`
 - `LOGGING_AGENT_*`
+- `AGENT_STREAM_*`
 - `AGENT_SSE_*`
 - `AGENT_H2A_RENDER_*`
 - `AGENT_WS_*`
@@ -388,20 +411,18 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 当前支持/归一化后的标签：
 
 - `system`
-- `context`
+- `session`
 - `owner`
-- `auth`
 - `all-agents`
-- `memory`
 
 兼容别名映射：
 
-- `agent_identity` / `run_session` / `scene` / `references` / `execution_policy` / `skills` -> `context`
-- `memory_context` -> `memory`
+- `context` / `auth` / `agent_identity` / `run_session` / `scene` / `references` / `execution_policy` / `skills` -> `session`
+- `sandbox` / `memory` / `memory_context` -> 丢弃（不再作为 context tag 生效）
 
 说明：
 
-- `context` 负责暴露运行上下文与 sandbox 路径，例如 `sandbox_owner_dir=/owner`、`sandbox_memory_dir=/memory`
+- `session` 负责暴露运行上下文
 - `owner` 负责注入 `OWNER_DIR` 下的 markdown 内容
-- `memory` 负责注入运行期 memory context
-- `sandbox` 不再属于 `context tags`；只要 agent 配置了 `sandboxConfig`，运行时就会自动注入 sandbox context
+- `sandbox` 不再属于 `context tags`；只要 agent 配置了 `runtimeConfig.environmentId`，运行时就会自动注入 sandbox context
+- runtime memory context 不再属于 `context tags`；只要 agent 开启 `memoryConfig.enabled`（或使用默认开启行为），运行时就会自动注入 memory context

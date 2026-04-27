@@ -21,6 +21,7 @@ import (
 
 	"agent-platform-runner-go/internal/api"
 	"agent-platform-runner-go/internal/catalog"
+	"agent-platform-runner-go/internal/channel"
 	"agent-platform-runner-go/internal/chat"
 	"agent-platform-runner-go/internal/config"
 	"agent-platform-runner-go/internal/contracts"
@@ -49,6 +50,8 @@ type Dependencies struct {
 	CatalogReloader contracts.CatalogReloader
 	Notifications   contracts.NotificationSink
 	SkillCandidates skills.CandidateStore
+	Channels        ChannelRegistry
+	ChannelStatus   ChannelStatusProvider
 	// GatewayResolver 按 chatId 查对应 gateway 的 BaseURL/Token，ws_routes 的文件下载
 	// 路径用它替代旧的 cfg.GatewayWS.BaseURL/JwtToken。nil 时 /api/download 走 legacy 单 gateway 的 cfg 字段（兼容老部署）。
 	GatewayResolver GatewayResolver
@@ -61,6 +64,18 @@ type Dependencies struct {
 // 由 internal/gateway.Registry 提供实现；放在 server 包避免 server → gateway 的直接 import。
 type GatewayResolver interface {
 	Resolve(chatID string) (baseURL string, token string, ok bool)
+}
+
+type ChannelRegistry interface {
+	Lookup(channelID string) (*channel.Definition, bool)
+	IsAgentAllowed(channelID, agentKey string) bool
+	DefaultAgent(channelID string) string
+	AllowedAgentKeys(channelID string) []string
+	All() []*channel.Definition
+}
+
+type ChannelStatusProvider interface {
+	Connected(channelID string) bool
 }
 
 // GatewayAdmin 是 Admin API 依赖的管理接口；internal/gateway.Registry 实现之。
@@ -83,13 +98,14 @@ type GatewayAdminEntry struct {
 }
 
 type Server struct {
-	router        *http.ServeMux
-	deps          Dependencies
-	authVerifier  *JWTVerifier
-	ticketService *ResourceTicketService
-	wsHandler     *ws.Handler
-	proxyMu       sync.RWMutex
-	proxyRuns     map[string]*proxyRunRoute
+	router            *http.ServeMux
+	deps              Dependencies
+	authVerifier      *JWTVerifier
+	ticketService     *ResourceTicketService
+	wsHandler         *ws.Handler
+	deferredAwaitings *DeferredAwaitingStore
+	proxyMu           sync.RWMutex
+	proxyRuns         map[string]*proxyRunRoute
 }
 
 type syncQueryContextKey struct{}
@@ -139,12 +155,14 @@ func New(deps Dependencies) (*Server, error) {
 		deps.Notifications = contracts.NewNoopNotificationSink()
 	}
 	s := &Server{
-		router:        http.NewServeMux(),
-		deps:          deps,
-		authVerifier:  authVerifier,
-		ticketService: NewResourceTicketService(deps.Config.ChatImage),
-		proxyRuns:     map[string]*proxyRunRoute{},
+		router:            http.NewServeMux(),
+		deps:              deps,
+		authVerifier:      authVerifier,
+		ticketService:     NewResourceTicketService(deps.Config.ResourceTicket),
+		deferredAwaitings: NewDeferredAwaitingStore(),
+		proxyRuns:         map[string]*proxyRunRoute{},
 	}
+	s.hydrateDeferredAwaitings()
 	if deps.Config.WebSocket.Enabled {
 		if hub, ok := deps.Notifications.(*ws.Hub); ok {
 			s.wsHandler = s.newWSHandler(hub)
@@ -176,6 +194,13 @@ func (s *Server) WSHandler() *ws.Handler {
 		return nil
 	}
 	return s.wsHandler
+}
+
+func (s *Server) SetChannelStatusProvider(provider ChannelStatusProvider) {
+	if s == nil {
+		return
+	}
+	s.deps.ChannelStatus = provider
 }
 
 // ExecuteInternalQuery reuses the normal query handling pipeline for
@@ -391,7 +416,7 @@ func (s *Server) withPrincipal(r *http.Request, w http.ResponseWriter) *http.Req
 		return r
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/api/resource" {
-		if !s.deps.Config.ChatImage.ResourceTicketEnabled {
+		if !s.deps.Config.ResourceTicket.Enabled() {
 			return r
 		}
 		if strings.TrimSpace(r.URL.Query().Get("t")) != "" {
@@ -444,6 +469,7 @@ func resourceBelongsToChat(fileParam string, chatID string) bool {
 
 func (s *Server) routes() {
 	s.router.HandleFunc("/api/agents", s.method(http.MethodGet, s.handleAgents))
+	s.router.HandleFunc("/api/channels", s.method(http.MethodGet, s.handleChannels))
 	s.router.HandleFunc("/api/agent", s.method(http.MethodGet, s.handleAgent))
 	s.router.HandleFunc("/api/teams", s.method(http.MethodGet, s.handleTeams))
 	s.router.HandleFunc("/api/skills", s.method(http.MethodGet, s.handleSkills))
@@ -576,7 +602,7 @@ func (s *Server) listTools(kind string, tag string) []api.ToolSummary {
 
 func (s *Server) lookupTool(toolName string) (api.ToolDetailResponse, bool) {
 	switch strings.ToLower(strings.TrimSpace(toolName)) {
-	case "_sandbox_bash_", "_bash_container_":
+	case "_sandbox_bash_", "bash_sandbox":
 		return api.ToolDetailResponse{}, false
 	}
 	if tl, ok := s.deps.Tools.(contracts.ToolDefinitionLookup); ok {
@@ -726,8 +752,8 @@ func (s *Server) buildAgentDetailMeta(def catalog.AgentDefinition) (string, map[
 	if len(def.Skills) > 0 {
 		meta["perAgentSkills"] = append([]string(nil), def.Skills...)
 	}
-	if def.Sandbox != nil {
-		meta["sandbox"] = normalizedSandboxMeta(def.Sandbox)
+	if hasRuntimeSandbox(def.Runtime) {
+		meta["sandbox"] = normalizedRuntimeMeta(def.Runtime)
 	}
 	return modelName, meta
 }
@@ -747,10 +773,10 @@ func normalizedAgentTools(def catalog.AgentDefinition) []string {
 		seen[key] = struct{}{}
 		tools = append(tools, name)
 	}
-	if len(def.Skills) > 0 || hasSandboxConfig(def.Sandbox) {
-		if _, ok := seen["_bash_"]; !ok {
-			tools = append(tools, "_bash_")
-			seen["_bash_"] = struct{}{}
+	if len(def.Skills) > 0 || hasRuntimeSandbox(def.Runtime) || hasRuntimeEnvOverrides(def.Runtime) {
+		if _, ok := seen["bash"]; !ok {
+			tools = append(tools, "bash")
+			seen["bash"] = struct{}{}
 		}
 	}
 	return tools
@@ -760,31 +786,42 @@ func effectiveAgentTools(def catalog.AgentDefinition) []string {
 	return normalizedAgentTools(def)
 }
 
-func hasSandboxConfig(sandbox map[string]any) bool {
-	return len(sandbox) > 0
+func hasRuntimeSandbox(runtime map[string]any) bool {
+	if len(runtime) == 0 {
+		return false
+	}
+	return strings.TrimSpace(stringValue(runtime["environmentId"])) != ""
 }
 
-func normalizedSandboxMeta(sandbox map[string]any) map[string]any {
-	if sandbox == nil {
+func hasRuntimeEnvOverrides(runtime map[string]any) bool {
+	if len(runtime) == 0 {
+		return false
+	}
+	env, ok := runtime["env"].(map[string]string)
+	return ok && len(env) > 0
+}
+
+func normalizedRuntimeMeta(runtime map[string]any) map[string]any {
+	if runtime == nil {
 		return nil
 	}
 	out := map[string]any{
-		"environmentId": stringValue(sandbox["environmentId"]),
-		"level":         strings.ToUpper(stringValue(sandbox["level"])),
+		"environmentId": stringValue(runtime["environmentId"]),
+		"level":         strings.ToUpper(stringValue(runtime["level"])),
 	}
 	// Intentionally do not expose sandbox env values via API metadata.
-	if mounts := normalizeSandboxMounts(sandbox["extraMounts"]); len(mounts) > 0 {
+	if mounts := normalizeRuntimeMounts(runtime["extraMounts"]); len(mounts) > 0 {
 		out["extraMounts"] = mounts
 	}
 	return out
 }
 
-func normalizeSandboxMounts(value any) []map[string]any {
+func normalizeRuntimeMounts(value any) []map[string]any {
 	switch mounts := value.(type) {
 	case []map[string]any:
 		out := make([]map[string]any, 0, len(mounts))
 		for _, mount := range mounts {
-			out = append(out, normalizeSandboxMount(mount))
+			out = append(out, normalizeRuntimeMount(mount))
 		}
 		return out
 	case []any:
@@ -794,7 +831,7 @@ func normalizeSandboxMounts(value any) []map[string]any {
 			if !ok {
 				continue
 			}
-			out = append(out, normalizeSandboxMount(mount))
+			out = append(out, normalizeRuntimeMount(mount))
 		}
 		return out
 	default:
@@ -802,7 +839,7 @@ func normalizeSandboxMounts(value any) []map[string]any {
 	}
 }
 
-func normalizeSandboxMount(mount map[string]any) map[string]any {
+func normalizeRuntimeMount(mount map[string]any) map[string]any {
 	return map[string]any{
 		"platform":    stringValue(mount["platform"]),
 		"source":      nullableStringValue(mount["source"]),
@@ -811,8 +848,8 @@ func normalizeSandboxMount(mount map[string]any) map[string]any {
 	}
 }
 
-func sandboxExtraMounts(value any) []contracts.SandboxExtraMount {
-	mounts := normalizeSandboxMounts(value)
+func runtimeExtraMounts(value any) []contracts.SandboxExtraMount {
+	mounts := normalizeRuntimeMounts(value)
 	if len(mounts) == 0 {
 		return nil
 	}
@@ -850,11 +887,11 @@ func nullableStringValue(value any) any {
 	return text
 }
 
-func extractSandboxField(sandbox map[string]any, key string) string {
-	if sandbox == nil {
+func extractRuntimeField(runtime map[string]any, key string) string {
+	if runtime == nil {
 		return ""
 	}
-	v, _ := sandbox[key].(string)
+	v, _ := runtime[key].(string)
 	return strings.TrimSpace(v)
 }
 
@@ -918,14 +955,14 @@ func (o overrideToolLookup) Tool(name string) (api.ToolDetailResponse, bool) {
 
 func canonicalizePublicToolDefinition(tool api.ToolDetailResponse) (api.ToolDetailResponse, bool) {
 	switch strings.ToLower(strings.TrimSpace(tool.Name)) {
-	case "_sandbox_bash_", "_bash_container_":
+	case "_sandbox_bash_", "bash_sandbox":
 		return api.ToolDetailResponse{}, false
-	case "_bash_":
+	case "bash":
 		canonical := cloneToolDetailResponse(tool)
-		canonical.Key = "_bash_"
-		canonical.Name = "_bash_"
+		canonical.Key = "bash"
+		canonical.Name = "bash"
 		canonical.Label = "执行命令"
-		canonical.Description = "Run a command. Runtime decides whether to execute on the host or inside the sandbox based on the agent's sandboxConfig. Always include a short Chinese description explaining the command purpose."
+		canonical.Description = "Run a command. Runtime decides whether to execute on the host or inside the sandbox based on the agent's runtimeConfig.environmentId. Always include a short Chinese description explaining the command purpose."
 		return canonical, true
 	default:
 		return cloneToolDetailResponse(tool), true

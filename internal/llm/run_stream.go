@@ -842,7 +842,7 @@ func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolIn
 		prelude:  s.preToolInvocationDeltas(toolID, toolCall.Function.Name, args),
 	}
 	if isBashTool(invocation.toolName) {
-		review := bashsec.ReviewBashSecurity(strings.TrimSpace(mapStringArg(invocation.args, "command")))
+		review := s.reviewBashSecurity(strings.TrimSpace(mapStringArg(invocation.args, "command")))
 		if review.Decision == bashsec.ReviewRequiresApproval {
 			invocation.bashSecurityReview = &review
 		}
@@ -934,6 +934,18 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 	if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
 		if strings.TrimSpace(invocation.approvalDecision) != "" {
 			return s.executeApprovedBashSecurityInvocation(invocation, review)
+		}
+		if s.isRuleWhitelisted(review.RuleKey) {
+			s.applyHITLDecision(invocation, bashSecurityInterceptResult(invocation, review), "", "approve_prefix_run", "", true)
+			s.registerBashSecurityApproval(review.Fingerprint)
+			return s.executeOriginalBash(invocation)
+		}
+		if s.shouldAutoApproveBashSecurity(review) {
+			s.registerBashSecurityApproval(review.Fingerprint)
+			return s.executeOriginalBash(invocation)
+		}
+		if s.hasBashSecurityApproval(review.Fingerprint) {
+			return s.executeOriginalBash(invocation)
 		}
 		s.skipPostToolHook = true
 		return s.emitBashSecurityApprovalDeltas(invocation, review)
@@ -1057,12 +1069,19 @@ func (s *llmRunStream) lookupBashSecurityReview(invocation *preparedToolInvocati
 	if invocation.bashSecurityReview != nil {
 		return *invocation.bashSecurityReview
 	}
-	review := bashsec.ReviewBashSecurity(strings.TrimSpace(mapStringArg(invocation.args, "command")))
+	review := s.reviewBashSecurity(strings.TrimSpace(mapStringArg(invocation.args, "command")))
 	if review.Decision == bashsec.ReviewRequiresApproval {
 		cloned := review
 		invocation.bashSecurityReview = &cloned
 	}
 	return review
+}
+
+func (s *llmRunStream) reviewBashSecurity(command string) bashsec.ReviewResult {
+	if s == nil || s.execCtx == nil || len(s.execCtx.RuntimeEnvOverrides) == 0 {
+		return bashsec.ReviewBashSecurity(command)
+	}
+	return bashsec.ReviewBashSecurityWithKnownVariables(command, s.execCtx.RuntimeEnvOverrides)
 }
 
 func (s *llmRunStream) emitBashSecurityApprovalDeltas(invocation *preparedToolInvocation, review bashsec.ReviewResult) error {
@@ -1073,7 +1092,7 @@ func (s *llmRunStream) emitBashSecurityApprovalDeltas(invocation *preparedToolIn
 
 	args := s.buildConfirmApprovalArgs(invocation)
 	s.hitlAwaitArgs = CloneMap(args)
-	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args))
+	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args, 0))
 
 	if s.runControl != nil {
 		awaitDelta, _ := s.pending[len(s.pending)-1].(DeltaAwaitAsk)
@@ -1092,7 +1111,12 @@ func (s *llmRunStream) executeApprovedBashSecurityInvocation(invocation *prepare
 	case "reject":
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
-	case "approve", "approve_prefix_run":
+	case "approve_prefix_run":
+		s.registerRuleWhitelist(review.RuleKey)
+		invocation.approvalDecision = ""
+		s.registerBashSecurityApproval(review.Fingerprint)
+		return s.executeOriginalBash(invocation)
+	case "approve":
 		invocation.approvalDecision = ""
 		s.registerBashSecurityApproval(review.Fingerprint)
 		return s.executeOriginalBash(invocation)
@@ -1111,16 +1135,38 @@ func (s *llmRunStream) registerBashSecurityApproval(fingerprint string) {
 	s.execCtx.BashSecurityApprovals[fingerprint]++
 }
 
+func (s *llmRunStream) hasBashSecurityApproval(fingerprint string) bool {
+	if s == nil || s.execCtx == nil || strings.TrimSpace(fingerprint) == "" || len(s.execCtx.BashSecurityApprovals) == 0 {
+		return false
+	}
+	return s.execCtx.BashSecurityApprovals[fingerprint] > 0
+}
+
+func (s *llmRunStream) shouldAutoApproveBashSecurity(review bashsec.ReviewResult) bool {
+	if s == nil || s.execCtx == nil || review.Level <= 0 {
+		return false
+	}
+	return s.execCtx.HITLLevel >= review.Level
+}
+
 func bashSecurityInterceptResult(invocation *preparedToolInvocation, review bashsec.ReviewResult) hitl.InterceptResult {
 	command := ""
 	if invocation != nil {
 		command = strings.TrimSpace(mapStringArg(invocation.args, "command"))
 	}
+	ruleKey := strings.TrimSpace(review.RuleKey)
+	if ruleKey == "" {
+		ruleKey = "bash-security::" + review.Fingerprint
+	}
+	level := review.Level
+	if level <= 0 {
+		level = 1
+	}
 	return hitl.InterceptResult{
 		Intercepted: true,
 		Rule: hitl.FlatRule{
-			RuleKey:      "bash-security::" + review.Fingerprint,
-			Level:        1,
+			RuleKey:      ruleKey,
+			Level:        level,
 			Title:        "Bash security approval",
 			ViewportType: "builtin",
 			ViewportKey:  "confirm_dialog",
@@ -1172,7 +1218,7 @@ func (s *llmRunStream) emitHITLConfirmDeltas(invocation *preparedToolInvocation,
 
 	args := s.buildHITLArgs(invocation, result)
 	s.hitlAwaitArgs = CloneMap(args)
-	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args))
+	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args, result.Rule.TimeoutMs))
 
 	if s.runControl != nil {
 		awaitDelta, _ := s.pending[len(s.pending)-1].(DeltaAwaitAsk)
@@ -1196,6 +1242,13 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 			continue
 		}
 		if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
+			if s.isRuleWhitelisted(review.RuleKey) {
+				s.applyHITLDecision(invocation, bashSecurityInterceptResult(invocation, review), "", "approve_prefix_run", "", true)
+				continue
+			}
+			if s.shouldAutoApproveBashSecurity(review) || s.hasBashSecurityApproval(review.Fingerprint) {
+				continue
+			}
 			approvals = append(approvals, s.buildApprovalAskItem(invocation))
 			invocations = append(invocations, invocation)
 			continue
@@ -1229,12 +1282,21 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 		"mode":      "approval",
 		"approvals": approvals,
 	}
+	maxRuleTimeout := 0
+	for _, invocation := range invocations {
+		if invocation == nil || invocation.precheckedHITL == nil {
+			continue
+		}
+		if invocation.precheckedHITL.Rule.TimeoutMs > maxRuleTimeout {
+			maxRuleTimeout = invocation.precheckedHITL.Rule.TimeoutMs
+		}
+	}
 	s.hitlPendingBatch = &pendingHITLApprovalBatch{
 		awaitingID:  awaitingID,
 		awaitArgs:   CloneMap(args),
 		invocations: invocations,
 	}
-	awaitDelta := s.buildHITLAwaitDelta(awaitingID, args)
+	awaitDelta := s.buildHITLAwaitDelta(awaitingID, args, maxRuleTimeout)
 	s.pending = append(s.pending, awaitDelta)
 	if s.runControl != nil {
 		s.runControl.ExpectSubmit(awaitingContextFromDeltaAsk(awaitDelta))
@@ -1281,7 +1343,7 @@ func (s *llmRunStream) awaitHITLApprovalBatchAndContinue() error {
 	}
 
 	s.execCtx.CurrentToolID = batch.awaitingID
-	s.execCtx.CurrentToolName = "_bash_"
+	s.execCtx.CurrentToolName = "bash"
 	s.execCtx.RunLoopState = RunLoopStateWaitingSubmit
 	s.runControl.TransitionState(RunLoopStateWaitingSubmit)
 
@@ -1457,7 +1519,7 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 		selectedForm := firstAwaitItem(normalized["forms"])
 		action := strings.ToLower(strings.TrimSpace(AnyStringNode(selectedForm["action"])))
 		if action == "submit" {
-			formPayload := AnyMapNode(selectedForm["payload"])
+			formPayload := AnyMapNode(selectedForm["form"])
 			rebuiltCommand, rebuildErr := reconstructCommandWithPayload(mapStringArg(invocation.args, "command"), formPayload)
 			if rebuildErr != nil {
 				payload := NewErrorPayload(
@@ -1486,7 +1548,7 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 			invocation.hitlDecision.FormPayload = formPayload
 			return s.executeOriginalBash(invocation)
 		}
-		s.applyHITLDecision(invocation, *match, awaitingID, "reject", strings.TrimSpace(AnyStringNode(selectedForm["reason"])), false)
+		s.applyHITLDecision(invocation, *match, awaitingID, "reject", "", false)
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
 	}
@@ -1558,12 +1620,12 @@ func (s *llmRunStream) buildFormApprovalArgs(command string, result hitl.Interce
 		form["title"] = title
 	}
 	if payload := extractCommandPayload(result.ParsedCommand); len(payload) > 0 {
-		form["payload"] = payload
+		form["form"] = payload
 		args["forms"] = []any{form}
 		return args
 	}
 	if payload := extractPayloadFromOriginalCommand(result.OriginalCommand); len(payload) > 0 {
-		form["payload"] = payload
+		form["form"] = payload
 		args["forms"] = []any{form}
 		return args
 	}
@@ -1602,25 +1664,7 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 }
 
 func (s *llmRunStream) approvalOptionsForInvocation(invocation *preparedToolInvocation) []any {
-	if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
-		return buildSingleUseApprovalOptions()
-	}
 	return buildApprovalOptions()
-}
-
-func buildSingleUseApprovalOptions() []any {
-	return []any{
-		map[string]any{
-			"label":       "同意",
-			"decision":    "approve",
-			"description": "只本次放行这条命令",
-		},
-		map[string]any{
-			"label":       "拒绝",
-			"decision":    "reject",
-			"description": "终止这条命令",
-		},
-	}
 }
 
 func buildApprovalOptions() []any {
@@ -1656,12 +1700,14 @@ func approvalDescription(invocation *preparedToolInvocation) string {
 }
 
 func (s *llmRunStream) resolveHITLTimeout() int64 {
+	if s != nil && s.execCtx != nil {
+		budget := NormalizeBudget(s.execCtx.Budget)
+		if budget.Hitl.TimeoutMs > 0 {
+			return int64(budget.Hitl.TimeoutMs)
+		}
+	}
 	if s.engine.cfg.BashHITL.DefaultTimeoutMs > 0 {
 		return int64(s.engine.cfg.BashHITL.DefaultTimeoutMs)
-	}
-	budget := NormalizeBudget(s.execCtx.Budget)
-	if budget.Tool.TimeoutMs > 0 {
-		return int64(budget.Tool.TimeoutMs)
 	}
 	return 120000
 }
@@ -1902,7 +1948,7 @@ func (s *llmRunStream) toolResultContent(toolName string, result ToolExecutionRe
 
 func isBashTool(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "_bash_", "simple-bash":
+	case "bash", "simple-bash":
 		return true
 	default:
 		return false
@@ -2014,11 +2060,15 @@ func frontendSubmitInvalidPayloadResult(invocation *preparedToolInvocation, awai
 	}
 }
 
-func (s *llmRunStream) buildHITLAwaitDelta(awaitingID string, args map[string]any) DeltaAwaitAsk {
+func (s *llmRunStream) buildHITLAwaitDelta(awaitingID string, args map[string]any, ruleTimeoutMs int) DeltaAwaitAsk {
+	timeout := s.resolveHITLTimeout()
+	if ruleTimeoutMs > 0 {
+		timeout = int64(ruleTimeoutMs)
+	}
 	await := DeltaAwaitAsk{
 		AwaitingID: awaitingID,
 		Mode:       strings.ToLower(strings.TrimSpace(AnyStringNode(args["mode"]))),
-		Timeout:    s.resolveHITLTimeout(),
+		Timeout:    timeout,
 		RunID:      s.session.RunID,
 	}
 	if await.Mode == "form" {
@@ -2458,10 +2508,7 @@ func (s *llmRunStream) preToolInvocationDeltas(toolID string, toolName string, p
 	if !ok {
 		return nil
 	}
-	toolTimeout := int64(0)
-	if budget := NormalizeBudget(s.execCtx.Budget); budget.Tool.TimeoutMs > 0 {
-		toolTimeout = int64(budget.Tool.TimeoutMs)
-	}
+	toolTimeout := s.resolveHITLTimeout()
 	awaitAsk := handler.BuildInitialAwaitAsk(toolID, s.session.RunID, tool, payload, 0, toolTimeout)
 	if s.runControl != nil && awaitAsk != nil {
 		s.runControl.ExpectSubmit(awaitingContextFromStreamAsk(awaitAsk))

@@ -13,9 +13,9 @@ import (
 )
 
 var requiredBuiltinToolNames = []string{
-	"_artifact_publish_",
-	"_bash_",
-	"_datetime_",
+	"artifact_publish",
+	"bash",
+	"datetime",
 	"_memory_read_",
 	"_memory_forget_",
 	"_memory_promote_",
@@ -26,9 +26,9 @@ var requiredBuiltinToolNames = []string{
 	"plan_add_tasks",
 	"plan_get_tasks",
 	"plan_update_task",
-	"_bash_container_",
-	"_ask_user_question_",
-	"_agent_invoke_",
+	"bash_sandbox",
+	"ask_user_question",
+	"agent_invoke",
 }
 
 func LoadEmbeddedToolDefinitions() ([]api.ToolDetailResponse, error) {

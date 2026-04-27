@@ -110,6 +110,109 @@ func TestFileStoreClearPendingAwaitingIgnoresStaleAwaitingID(t *testing.T) {
 	}
 }
 
+func TestFileStoreLoadAllPendingAwaitingsReturnsPersistedRows(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-pending-a", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat a: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-pending-b", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat b: %v", err)
+	}
+	if err := store.SetPendingAwaiting("chat-pending-a", PendingAwaiting{
+		AwaitingID: "await_a",
+		RunID:      "run_a",
+		Mode:       "question",
+		CreatedAt:  111,
+	}); err != nil {
+		t.Fatalf("set pending a: %v", err)
+	}
+	if err := store.SetPendingAwaiting("chat-pending-b", PendingAwaiting{
+		AwaitingID: "await_b",
+		RunID:      "run_b",
+		Mode:       "approval",
+		CreatedAt:  222,
+	}); err != nil {
+		t.Fatalf("set pending b: %v", err)
+	}
+
+	items, err := store.LoadAllPendingAwaitings()
+	if err != nil {
+		t.Fatalf("load all pending awaitings: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 pending awaitings, got %#v", items)
+	}
+	if items[0].ChatID != "chat-pending-a" || items[0].AwaitingID != "await_a" || items[1].ChatID != "chat-pending-b" || items[1].AwaitingID != "await_b" {
+		t.Fatalf("unexpected pending awaitings %#v", items)
+	}
+}
+
+func TestFileStoreLoadAwaitingAskFindsStepAndEventLines(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-awaiting-step", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure step chat: %v", err)
+	}
+	if err := store.AppendStepLine("chat-awaiting-step", StepLine{
+		ChatID:    "chat-awaiting-step",
+		RunID:     "run-step",
+		UpdatedAt: 100,
+		Type:      "react",
+		Awaiting: []map[string]any{
+			{
+				"type":       "awaiting.ask",
+				"awaitingId": "await_step",
+				"mode":       "question",
+				"questions": []any{
+					map[string]any{"id": "q1", "question": "Need confirmation", "type": "text"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append step line: %v", err)
+	}
+	ask, err := store.LoadAwaitingAsk("chat-awaiting-step", "await_step")
+	if err != nil {
+		t.Fatalf("load step awaiting ask: %v", err)
+	}
+	if ask == nil || ask.AwaitingID != "await_step" || ask.RunID != "run-step" || ask.Mode != "question" {
+		t.Fatalf("unexpected step awaiting ask %#v", ask)
+	}
+
+	if _, _, err := store.EnsureChat("chat-awaiting-event", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure event chat: %v", err)
+	}
+	if err := store.AppendEventLine("chat-awaiting-event", EventLine{
+		ChatID:    "chat-awaiting-event",
+		RunID:     "run-event",
+		UpdatedAt: 200,
+		Type:      "event",
+		Event: map[string]any{
+			"type":       "awaiting.ask",
+			"awaitingId": "await_event",
+			"mode":       "approval",
+			"approvals": []any{
+				map[string]any{"id": "cmd-1", "command": "rm -rf /tmp/demo"},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append event line: %v", err)
+	}
+	ask, err = store.LoadAwaitingAsk("chat-awaiting-event", "await_event")
+	if err != nil {
+		t.Fatalf("load event awaiting ask: %v", err)
+	}
+	if ask == nil || ask.AwaitingID != "await_event" || ask.RunID != "run-event" || ask.Mode != "approval" {
+		t.Fatalf("unexpected event awaiting ask %#v", ask)
+	}
+}
+
 func TestFileStoreMigratesLegacyDBAndRoundTripsPendingAwaiting(t *testing.T) {
 	root := t.TempDir()
 	db, err := sql.Open("sqlite", filepath.Join(root, "chats.db"))
@@ -130,14 +233,21 @@ func TestFileStoreMigratesLegacyDBAndRoundTripsPendingAwaiting(t *testing.T) {
 			READ_AT_ INTEGER,
 			USAGE_PROMPT_TOKENS_ INTEGER NOT NULL DEFAULT 0,
 			USAGE_COMPLETION_TOKENS_ INTEGER NOT NULL DEFAULT 0,
-			USAGE_TOTAL_TOKENS_ INTEGER NOT NULL DEFAULT 0
+			USAGE_TOTAL_TOKENS_ INTEGER NOT NULL DEFAULT 0,
+			PENDING_AWAITING_ID_ TEXT NOT NULL DEFAULT '',
+			PENDING_AWAITING_RUN_ID_ TEXT NOT NULL DEFAULT '',
+			PENDING_AWAITING_MODE_ TEXT NOT NULL DEFAULT '',
+			PENDING_AWAITING_CREATED_AT_ INTEGER NOT NULL DEFAULT 0
 		);
 	`)
 	if err != nil {
 		t.Fatalf("create legacy chats table: %v", err)
 	}
-	_, err = db.Exec(`INSERT INTO CHATS (CHAT_ID_, CHAT_NAME_, AGENT_KEY_, CREATED_AT_, UPDATED_AT_, LAST_RUN_ID_, LAST_RUN_CONTENT_, READ_STATUS_) VALUES (?, ?, ?, ?, ?, '', '', 1)`,
-		"chat-legacy", "legacy", "agent", 100, 200)
+	_, err = db.Exec(`INSERT INTO CHATS (
+			CHAT_ID_, CHAT_NAME_, AGENT_KEY_, CREATED_AT_, UPDATED_AT_, LAST_RUN_ID_, LAST_RUN_CONTENT_, READ_STATUS_,
+			PENDING_AWAITING_ID_, PENDING_AWAITING_RUN_ID_, PENDING_AWAITING_MODE_, PENDING_AWAITING_CREATED_AT_
+		) VALUES (?, ?, ?, ?, ?, '', '', 1, ?, ?, ?, ?)`,
+		"chat-legacy", "legacy", "agent", 100, 200, "await_legacy", "run_legacy", "question", 24680)
 	if err != nil {
 		t.Fatalf("insert legacy chat: %v", err)
 	}
@@ -154,27 +264,18 @@ func TestFileStoreMigratesLegacyDBAndRoundTripsPendingAwaiting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load migrated summary: %v", err)
 	}
-	if summary == nil || summary.PendingAwaiting != nil {
-		t.Fatalf("expected migrated summary without pending awaiting, got %#v", summary)
+	if summary == nil || summary.PendingAwaiting == nil {
+		t.Fatalf("expected migrated summary with pending awaiting, got %#v", summary)
 	}
 	if summary.Read.ReadRunID != "" || !summary.Read.IsRead {
 		t.Fatalf("expected migrated summary to preserve read state, got %#v", summary.Read)
 	}
-
-	pending := PendingAwaiting{
+	if *summary.PendingAwaiting != (PendingAwaiting{
 		AwaitingID: "await_legacy",
 		RunID:      "run_legacy",
 		Mode:       "question",
 		CreatedAt:  24680,
-	}
-	if err := store.SetPendingAwaiting("chat-legacy", pending); err != nil {
-		t.Fatalf("set pending awaiting after migration: %v", err)
-	}
-	summary, err = store.Summary("chat-legacy")
-	if err != nil {
-		t.Fatalf("reload migrated summary after set: %v", err)
-	}
-	if summary == nil || summary.PendingAwaiting == nil || *summary.PendingAwaiting != pending {
+	}) {
 		t.Fatalf("expected migrated summary pending awaiting, got %#v", summary)
 	}
 	if err := store.ClearPendingAwaiting("chat-legacy", "await_legacy"); err != nil {
@@ -208,6 +309,9 @@ func TestFileStoreMigratesLegacyDBAndRoundTripsPendingAwaiting(t *testing.T) {
 		}
 		if name == "READ_STATUS_" {
 			t.Fatal("expected READ_STATUS_ column to be removed during migration")
+		}
+		if name == "PENDING_AWAITING_ID_" {
+			t.Fatal("expected pending awaiting columns to be renamed during migration")
 		}
 	}
 }
@@ -372,7 +476,7 @@ func TestRebuildSnapshotEventsGroupsByRunAndBackfillsLegacyIDs(t *testing.T) {
 		{"type": "request.query", "chatId": "chat_1", "message": "second"},
 		{"type": "chat.start", "chatId": "chat_1", "chatName": "demo"},
 		{"type": "run.start", "chatId": "chat_1", "runId": run2},
-		{"type": "tool.start", "chatId": "chat_1", "runId": run2, "toolName": "_datetime_"},
+		{"type": "tool.start", "chatId": "chat_1", "runId": run2, "toolName": "datetime"},
 		{"type": "tool.end", "chatId": "chat_1", "runId": run2},
 		{"type": "tool.snapshot", "chatId": "chat_1", "runId": run2, "arguments": "{}"},
 		{"type": "tool.result", "chatId": "chat_1", "runId": run2, "output": map[string]any{"ok": true}},
@@ -521,7 +625,7 @@ func TestStoredMessageToEventsPreservesTimestamp(t *testing.T) {
 					map[string]any{
 						"id": "tool-call-1",
 						"function": map[string]any{
-							"name":      "_datetime_",
+							"name":      "datetime",
 							"arguments": "{}",
 						},
 					},
@@ -910,6 +1014,91 @@ func TestStepWriterMergesSubmitAndAnswer(t *testing.T) {
 	}
 }
 
+func TestStepWriterTimeoutAnswerDoesNotSplitToolStep(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	writer := NewStepWriter(store, "chat-timeout-submit", "run-timeout-submit", "react", false)
+	writer.OnEvent(stream.EventData{
+		Type:      "tool.snapshot",
+		Timestamp: 1001,
+		Payload: map[string]any{
+			"toolId":    "tool-1",
+			"toolName":  "bash",
+			"arguments": `{"command":"mock create-leave"}`,
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type:      "awaiting.ask",
+		Timestamp: 1002,
+		Payload: map[string]any{
+			"awaitingId": "tool-1",
+			"mode":       "approval",
+			"timeout":    120000,
+			"runId":      "run-timeout-submit",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type:      "awaiting.answer",
+		Seq:       12,
+		Timestamp: 1003,
+		Payload: map[string]any{
+			"type":       "awaiting.answer",
+			"awaitingId": "tool-1",
+			"mode":       "approval",
+			"status":     "error",
+			"error": map[string]any{
+				"code": "timeout",
+			},
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type:      "tool.result",
+		Timestamp: 1004,
+		Payload: map[string]any{
+			"toolId": "tool-1",
+			"result": map[string]any{
+				"error": "hitl_timeout",
+			},
+		},
+	})
+	writer.Flush()
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-timeout-submit"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("expected one step line and one submit line, got %#v", lines)
+	}
+	var stepLine map[string]any
+	var submitLine map[string]any
+	for _, line := range lines {
+		switch line["_type"] {
+		case "react":
+			stepLine = line
+		case "submit":
+			submitLine = line
+		}
+	}
+	if stepLine == nil || submitLine == nil {
+		t.Fatalf("expected both step and submit lines, got %#v", lines)
+	}
+	messages, _ := stepLine["messages"].([]any)
+	if len(messages) != 2 {
+		t.Fatalf("expected tool snapshot and tool result in same step line, got %#v", stepLine)
+	}
+	answer, _ := submitLine["answer"].(map[string]any)
+	if answer == nil || answer["type"] != "awaiting.answer" {
+		t.Fatalf("expected awaiting.answer on submit line, got %#v", submitLine)
+	}
+	if _, ok := answer["seq"]; ok {
+		t.Fatalf("did not expect seq on submit answer payload, got %#v", answer)
+	}
+}
+
 func TestStepWriterFormatsStructuredToolResultAsJSON(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
@@ -922,7 +1111,7 @@ func TestStepWriterFormatsStructuredToolResultAsJSON(t *testing.T) {
 		Timestamp: 1001,
 		Payload: map[string]any{
 			"toolId":    "tool-1",
-			"toolName":  "_bash_",
+			"toolName":  "bash",
 			"arguments": `{"command":"echo hi"}`,
 		},
 	})
@@ -1082,7 +1271,7 @@ func TestStepWriterPersistsApprovalSidecarOnStepLine(t *testing.T) {
 		Timestamp: 4001,
 		Payload: map[string]any{
 			"toolId":    "tool-1",
-			"toolName":  "_bash_",
+			"toolName":  "bash",
 			"arguments": `{"command":"chmod 777 ~/a.sh"}`,
 		},
 	})
@@ -1142,7 +1331,7 @@ func TestStepWriterPersistsFormApprovalDecisionPayload(t *testing.T) {
 		Timestamp: 4101,
 		Payload: map[string]any{
 			"toolId":    "tool-1",
-			"toolName":  "_bash_",
+			"toolName":  "bash",
 			"arguments": `{"command":"mock create-leave --payload '{...}'"}`,
 		},
 	})
@@ -1220,7 +1409,7 @@ func TestLoadRawMessagesReplaysApprovalSummaryFromStepLine(t *testing.T) {
 					ID:   "tool-1",
 					Type: "function",
 					Function: StoredFunction{
-						Name:      "_bash_",
+						Name:      "bash",
 						Arguments: `{"command":"chmod 777 ~/a.sh"}`,
 					},
 				}},
@@ -1230,7 +1419,7 @@ func TestLoadRawMessagesReplaysApprovalSummaryFromStepLine(t *testing.T) {
 			},
 			{
 				Role:       "tool",
-				Name:       "_bash_",
+				Name:       "bash",
 				ToolCallID: "tool-1",
 				Content:    []ContentPart{{Type: "text", Text: ""}},
 				ToolID:     "tool-1",
@@ -1257,6 +1446,9 @@ func TestLoadRawMessagesReplaysApprovalSummaryFromStepLine(t *testing.T) {
 	if len(rawMessages) != 3 {
 		t.Fatalf("expected assistant, tool, synthetic user messages, got %#v", rawMessages)
 	}
+	if rawMessages[1]["role"] != "tool" {
+		t.Fatalf("expected tool result before approval summary, got %#v", rawMessages)
+	}
 	if rawMessages[2]["role"] != "user" || rawMessages[2]["content"] != `[HITL] chmod 777 ~/a.sh → approve` {
 		t.Fatalf("expected approval summary replayed as user raw message, got %#v", rawMessages[2])
 	}
@@ -1270,6 +1462,162 @@ func TestLoadRawMessagesReplaysApprovalSummaryFromStepLine(t *testing.T) {
 	}
 	if detail.RawMessages[2]["role"] != "user" {
 		t.Fatalf("expected synthetic approval summary at end of raw messages, got %#v", detail.RawMessages)
+	}
+}
+
+func TestLoadRawMessagesReplaysSplitApprovalSummaryAfterToolResult(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-approval-split", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	toolTs := int64(5001)
+	resultTs := int64(5002)
+	if err := store.AppendStepLine("chat-approval-split", StepLine{
+		ChatID:    "chat-approval-split",
+		RunID:     "run-approval-split",
+		UpdatedAt: 5003,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{{
+			Role: "assistant",
+			ToolCalls: []StoredToolCall{{
+				ID:   "tool-1",
+				Type: "function",
+				Function: StoredFunction{
+					Name:      "bash",
+					Arguments: `{"command":"mock create-leave"}`,
+				},
+			}},
+			ToolID: "tool-1",
+			MsgID:  "msg-1",
+			Ts:     &toolTs,
+		}},
+		Approval: &StepApproval{
+			Summary: `[HITL] mock create-leave → reject（timeout）`,
+			Decisions: []StepApprovalDecision{{
+				ToolID:   "tool-1",
+				Command:  "mock create-leave",
+				Decision: "reject",
+				RuleKey:  "leave::create",
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("append split approval step line: %v", err)
+	}
+	if err := store.AppendStepLine("chat-approval-split", StepLine{
+		ChatID:    "chat-approval-split",
+		RunID:     "run-approval-split",
+		UpdatedAt: 5004,
+		Type:      "react",
+		Seq:       2,
+		Messages: []StoredMessage{{
+			Role:       "tool",
+			Name:       "bash",
+			ToolCallID: "tool-1",
+			Content:    []ContentPart{{Type: "text", Text: `{"error":"hitl_timeout"}`}},
+			ToolID:     "tool-1",
+			Ts:         &resultTs,
+		}},
+	}); err != nil {
+		t.Fatalf("append tool result step line: %v", err)
+	}
+
+	rawMessages, err := store.LoadRawMessages("chat-approval-split", 10)
+	if err != nil {
+		t.Fatalf("load raw messages: %v", err)
+	}
+	if len(rawMessages) != 3 {
+		t.Fatalf("expected assistant, tool, synthetic user messages, got %#v", rawMessages)
+	}
+	if rawMessages[0]["role"] != "assistant" || rawMessages[1]["role"] != "tool" || rawMessages[2]["role"] != "user" {
+		t.Fatalf("expected assistant -> tool -> user ordering, got %#v", rawMessages)
+	}
+	if rawMessages[2]["content"] != `[HITL] mock create-leave → reject（timeout）` {
+		t.Fatalf("expected approval summary at end, got %#v", rawMessages[2])
+	}
+}
+
+func TestLoadRawMessagesFlushesApprovalSummaryBeforeNextRun(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-approval-multirun", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-approval-multirun", QueryLine{
+		ChatID:    "chat-approval-multirun",
+		RunID:     "run-1",
+		UpdatedAt: 1000,
+		Query: map[string]any{
+			"role":    "user",
+			"message": "first",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append first query line: %v", err)
+	}
+	if err := store.AppendStepLine("chat-approval-multirun", StepLine{
+		ChatID:    "chat-approval-multirun",
+		RunID:     "run-1",
+		UpdatedAt: 1001,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{{
+			Role:    "assistant",
+			Content: []ContentPart{{Type: "text", Text: "first reply"}},
+			MsgID:   "msg-1",
+		}},
+		Approval: &StepApproval{Summary: "[HITL] first approval"},
+	}); err != nil {
+		t.Fatalf("append first step line: %v", err)
+	}
+	if err := store.AppendQueryLine("chat-approval-multirun", QueryLine{
+		ChatID:    "chat-approval-multirun",
+		RunID:     "run-2",
+		UpdatedAt: 1002,
+		Query: map[string]any{
+			"role":    "user",
+			"message": "second",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append second query line: %v", err)
+	}
+	if err := store.AppendStepLine("chat-approval-multirun", StepLine{
+		ChatID:    "chat-approval-multirun",
+		RunID:     "run-2",
+		UpdatedAt: 1003,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{{
+			Role:    "assistant",
+			Content: []ContentPart{{Type: "text", Text: "second reply"}},
+			MsgID:   "msg-2",
+		}},
+	}); err != nil {
+		t.Fatalf("append second step line: %v", err)
+	}
+
+	rawMessages, err := store.LoadRawMessages("chat-approval-multirun", 10)
+	if err != nil {
+		t.Fatalf("load raw messages: %v", err)
+	}
+	if len(rawMessages) != 5 {
+		t.Fatalf("expected first query, first reply, summary, second query, second reply; got %#v", rawMessages)
+	}
+	if rawMessages[2]["role"] != "user" || rawMessages[2]["content"] != "[HITL] first approval" {
+		t.Fatalf("expected first run approval summary before next run query, got %#v", rawMessages)
+	}
+	if rawMessages[3]["runId"] != "run-2" || rawMessages[3]["content"] != "second" {
+		t.Fatalf("expected second run query after first summary, got %#v", rawMessages)
 	}
 }
 

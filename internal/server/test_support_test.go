@@ -105,6 +105,33 @@ func newTestFixture(t *testing.T) testFixture {
 	})
 }
 
+func newMemoryEnabledTestFixture(t *testing.T) testFixture {
+	return newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w,
+			`{"choices":[{"delta":{"content":"Go runner "}}]}`,
+			`{"choices":[{"delta":{"content":"test response"},"finish_reason":"stop"}]}`,
+			`[DONE]`,
+		)
+	}, testFixtureOptions{
+		configure: func(cfg *config.Config) {
+			cfg.Memory.Enabled = true
+		},
+		setupRuntime: func(_ string, cfg *config.Config) {
+			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-runner", "agent.yml")
+			data, err := os.ReadFile(agentPath)
+			if err != nil {
+				t.Fatalf("read agent config: %v", err)
+			}
+			content := strings.TrimSpace(string(data)) + "\n" +
+				"memoryConfig:\n" +
+				"  enabled: true\n"
+			if err := os.WriteFile(agentPath, []byte(content), 0o644); err != nil {
+				t.Fatalf("write agent config: %v", err)
+			}
+		},
+	})
+}
+
 func newTestFixtureWithModelHandler(t *testing.T, modelHandler http.HandlerFunc) testFixture {
 	return newTestFixtureWithModelHandlerAndOptions(t, modelHandler, testFixtureOptions{})
 }
@@ -175,8 +202,8 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 		"  modelKey: mock-model",
 		"toolConfig:",
 		"  tools:",
-		"    - _datetime_",
-		"    - _ask_user_question_",
+		"    - datetime",
+		"    - ask_user_question",
 		"skillConfig:",
 		"  skills:",
 		"    - mock-skill",
@@ -188,7 +215,7 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 		"    options:",
 		"      - value: concise",
 		"        label: 简洁",
-		"sandboxConfig:",
+		"runtimeConfig:",
 		"  environmentId: shell",
 		"  level: RUN",
 		"  env:",
@@ -201,6 +228,8 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 		"mode: REACT",
 		"budget:",
 		"  tool:",
+		"    timeoutMs: 210000",
+		"  hitl:",
 		"    timeoutMs: 210000",
 		"react:",
 		"  maxSteps: 6",
@@ -234,13 +263,10 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 		Auth: config.AuthConfig{
 			Enabled: false,
 		},
-		ChatImage: config.ChatImageTokenConfig{
-			ResourceTicketEnabled: false,
-		},
 		Memory: config.MemoryConfig{
 			AutoRememberEnabled: true,
 		},
-		SSE: config.SSEConfig{
+		Stream: config.StreamConfig{
 			IncludeToolPayloadEvents: true,
 		},
 		Defaults: config.DefaultsConfig{

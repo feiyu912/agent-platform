@@ -9,10 +9,13 @@ import (
 	"time"
 
 	"agent-platform-runner-go/internal/api"
+	"agent-platform-runner-go/internal/bashsec"
 	"agent-platform-runner-go/internal/chat"
+	"agent-platform-runner-go/internal/config"
 	contracts "agent-platform-runner-go/internal/contracts"
 	"agent-platform-runner-go/internal/frontendtools"
 	"agent-platform-runner-go/internal/hitl"
+	streampkg "agent-platform-runner-go/internal/stream"
 )
 
 func encodedSubmitParams(t *testing.T, value any) api.SubmitParams {
@@ -49,6 +52,35 @@ func sampleExpenseCommand(amount float64) string {
 
 func canonicalExpenseCommand(amount float64) string {
 	return fmt.Sprintf(`mock expense add --payload '{"currency":"CNY","department":{"code":"engineering","name":"工程部"},"employee":{"id":"E1001","name":"张三"},"expense_type":"travel","items":[{"amount":%v,"category":"transport","description":"flight","invoice_id":"INV-001","occurred_on":"2026-04-10"}],"submitted_at":"2026-04-14T10:30:00+08:00","total_amount":%v}'`, amount, amount)
+}
+
+type captureFrontendHandler struct {
+	timeoutMs int64
+}
+
+func (h *captureFrontendHandler) ToolName() string { return "ask_user_question" }
+
+func (h *captureFrontendHandler) ValidateArgs(args map[string]any) error { return nil }
+
+func (h *captureFrontendHandler) BuildInitialAwaitAsk(toolID string, runID string, tool api.ToolDetailResponse, args map[string]any, chunkIndex int, timeoutMs int64) *streampkg.AwaitAsk {
+	h.timeoutMs = timeoutMs
+	return &streampkg.AwaitAsk{
+		AwaitingID: toolID,
+		RunID:      runID,
+		Mode:       "question",
+		Timeout:    timeoutMs,
+		Questions: []any{
+			map[string]any{"id": "q1", "question": "Need confirmation", "type": "text"},
+		},
+	}
+}
+
+func (h *captureFrontendHandler) NormalizeSubmit(args map[string]any, params any) (map[string]any, error) {
+	return map[string]any{}, nil
+}
+
+func (h *captureFrontendHandler) FormatSubmitResult(format string, result contracts.ToolExecutionResult) (string, bool) {
+	return "", false
 }
 
 func sampleProcurementCommand(city string) string {
@@ -137,7 +169,7 @@ func (c commandResultChecker) Tools() []api.ToolDetailResponse {
 
 func bashToolDefinition() api.ToolDetailResponse {
 	return api.ToolDetailResponse{
-		Name: "_bash_",
+		Name: "bash",
 		Meta: map[string]any{
 			"kind":          "backend",
 			"sourceType":    "local",
@@ -172,7 +204,7 @@ func invokeAgentsToolDefinition() api.ToolDetailResponse {
 
 func TestPreToolInvocationDeltas_QuestionRegistersAwaitingContext(t *testing.T) {
 	tool := api.ToolDetailResponse{
-		Name: "_ask_user_question_",
+		Name: "ask_user_question",
 		Meta: map[string]any{
 			"kind":          "frontend",
 			"sourceType":    "local",
@@ -194,7 +226,7 @@ func TestPreToolInvocationDeltas_QuestionRegistersAwaitingContext(t *testing.T) 
 		},
 	}
 
-	deltas := stream.preToolInvocationDeltas("tool_1", "_ask_user_question_", map[string]any{
+	deltas := stream.preToolInvocationDeltas("tool_1", "ask_user_question", map[string]any{
 		"mode": "question",
 		"questions": []any{
 			map[string]any{
@@ -224,7 +256,7 @@ func TestPreToolInvocationDeltas_QuestionRegistersAwaitingContext(t *testing.T) 
 
 func TestPrepareToolCall_LegacyMultipleReturnsToolError(t *testing.T) {
 	tool := api.ToolDetailResponse{
-		Name: "_ask_user_question_",
+		Name: "ask_user_question",
 		Meta: map[string]any{
 			"kind":          "frontend",
 			"sourceType":    "local",
@@ -246,7 +278,7 @@ func TestPrepareToolCall_LegacyMultipleReturnsToolError(t *testing.T) {
 		ID:   "tool_1",
 		Type: "function",
 		Function: openAIFunctionCall{
-			Name:      "_ask_user_question_",
+			Name:      "ask_user_question",
 			Arguments: `{"mode":"question","questions":[{"question":"Notification topics","type":"select","multiple":true,"options":[{"label":"产品更新"}]}]}`,
 		},
 	})
@@ -266,6 +298,139 @@ func TestPrepareToolCall_LegacyMultipleReturnsToolError(t *testing.T) {
 	toolContent, _ := toolMsg.Content.(string)
 	if toolMsg == nil || !strings.Contains(toolContent, "multiple is no longer supported; use type=multi-select") {
 		t.Fatalf("unexpected tool message %#v", toolMsg)
+	}
+}
+
+func TestResolveHITLTimeoutUsesHitlBudgetGlobalAndFallback(t *testing.T) {
+	tests := []struct {
+		name   string
+		budget contracts.Budget
+		global int
+		want   int64
+	}{
+		{
+			name:   "agent hitl budget wins",
+			budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 600000}, Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
+			global: 300000,
+			want:   600000,
+		},
+		{
+			name:   "global wins when hitl budget unset",
+			budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
+			global: 300000,
+			want:   300000,
+		},
+		{
+			name:   "tool timeout no longer affects hitl timeout",
+			budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
+			global: 0,
+			want:   120000,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stream := &llmRunStream{
+				engine: &LLMAgentEngine{cfg: config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: tc.global}}},
+				execCtx: &contracts.ExecutionContext{
+					Budget: tc.budget,
+				},
+			}
+			if got := stream.resolveHITLTimeout(); got != tc.want {
+				t.Fatalf("expected timeout %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestPreToolInvocationDeltasUsesHitlTimeoutForFrontendAwaiting(t *testing.T) {
+	handler := &captureFrontendHandler{}
+	tool := api.ToolDetailResponse{
+		Name: "ask_user_question",
+		Meta: map[string]any{
+			"kind":          "frontend",
+			"sourceType":    "local",
+			"clientVisible": true,
+		},
+	}
+	stream := &llmRunStream{
+		engine: &LLMAgentEngine{
+			tools:    stubToolExecutor{defs: []api.ToolDetailResponse{tool}},
+			frontend: frontendtools.NewRegistry(handler),
+			cfg: config.Config{
+				BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 300000},
+			},
+		},
+		session:    contracts.QuerySession{RunID: "run_1"},
+		runControl: contracts.NewRunControl(context.Background(), "run_1"),
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{
+				Tool: contracts.RetryPolicy{TimeoutMs: 5000},
+				Hitl: contracts.HitlPolicy{TimeoutMs: 600000},
+			},
+		},
+	}
+
+	deltas := stream.preToolInvocationDeltas("tool_1", "ask_user_question", map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{"question": "Need confirmation", "type": "text"},
+		},
+	})
+	if len(deltas) != 0 {
+		t.Fatalf("expected no prelude deltas, got %#v", deltas)
+	}
+	if handler.timeoutMs != 600000 {
+		t.Fatalf("expected frontend await timeout 600000 from hitl budget, got %d", handler.timeoutMs)
+	}
+}
+
+func TestEmitHITLConfirmDeltasUsesRuleTimeoutOverride(t *testing.T) {
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			cfg: config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 15000}},
+		},
+		session: contracts.QuerySession{
+			RunID: "run_1",
+		},
+		runControl: contracts.NewRunControl(context.Background(), "run_1"),
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 30000}},
+		},
+	}
+	invocation := &preparedToolInvocation{
+		toolID:   "tool_1",
+		toolName: "bash",
+		args: map[string]any{
+			"command":     "mock create-leave --payload '{}'",
+			"description": "执行命令用途说明",
+		},
+	}
+	result := hitl.InterceptResult{
+		Intercepted: true,
+		Rule: hitl.FlatRule{
+			Match:        "create-leave",
+			Level:        1,
+			ViewportType: "html",
+			ViewportKey:  "leave_form",
+			TimeoutMs:    60000,
+		},
+		ParsedCommand: hitl.CommandComponents{
+			BaseCommand: "mock",
+			Tokens:      []string{"create-leave", "--payload", `{}`},
+		},
+	}
+
+	if err := stream.emitHITLConfirmDeltas(invocation, result); err != nil {
+		t.Fatalf("emitHITLConfirmDeltas returned error: %v", err)
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok {
+		t.Fatalf("expected await ask delta, got %#v", stream.pending)
+	}
+	if ask.Timeout != 60000 {
+		t.Fatalf("expected rule timeout 60000, got %#v", ask)
 	}
 }
 
@@ -455,7 +620,7 @@ func TestInjectToolResultAppendsToolMessageAndFinalAssistantContent(t *testing.T
 
 func TestPrepareToolCall_InvalidAskUserQuestionArgsReturnToolError(t *testing.T) {
 	tool := api.ToolDetailResponse{
-		Name: "_ask_user_question_",
+		Name: "ask_user_question",
 		Meta: map[string]any{
 			"kind":          "frontend",
 			"sourceType":    "local",
@@ -477,7 +642,7 @@ func TestPrepareToolCall_InvalidAskUserQuestionArgsReturnToolError(t *testing.T)
 		ID:   "tool_1",
 		Type: "function",
 		Function: openAIFunctionCall{
-			Name:      "_ask_user_question_",
+			Name:      "ask_user_question",
 			Arguments: `{"mode":"question","questions":[{"question":"Pick a plan","type":"select"}]}`,
 		},
 	})
@@ -515,7 +680,7 @@ func TestPrepareToolCall_BashDescriptionIsRequired(t *testing.T) {
 		ID:   "tool_1",
 		Type: "function",
 		Function: openAIFunctionCall{
-			Name:      "_bash_",
+			Name:      "bash",
 			Arguments: `{"command":"chmod 777 ~/a.sh"}`,
 		},
 	})
@@ -588,8 +753,9 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			},
 			submitParams: encodedSubmitParams(t, []map[string]any{
 				{
-					"id":      "form-1",
-					"payload": sampleLeavePayload(2),
+					"id":     "form-1",
+					"action": "submit",
+					"form":   sampleLeavePayload(2),
 				},
 			}),
 			expectedCommand:          sampleLeaveCommand(2),
@@ -614,8 +780,9 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			},
 			submitParams: encodedSubmitParams(t, []map[string]any{
 				{
-					"id": "form-1",
-					"payload": map[string]any{
+					"id":     "form-1",
+					"action": "submit",
+					"form": map[string]any{
 						"employee":     map[string]any{"id": "E1001", "name": "张三"},
 						"department":   map[string]any{"code": "engineering", "name": "工程部"},
 						"expense_type": "travel",
@@ -688,8 +855,9 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			},
 			submitParams: encodedSubmitParams(t, []map[string]any{
 				{
-					"id": "form-1",
-					"payload": map[string]any{
+					"id":     "form-1",
+					"action": "submit",
+					"form": map[string]any{
 						"delivery_city": "Hangzhou",
 						"requester_id":  "E1001",
 					},
@@ -732,7 +900,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			}
 			invocation := &preparedToolInvocation{
 				toolID:   "tool_1",
-				toolName: "_bash_",
+				toolName: "bash",
 				args: map[string]any{
 					"command":     tc.initialCommand,
 					"description": "执行命令用途说明",
@@ -780,7 +948,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 				if _, ok := form["command"]; ok {
 					t.Fatalf("did not expect form command in awaiting.ask payload, got %#v", form)
 				}
-				formPayload, _ := form["payload"].(map[string]any)
+				formPayload, _ := form["form"].(map[string]any)
 				if !reflect.DeepEqual(formPayload, tc.expectedInitialPayload) {
 					t.Fatalf("expected form payload %#v, got %#v", tc.expectedInitialPayload, awaitAsk)
 				}
@@ -839,7 +1007,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			if len(executor.invocations) != 1 {
 				t.Fatalf("expected original bash tool to run once, got %#v", executor.invocations)
 			}
-			if executor.invocations[0].name != "_bash_" {
+			if executor.invocations[0].name != "bash" {
 				t.Fatalf("expected original bash tool to execute, got %#v", executor.invocations[0])
 			}
 			if got := executor.invocations[0].args["command"]; got != tc.expectedCommand {
@@ -866,7 +1034,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 						}
 					}
 				case contracts.DeltaToolResult:
-					if typed.ToolName == "_bash_" {
+					if typed.ToolName == "bash" {
 						foundOriginalResult = true
 						if tc.expectedSubmittedPayload != nil {
 							if typed.Result.HITL["mode"] != "form" || typed.Result.HITL["decision"] != "approve" {
@@ -916,7 +1084,7 @@ func TestBashSecuritySoftBlockEmitsApprovalWithoutChecker(t *testing.T) {
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx:    &contracts.ExecutionContext{},
 		queuedToolCalls: []*preparedToolInvocation{
-			{toolID: "tool_1", toolName: "_bash_", args: map[string]any{"command": "printf ok > owner.md", "description": "创建 owner"}},
+			{toolID: "tool_1", toolName: "bash", args: map[string]any{"command": "printf ok > owner.md", "description": "创建 owner"}},
 		},
 	}
 
@@ -934,15 +1102,22 @@ func TestBashSecuritySoftBlockEmitsApprovalWithoutChecker(t *testing.T) {
 		t.Fatalf("expected one approval item, got %#v", ask)
 	}
 	approval, _ := ask.Approvals[0].(map[string]any)
-	options, _ := approval["options"].([]any)
-	if len(options) != 2 {
-		t.Fatalf("expected bash security approval to omit prefix option, got %#v", options)
+	if approval["ruleKey"] != bashsec.RuleKeyRedirections {
+		t.Fatalf("expected stable bash security rule key, got %#v", approval)
 	}
+	options, _ := approval["options"].([]any)
+	if len(options) != 3 {
+		t.Fatalf("expected bash security approval to include prefix option, got %#v", options)
+	}
+	foundPrefix := false
 	for _, option := range options {
 		item, _ := option.(map[string]any)
 		if item["decision"] == "approve_prefix_run" {
-			t.Fatalf("did not expect prefix approval option, got %#v", options)
+			foundPrefix = true
 		}
+	}
+	if !foundPrefix {
+		t.Fatalf("expected prefix approval option, got %#v", options)
 	}
 }
 
@@ -964,7 +1139,7 @@ func TestBashSecuritySoftBlockApproveExecutesOriginalCommand(t *testing.T) {
 		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}}},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args:     map[string]any{"command": "printf ok > owner.md", "description": "创建 owner"},
 		},
 	}
@@ -997,6 +1172,130 @@ func TestBashSecuritySoftBlockApproveExecutesOriginalCommand(t *testing.T) {
 	}
 }
 
+func TestBashSecuritySoftBlockPrefixApprovalWhitelistsRule(t *testing.T) {
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
+	runControl := contracts.NewRunControl(context.Background(), "run_1")
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools:    executor,
+			frontend: frontendtools.NewDefaultRegistry(),
+		},
+		session: contracts.QuerySession{
+			RequestID: "req_1",
+			ChatID:    "chat_1",
+			RunID:     "run_1",
+		},
+		runControl: runControl,
+		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}}},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "bash",
+			args:     map[string]any{"command": "printf ok > owner.md", "description": "创建 owner"},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invokeActiveToolCall returned error: %v", err)
+	}
+	ack := runControl.ResolveSubmit(api.SubmitRequest{
+		RunID:      "run_1",
+		AwaitingID: stream.hitlAwaitingID,
+		Params:     encodedSubmitParams(t, []map[string]any{{"id": "tool_1", "decision": "approve_prefix_run"}}),
+	})
+	if !ack.Accepted {
+		t.Fatalf("expected submit to be accepted, got %#v", ack)
+	}
+	if err := stream.awaitHITLSubmitAndExecute(); err != nil {
+		t.Fatalf("awaitHITLSubmitAndExecute returned error: %v", err)
+	}
+	if !stream.isRuleWhitelisted(bashsec.RuleKeyRedirections) {
+		t.Fatalf("expected bash security rule whitelist, got %#v", stream.hitlRuleWhitelist)
+	}
+
+	stream.activeToolCall = &preparedToolInvocation{
+		toolID:   "tool_2",
+		toolName: "bash",
+		args:     map[string]any{"command": "printf again > other.md", "description": "创建 other"},
+	}
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("second invokeActiveToolCall returned error: %v", err)
+	}
+	if len(executor.invocations) != 2 {
+		t.Fatalf("expected both commands to execute, got %#v", executor.invocations)
+	}
+	if stream.hitlPendingCall != nil {
+		t.Fatalf("expected whitelisted bash security command to skip approval, got %#v", stream.hitlPendingCall)
+	}
+}
+
+func TestBashSecuritySoftBlockAutoApprovesByHITLLevel(t *testing.T) {
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
+	command := "printf ok > owner.md"
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools:    executor,
+			frontend: frontendtools.NewDefaultRegistry(),
+		},
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{
+			HITLLevel: bashsec.LevelRedirections,
+		},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "bash",
+			args:     map[string]any{"command": command, "description": "创建 owner"},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invokeActiveToolCall returned error: %v", err)
+	}
+	if len(executor.invocations) != 1 {
+		t.Fatalf("expected command to execute without approval UI, got %#v", executor.invocations)
+	}
+	if stream.hitlPendingCall != nil || len(stream.pending) != 1 {
+		t.Fatalf("expected no approval ask and one tool result, pending=%#v hitlPending=%#v", stream.pending, stream.hitlPendingCall)
+	}
+	if got := stream.execCtx.BashSecurityApprovals[bashsec.ApprovalFingerprint(command)]; got != 1 {
+		t.Fatalf("expected fingerprint approval registered before host bash execution, got %d in %#v", got, stream.execCtx.BashSecurityApprovals)
+	}
+}
+
+func TestBashSecuritySoftBlockUsesExistingFingerprintApproval(t *testing.T) {
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
+	command := "printf ok > owner.md"
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools:    executor,
+			frontend: frontendtools.NewDefaultRegistry(),
+		},
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{
+			BashSecurityApprovals: map[string]int{
+				bashsec.ApprovalFingerprint(command): 1,
+			},
+		},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "bash",
+			args:     map[string]any{"command": command, "description": "创建 owner"},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invokeActiveToolCall returned error: %v", err)
+	}
+	if len(executor.invocations) != 1 {
+		t.Fatalf("expected command to execute with existing fingerprint approval, got %#v", executor.invocations)
+	}
+	if stream.hitlPendingCall != nil {
+		t.Fatalf("expected existing fingerprint approval to skip UI, got %#v", stream.hitlPendingCall)
+	}
+}
+
 func TestBashSecuritySoftBlockRejectDoesNotExecute(t *testing.T) {
 	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
 	runControl := contracts.NewRunControl(context.Background(), "run_1")
@@ -1015,7 +1314,7 @@ func TestBashSecuritySoftBlockRejectDoesNotExecute(t *testing.T) {
 		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}}},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args:     map[string]any{"command": "printf ok > owner.md", "description": "创建 owner"},
 		},
 	}
@@ -1058,7 +1357,7 @@ func TestAwaitHITLSubmitAndExecute_RejectEmitsCancelledAnswer(t *testing.T) {
 		},
 		hitlPendingCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args: map[string]any{
 				"command": "docker rmi nginx:latest",
 			},
@@ -1121,7 +1420,7 @@ func TestAwaitHITLSubmitAndExecute_RejectEmitsCancelledAnswer(t *testing.T) {
 				}
 			}
 		case contracts.DeltaToolResult:
-			if typed.ToolName == "_bash_" {
+			if typed.ToolName == "bash" {
 				foundResult = true
 				if typed.Result.Error != "user_rejected" {
 					t.Fatalf("expected user_rejected tool result, got %#v", typed.Result)
@@ -1170,7 +1469,7 @@ func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *test
 	}
 	invocation := &preparedToolInvocation{
 		toolID:   "tool_1",
-		toolName: "_bash_",
+		toolName: "bash",
 		args: map[string]any{
 			"command": sampleLeaveCommand(3),
 		},
@@ -1195,7 +1494,7 @@ func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *test
 		RunID:      "run_1",
 		AwaitingID: stream.hitlAwaitingID,
 		Params: encodedSubmitParams(t, []map[string]any{
-			{"id": "form-1", "reason": "用户取消"},
+			{"id": "form-1", "action": "reject"},
 		}),
 	})
 	if !ack.Accepted {
@@ -1211,15 +1510,18 @@ func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *test
 	foundResult := false
 	for _, delta := range stream.pending {
 		typed, ok := delta.(contracts.DeltaToolResult)
-		if !ok || typed.ToolName != "_bash_" {
+		if !ok || typed.ToolName != "bash" {
 			continue
 		}
 		foundResult = true
 		if typed.Result.Error != "user_rejected" {
 			t.Fatalf("expected user_rejected result, got %#v", typed.Result)
 		}
-		if typed.Result.HITL["mode"] != "form" || typed.Result.HITL["decision"] != "reject" || typed.Result.HITL["reason"] != "用户取消" {
+		if typed.Result.HITL["mode"] != "form" || typed.Result.HITL["decision"] != "reject" {
 			t.Fatalf("expected form reject HITL metadata, got %#v", typed.Result.HITL)
+		}
+		if _, ok := typed.Result.HITL["reason"]; ok {
+			t.Fatalf("did not expect reject reason for form reject, got %#v", typed.Result.HITL)
 		}
 		if _, ok := typed.Result.HITL["submittedPayload"]; ok {
 			t.Fatalf("did not expect submitted payload for form reject, got %#v", typed.Result.HITL)
@@ -1232,7 +1534,7 @@ func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *test
 		t.Fatalf("expected form reject tool message and HITL summary, got %#v", stream.messages)
 	}
 	noticeText, _ := stream.messages[len(stream.messages)-1].Content.(string)
-	if !strings.Contains(noticeText, `[HITL] `) || !strings.Contains(noticeText, ` → reject（用户取消）`) || strings.Contains(noticeText, "提交参数:") {
+	if !strings.Contains(noticeText, `[HITL] `) || !strings.Contains(noticeText, ` → reject`) || strings.Contains(noticeText, "用户取消") || strings.Contains(noticeText, "提交参数:") {
 		t.Fatalf("expected form reject HITL summary without submitted payload, got %#v", stream.messages[len(stream.messages)-1])
 	}
 }
@@ -1258,7 +1560,7 @@ func TestAwaitHITLSubmitAndExecute_FormPayloadRebuildFailureEmitsRejectHITLMetad
 	}
 	invocation := &preparedToolInvocation{
 		toolID:   "tool_1",
-		toolName: "_bash_",
+		toolName: "bash",
 		args: map[string]any{
 			"command": "mock create-leave",
 		},
@@ -1283,7 +1585,7 @@ func TestAwaitHITLSubmitAndExecute_FormPayloadRebuildFailureEmitsRejectHITLMetad
 		RunID:      "run_1",
 		AwaitingID: stream.hitlAwaitingID,
 		Params: encodedSubmitParams(t, []map[string]any{
-			{"id": "form-1", "payload": sampleLeavePayload(2)},
+			{"id": "form-1", "action": "submit", "form": sampleLeavePayload(2)},
 		}),
 	})
 	if !ack.Accepted {
@@ -1299,7 +1601,7 @@ func TestAwaitHITLSubmitAndExecute_FormPayloadRebuildFailureEmitsRejectHITLMetad
 	foundResult := false
 	for _, delta := range stream.pending {
 		typed, ok := delta.(contracts.DeltaToolResult)
-		if !ok || typed.ToolName != "_bash_" {
+		if !ok || typed.ToolName != "bash" {
 			continue
 		}
 		foundResult = true
@@ -1342,17 +1644,17 @@ func TestAwaitHITLApprovalBatchAndContinue_HostUsesUnifiedBashToolName(t *testin
 			frontend: frontendtools.NewDefaultRegistry(),
 		},
 		session: contracts.QuerySession{
-			RequestID:             "req_1",
-			ChatID:                "chat_1",
-			RunID:                 "run_1",
-			AgentHasSandboxConfig: false,
+			RequestID:              "req_1",
+			ChatID:                 "chat_1",
+			RunID:                  "run_1",
+			AgentHasRuntimeSandbox: false,
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
 			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 100}},
 			Session: contracts.QuerySession{
-				RunID:                 "run_1",
-				AgentHasSandboxConfig: false,
+				RunID:                  "run_1",
+				AgentHasRuntimeSandbox: false,
 			},
 		},
 		checker: commandResultChecker{
@@ -1369,7 +1671,7 @@ func TestAwaitHITLApprovalBatchAndContinue_HostUsesUnifiedBashToolName(t *testin
 		},
 		queuedToolCalls: []*preparedToolInvocation{{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args: map[string]any{
 				"command":     "git status",
 				"description": "查看仓库状态",
@@ -1393,13 +1695,13 @@ func TestAwaitHITLApprovalBatchAndContinue_HostUsesUnifiedBashToolName(t *testin
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if stream.execCtx.CurrentToolName == "_bash_" {
+		if stream.execCtx.CurrentToolName == "bash" {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if stream.execCtx.CurrentToolName != "_bash_" {
-		t.Fatalf("expected CurrentToolName to be _bash_ while awaiting approval, got %q", stream.execCtx.CurrentToolName)
+	if stream.execCtx.CurrentToolName != "bash" {
+		t.Fatalf("expected CurrentToolName to be bash while awaiting approval, got %q", stream.execCtx.CurrentToolName)
 	}
 	ack := runControl.ResolveSubmit(api.SubmitRequest{
 		RunID:      "run_1",
@@ -1418,17 +1720,17 @@ func TestAwaitHITLApprovalBatchAndContinue_HostUsesUnifiedBashToolName(t *testin
 			t.Fatalf("invokeActiveToolCall returned error: %v", err)
 		}
 	}
-	if len(executor.invocations) != 1 || executor.invocations[0].name != "_bash_" {
-		t.Fatalf("expected host HITL flow to invoke unified _bash_, got %#v", executor.invocations)
+	if len(executor.invocations) != 1 || executor.invocations[0].name != "bash" {
+		t.Fatalf("expected host HITL flow to invoke unified bash, got %#v", executor.invocations)
 	}
 	foundResult := false
 	for _, delta := range stream.pending {
-		if typed, ok := delta.(contracts.DeltaToolResult); ok && typed.ToolName == "_bash_" {
+		if typed, ok := delta.(contracts.DeltaToolResult); ok && typed.ToolName == "bash" {
 			foundResult = true
 		}
 	}
 	if !foundResult {
-		t.Fatalf("expected approved host HITL flow to emit _bash_ tool result, got %#v", stream.pending)
+		t.Fatalf("expected approved host HITL flow to emit bash tool result, got %#v", stream.pending)
 	}
 }
 
@@ -1477,9 +1779,9 @@ func TestPrepareQueuedBashApprovalBatch_AppendsSingleSummaryAfterAllApprovedResu
 			},
 		},
 		queuedToolCalls: []*preparedToolInvocation{
-			{toolID: "tool_1", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
-			{toolID: "tool_2", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "放开 b.sh 权限"}},
-			{toolID: "tool_3", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/c.sh", "description": "放开 c.sh 权限"}},
+			{toolID: "tool_1", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
+			{toolID: "tool_2", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "放开 b.sh 权限"}},
+			{toolID: "tool_3", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/c.sh", "description": "放开 c.sh 权限"}},
 		},
 	}
 	var recordedApproval *chat.StepApproval
@@ -1597,9 +1899,9 @@ func TestPrepareQueuedBashApprovalBatch_MergesAllBuiltinApprovalsInSingleAwait(t
 			},
 		},
 		queuedToolCalls: []*preparedToolInvocation{
-			{toolID: "tool_1", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
-			{toolID: "tool_2", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "放开 b.sh 权限"}},
-			{toolID: "tool_3", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/c.sh", "description": "放开 c.sh 权限"}},
+			{toolID: "tool_1", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
+			{toolID: "tool_2", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "放开 b.sh 权限"}},
+			{toolID: "tool_3", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/c.sh", "description": "放开 c.sh 权限"}},
 		},
 	}
 
@@ -1687,7 +1989,7 @@ func TestPrepareQueuedBashApprovalBatch_MergesAllBuiltinApprovalsInSingleAwait(t
 				rejectedCount++
 				continue
 			}
-			if typed.ToolName == "_bash_" {
+			if typed.ToolName == "bash" {
 				approvedResults++
 				if typed.Result.HITL["decision"] != "approve" || typed.Result.HITL["awaitingId"] != ask.AwaitingID {
 					t.Fatalf("expected approved tool result to include HITL metadata, got %#v", typed.Result)
@@ -1735,6 +2037,57 @@ func TestPrepareQueuedBashApprovalBatch_MergesAllBuiltinApprovalsInSingleAwait(t
 		!strings.Contains(text, `2. chmod 777 ~/b.sh → approve`) ||
 		!strings.Contains(text, `3. chmod 777 ~/c.sh → reject（风险过高）`) {
 		t.Fatalf("unexpected mixed summary %#v", summary)
+	}
+}
+
+func TestPrepareQueuedBashApprovalBatch_UsesLargestRuleTimeout(t *testing.T) {
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools: stubToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}},
+			cfg:   config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 15000}},
+		},
+		session: contracts.QuerySession{
+			RequestID: "req_1",
+			ChatID:    "chat_1",
+			RunID:     "run_1",
+		},
+		runControl: contracts.NewRunControl(context.Background(), "run_1"),
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 30000}},
+		},
+		checker: commandResultChecker{
+			results: map[string]hitl.InterceptResult{
+				"chmod 777 ~/a.sh": {
+					Intercepted:     true,
+					Rule:            hitl.FlatRule{Level: 1, ViewportType: "builtin", ViewportKey: "confirm_dialog", TimeoutMs: 40000},
+					OriginalCommand: "chmod 777 ~/a.sh",
+				},
+				"chmod 777 ~/b.sh": {
+					Intercepted:     true,
+					Rule:            hitl.FlatRule{Level: 2, ViewportType: "builtin", ViewportKey: "confirm_dialog", TimeoutMs: 60000},
+					OriginalCommand: "chmod 777 ~/b.sh",
+				},
+			},
+			tools: map[string]api.ToolDetailResponse{
+				strings.ToLower(bashToolDefinition().Name): bashToolDefinition(),
+			},
+		},
+		queuedToolCalls: []*preparedToolInvocation{
+			{toolID: "tool_1", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "a"}},
+			{toolID: "tool_2", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "b"}},
+		},
+	}
+
+	if !stream.prepareQueuedBashApprovalBatch() {
+		t.Fatal("expected batch approval await to be prepared")
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok {
+		t.Fatalf("expected await ask delta, got %#v", stream.pending)
+	}
+	if ask.Timeout != 60000 {
+		t.Fatalf("expected largest rule timeout 60000, got %#v", ask)
 	}
 }
 
@@ -1786,8 +2139,8 @@ func TestPrepareQueuedBashApprovalBatch_LeavesHtmlViewportOutsideMergedApprovalA
 			},
 		},
 		queuedToolCalls: []*preparedToolInvocation{
-			{toolID: "tool_1", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
-			{toolID: "tool_2", toolName: "_bash_", args: map[string]any{"command": sampleLeaveCommand(3), "description": "创建请假单"}},
+			{toolID: "tool_1", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
+			{toolID: "tool_2", toolName: "bash", args: map[string]any{"command": sampleLeaveCommand(3), "description": "创建请假单"}},
 		},
 	}
 
@@ -1845,7 +2198,7 @@ func TestAppendOriginalToolResult_DoesNotAppendHITLSummaryWithoutApprovalEntries
 	}
 	invocation := &preparedToolInvocation{
 		toolID:   "tool_1",
-		toolName: "_bash_",
+		toolName: "bash",
 		args:     map[string]any{"command": "ls"},
 	}
 	stream.appendOriginalToolResult(invocation, contracts.ToolExecutionResult{
@@ -1873,7 +2226,7 @@ func TestPrepareQueuedBashApprovalBatch_SkipsWhitelistedRuleWithinRun(t *testing
 			},
 		},
 		queuedToolCalls: []*preparedToolInvocation{
-			{toolID: "tool_4", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/d.sh", "description": "放开 d.sh 权限"}},
+			{toolID: "tool_4", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/d.sh", "description": "放开 d.sh 权限"}},
 		},
 	}
 
@@ -1935,9 +2288,9 @@ func TestPrepareQueuedBashApprovalBatch_BlocksEntireTurnAndResumesInOriginalOrde
 			},
 		},
 		queuedToolCalls: []*preparedToolInvocation{
-			{toolID: "tool_1", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
+			{toolID: "tool_1", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "放开 a.sh 权限"}},
 			{toolID: "tool_2", toolName: "weather_tool", args: map[string]any{"city": "Shanghai"}},
-			{toolID: "tool_3", toolName: "_bash_", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "放开 b.sh 权限"}},
+			{toolID: "tool_3", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "放开 b.sh 权限"}},
 		},
 	}
 
@@ -1981,7 +2334,7 @@ func TestPrepareQueuedBashApprovalBatch_BlocksEntireTurnAndResumesInOriginalOrde
 	if len(executor.invocations) != 2 {
 		t.Fatalf("expected approved bash plus unblocked tool to execute, got %#v", executor.invocations)
 	}
-	if executor.invocations[0].name != "_bash_" || executor.invocations[0].args["command"] != "chmod 777 ~/a.sh" {
+	if executor.invocations[0].name != "bash" || executor.invocations[0].args["command"] != "chmod 777 ~/a.sh" {
 		t.Fatalf("expected first execution to be approved first bash, got %#v", executor.invocations)
 	}
 	if executor.invocations[1].name != "weather_tool" || executor.invocations[1].args["city"] != "Shanghai" {
@@ -2024,11 +2377,11 @@ func TestAwaitHITLSubmitAndExecute_TimeoutEmitsTerminalAnswer(t *testing.T) {
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 1}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 1}},
 		},
 		hitlPendingCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args: map[string]any{
 				"command": "docker rmi nginx:latest",
 			},
@@ -2069,7 +2422,7 @@ func TestAwaitHITLSubmitAndExecute_TimeoutEmitsTerminalAnswer(t *testing.T) {
 				}
 			}
 		case contracts.DeltaToolResult:
-			if typed.ToolName == "_bash_" {
+			if typed.ToolName == "bash" {
 				foundResult = true
 				if typed.Result.Error != "hitl_timeout" {
 					t.Fatalf("expected hitl_timeout tool result, got %#v", typed.Result)
@@ -2096,11 +2449,11 @@ func TestAwaitHITLSubmitAndExecute_FormTimeoutEmitsHITLMetadataAndSummary(t *tes
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 1}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 1}},
 		},
 		hitlPendingCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args: map[string]any{
 				"command": sampleLeaveCommand(3),
 			},
@@ -2131,7 +2484,7 @@ func TestAwaitHITLSubmitAndExecute_FormTimeoutEmitsHITLMetadataAndSummary(t *tes
 	foundResult := false
 	for _, delta := range stream.pending {
 		typed, ok := delta.(contracts.DeltaToolResult)
-		if !ok || typed.ToolName != "_bash_" {
+		if !ok || typed.ToolName != "bash" {
 			continue
 		}
 		foundResult = true
@@ -2198,7 +2551,7 @@ func TestInvokeActiveToolCallUsesSkillScopedChecker(t *testing.T) {
 		},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args: map[string]any{
 				"command": "git push origin main",
 			},
@@ -2281,9 +2634,9 @@ func TestBuildFormApprovalArgsFallsBackToOriginalCommandPayload(t *testing.T) {
 		t.Fatalf("expected forms in form approval args, got %#v", args)
 	}
 	form := forms[0].(map[string]any)
-	payload, ok := form["payload"].(map[string]any)
+	payload, ok := form["form"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected payload in form approval args, got %#v", args)
+		t.Fatalf("expected form in form approval args, got %#v", args)
 	}
 	expected := sampleLeavePayload(3)
 	if !reflect.DeepEqual(payload, expected) {
@@ -2358,7 +2711,7 @@ func TestReconstructCommandWithPayload(t *testing.T) {
 func TestHITLRejectedToolResultMarksResultFinal(t *testing.T) {
 	result := hitlRejectedToolResult(&preparedToolInvocation{
 		toolID:   "tool_1",
-		toolName: "_bash_",
+		toolName: "bash",
 	})
 
 	if result.Error != "user_rejected" || result.ExitCode != -1 {
@@ -2414,7 +2767,7 @@ func TestInvokeActiveToolCallAutoApprovesBuiltinLevelInCurrentRun(t *testing.T) 
 		},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args: map[string]any{
 				"command": "git push origin main",
 			},
@@ -2475,7 +2828,7 @@ func TestInvokeActiveToolCallDoesNotAutoApproveHTMLViewport(t *testing.T) {
 		},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "_bash_",
+			toolName: "bash",
 			args: map[string]any{
 				"command": sampleLeaveCommand(3),
 			},

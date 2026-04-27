@@ -9,33 +9,36 @@ import (
 )
 
 type Config struct {
-	Server       ServerConfig
-	Paths        PathsConfig
-	Agents       CatalogConfig
-	Teams        CatalogConfig
-	Skills       SkillCatalogConfig
-	Prompts      PromptsConfig
-	Providers    CatalogConfig
-	Models       CatalogConfig
-	Schedule     ScheduleConfig
-	Memory       MemoryConfig
-	Defaults     DefaultsConfig
-	SSE          SSEConfig
-	H2A          H2AConfig
-	Auth         AuthConfig
-	ChatImage    ChatImageTokenConfig
-	ChatStorage  ChatStorageConfig
-	Logging      LoggingConfig
-	CORS         CORSConfig
-	ContainerHub ContainerHubConfig
-	Bash         BashConfig
-	BashHITL     BashHITLConfig
-	Run          RunConfig
-	WebSocket    WebSocketConfig
-	GatewayWS    GatewayWSConfig
+	Server         ServerConfig
+	Paths          PathsConfig
+	Agents         CatalogConfig
+	Teams          CatalogConfig
+	Skills         SkillCatalogConfig
+	Prompts        PromptsConfig
+	Providers      CatalogConfig
+	Models         CatalogConfig
+	Schedule       ScheduleConfig
+	Memory         MemoryConfig
+	Defaults       DefaultsConfig
+	Stream         StreamConfig
+	SSE            SSEConfig
+	H2A            H2AConfig
+	Auth           AuthConfig
+	ResourceTicket ResourceTicketConfig
+	ChatStorage    ChatStorageConfig
+	Logging        LoggingConfig
+	CORS           CORSConfig
+	ContainerHub   ContainerHubConfig
+	Bash           BashConfig
+	BashHITL       BashHITLConfig
+	Run            RunConfig
+	WebSocket      WebSocketConfig
+	GatewayWS      GatewayWSConfig
 	// Gateways 是多 gateway 反向连接列表（wecom / feishu / ding / ...）。
 	// legacy 单 gateway 配置 (GatewayWS) 在 normalize() 阶段合成为 Gateways[0]。
 	Gateways []GatewayEntry
+	// Channels 是 channel 元数据与 agent 准入配置；每条可合成一条 gateway entry。
+	Channels []ChannelConfig
 }
 
 type ServerConfig struct {
@@ -111,12 +114,17 @@ type BudgetDefaultsConfig struct {
 	RunTimeoutMs int
 	Model        RetryBudgetConfig
 	Tool         RetryBudgetConfig
+	Hitl         HitlBudgetConfig
 }
 
 type RetryBudgetConfig struct {
 	MaxCalls   int
 	TimeoutMs  int
 	RetryCount int
+}
+
+type HitlBudgetConfig struct {
+	TimeoutMs int
 }
 
 type ReactDefaultsConfig struct {
@@ -128,10 +136,13 @@ type PlanExecuteDefaultsConfig struct {
 	MaxWorkRoundsPerTask int
 }
 
-type SSEConfig struct {
+type StreamConfig struct {
 	IncludeToolPayloadEvents bool
 	IncludeDebugEvents       bool
-	HeartbeatIntervalMs      int64
+}
+
+type SSEConfig struct {
+	HeartbeatIntervalMs int64
 }
 
 type H2AConfig struct {
@@ -153,10 +164,13 @@ type AuthConfig struct {
 	LocalPublicKeyFile string
 }
 
-type ChatImageTokenConfig struct {
-	Secret                string
-	TTLSeconds            int64
-	ResourceTicketEnabled bool
+type ResourceTicketConfig struct {
+	Secret     string
+	TTLSeconds int64
+}
+
+func (c ResourceTicketConfig) Enabled() bool {
+	return strings.TrimSpace(c.Secret) != ""
 }
 
 type ChatStorageConfig struct {
@@ -291,6 +305,32 @@ type GatewayEntry struct {
 	ReconnectMaxMs     int64
 }
 
+type ChannelType string
+
+const (
+	ChannelTypeBridge  ChannelType = "bridge"
+	ChannelTypeGateway ChannelType = "gateway"
+)
+
+type ChannelConfig struct {
+	ID           string
+	Name         string
+	Type         ChannelType
+	DefaultAgent string
+	Agents       []string
+	AllAgents    bool
+	Gateway      ChannelGatewayConfig
+}
+
+type ChannelGatewayConfig struct {
+	URL                string
+	JwtToken           string
+	BaseURL            string
+	HandshakeTimeoutMs int64
+	ReconnectMinMs     int64
+	ReconnectMaxMs     int64
+}
+
 // 网关 HTTP 旁路的路径约定，由网关侧固定，不再做成可配置。
 const (
 	GatewayUploadPath   = "/api/push"
@@ -299,15 +339,22 @@ const (
 
 func Load() (Config, error) {
 	cfg := defaultConfig()
-	cfg.applyStructuredConfig()
+	if err := cfg.applyStructuredConfig(); err != nil {
+		return Config{}, err
+	}
 	cfg.applyEnv()
-	cfg.normalize()
+	if err := cfg.normalize(); err != nil {
+		return Config{}, err
+	}
 
 	if strings.TrimSpace(cfg.Server.Port) == "" {
 		return Config{}, fmt.Errorf("SERVER_PORT must not be empty")
 	}
 	if strings.TrimSpace(cfg.Paths.RegistriesDir) == "" {
 		return Config{}, fmt.Errorf("REGISTRIES_DIR must not be empty")
+	}
+	if err := validateExplicitDirEnv("PAN_DIR", cfg.Paths.PanDir); err != nil {
+		return Config{}, err
 	}
 	return cfg, nil
 }
@@ -372,6 +419,9 @@ func defaultConfig() Config {
 					TimeoutMs:  120000,
 					RetryCount: 0,
 				},
+				Hitl: HitlBudgetConfig{
+					TimeoutMs: 0,
+				},
 			},
 			React: ReactDefaultsConfig{MaxSteps: 60},
 			Plan: PlanExecuteDefaultsConfig{
@@ -379,10 +429,12 @@ func defaultConfig() Config {
 				MaxWorkRoundsPerTask: 6,
 			},
 		},
-		SSE: SSEConfig{
+		Stream: StreamConfig{
 			IncludeToolPayloadEvents: true,
 			IncludeDebugEvents:       false,
-			HeartbeatIntervalMs:      15000,
+		},
+		SSE: SSEConfig{
+			HeartbeatIntervalMs: 15000,
 		},
 		H2A: H2AConfig{
 			Render: H2ARenderConfig{
@@ -396,10 +448,9 @@ func defaultConfig() Config {
 			Enabled:            true,
 			LocalPublicKeyFile: filepath.Join("configs", "local-public-key.pem"),
 		},
-		ChatImage: ChatImageTokenConfig{
-			Secret:                "",
-			TTLSeconds:            86400,
-			ResourceTicketEnabled: true,
+		ResourceTicket: ResourceTicketConfig{
+			Secret:     "",
+			TTLSeconds: 86400,
 		},
 		ChatStorage: ChatStorageConfig{
 			Dir:                                  paths.ChatsDir,
@@ -488,11 +539,15 @@ func defaultConfig() Config {
 	}
 }
 
-func (c *Config) applyStructuredConfig() {
+func (c *Config) applyStructuredConfig() error {
 	c.applyContainerHubFile(ProjectFile("configs/container-hub.yml"))
 	c.applyBashFile(ProjectFile("configs/bash.yml"))
 	c.applyCORSFile(ProjectFile("configs/cors.yml"))
 	c.applyPromptsFile(ProjectFile("configs/prompts.yml"))
+	if err := c.applyChannelsFile(ProjectFile("configs/channels.yml")); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Config) applyContainerHubFile(path string) {
@@ -570,6 +625,111 @@ func (c *Config) applyPromptsFile(path string) {
 	c.Prompts.Skill.CatalogHeader = stringValue(anyValue(skill["catalog-header"], c.Prompts.Skill.CatalogHeader), c.Prompts.Skill.CatalogHeader)
 }
 
+func (c *Config) applyChannelsFile(path string) error {
+	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return err
+	}
+	values, _ := tree.(map[string]any)
+	if len(values) == 0 {
+		return nil
+	}
+	rawChannels, ok := values["channels"]
+	if !ok {
+		return nil
+	}
+	channelMap, ok := rawChannels.(map[string]any)
+	if !ok {
+		return fmt.Errorf("channels config: channels must be a map")
+	}
+	configs := make([]ChannelConfig, 0, len(channelMap))
+	for rawID, rawValue := range channelMap {
+		channelID := strings.TrimSpace(rawID)
+		if channelID == "" {
+			return fmt.Errorf("channels config: channel id must not be empty")
+		}
+		entry, ok := rawValue.(map[string]any)
+		if !ok {
+			return fmt.Errorf("channels config: channel %q must be an object", channelID)
+		}
+		channelCfg, err := parseChannelConfig(channelID, entry)
+		if err != nil {
+			return err
+		}
+		configs = append(configs, channelCfg)
+	}
+	c.Channels = configs
+	return nil
+}
+
+func parseChannelConfig(channelID string, values map[string]any) (ChannelConfig, error) {
+	cfg := ChannelConfig{
+		ID:   channelID,
+		Name: stringValue(anyValue(values["name"], channelID), channelID),
+	}
+	rawType := strings.ToLower(strings.TrimSpace(stringValue(anyValue(values["type"], ""), "")))
+	switch ChannelType(rawType) {
+	case ChannelTypeBridge, ChannelTypeGateway:
+		cfg.Type = ChannelType(rawType)
+	default:
+		return ChannelConfig{}, fmt.Errorf("channels config: channel %q has invalid type %q", channelID, rawType)
+	}
+	cfg.DefaultAgent = stringValue(anyValue(values["default-agent"], ""), "")
+	allAgents, agents, err := parseChannelAgents(values["agents"])
+	if err != nil {
+		return ChannelConfig{}, fmt.Errorf("channels config: channel %q agents: %w", channelID, err)
+	}
+	cfg.AllAgents = allAgents
+	cfg.Agents = agents
+	gatewayMap, ok := values["gateway"].(map[string]any)
+	if !ok || len(gatewayMap) == 0 {
+		return ChannelConfig{}, fmt.Errorf("channels config: channel %q gateway is required", channelID)
+	}
+	cfg.Gateway = ChannelGatewayConfig{
+		URL:                stringValue(anyValue(gatewayMap["url"], ""), ""),
+		JwtToken:           stringValue(anyValue(gatewayMap["jwt-token"], ""), ""),
+		BaseURL:            stringValue(anyValue(gatewayMap["base-url"], ""), ""),
+		HandshakeTimeoutMs: int64Value(anyValue(gatewayMap["handshake-timeout-ms"], 0), 0),
+		ReconnectMinMs:     int64Value(anyValue(gatewayMap["reconnect-min-ms"], 0), 0),
+		ReconnectMaxMs:     int64Value(anyValue(gatewayMap["reconnect-max-ms"], 0), 0),
+	}
+	return cfg, nil
+}
+
+func parseChannelAgents(value any) (bool, []string, error) {
+	if value == nil {
+		return true, nil, nil
+	}
+	switch typed := value.(type) {
+	case string:
+		typed = strings.TrimSpace(typed)
+		if typed == "" || typed == "*" {
+			return true, nil, nil
+		}
+		return false, []string{typed}, nil
+	case []any:
+		agents := make([]string, 0, len(typed))
+		seen := map[string]struct{}{}
+		for _, item := range typed {
+			agentKey := strings.TrimSpace(stringValue(item, ""))
+			if agentKey == "" {
+				return false, nil, fmt.Errorf("agent key must not be empty")
+			}
+			if agentKey == "*" {
+				return false, nil, fmt.Errorf(`"*" must be used as a scalar, not inside a list`)
+			}
+			if _, exists := seen[agentKey]; exists {
+				continue
+			}
+			seen[agentKey] = struct{}{}
+			agents = append(agents, agentKey)
+		}
+		return false, agents, nil
+	default:
+		return false, nil, fmt.Errorf("must be \"*\" or a list of agent keys")
+	}
+}
+
 func (c *Config) applyEnv() {
 	c.Server.Port = stringEnv("SERVER_PORT", c.Server.Port)
 
@@ -622,12 +782,13 @@ func (c *Config) applyEnv() {
 	c.Defaults.Budget.Tool.MaxCalls = intEnv("AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS", c.Defaults.Budget.Tool.MaxCalls)
 	c.Defaults.Budget.Tool.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS", c.Defaults.Budget.Tool.TimeoutMs)
 	c.Defaults.Budget.Tool.RetryCount = intEnv("AGENT_DEFAULT_BUDGET_TOOL_RETRY_COUNT", c.Defaults.Budget.Tool.RetryCount)
+	c.Defaults.Budget.Hitl.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS", c.Defaults.Budget.Hitl.TimeoutMs)
 	c.Defaults.React.MaxSteps = intEnv("AGENT_DEFAULT_REACT_MAX_STEPS", c.Defaults.React.MaxSteps)
 	c.Defaults.Plan.MaxSteps = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_STEPS", c.Defaults.Plan.MaxSteps)
 	c.Defaults.Plan.MaxWorkRoundsPerTask = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_WORK_ROUNDS_PER_TASK", c.Defaults.Plan.MaxWorkRoundsPerTask)
 
-	c.SSE.IncludeToolPayloadEvents = boolEnv("AGENT_SSE_INCLUDE_TOOL_PAYLOAD_EVENTS", c.SSE.IncludeToolPayloadEvents)
-	c.SSE.IncludeDebugEvents = boolEnv("AGENT_SSE_INCLUDE_DEBUG_EVENTS", c.SSE.IncludeDebugEvents)
+	c.Stream.IncludeToolPayloadEvents = boolEnv("AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS", c.Stream.IncludeToolPayloadEvents)
+	c.Stream.IncludeDebugEvents = boolEnv("AGENT_STREAM_INCLUDE_DEBUG_EVENTS", c.Stream.IncludeDebugEvents)
 	c.SSE.HeartbeatIntervalMs = int64Env("AGENT_SSE_HEARTBEAT_INTERVAL_MS", c.SSE.HeartbeatIntervalMs)
 	c.H2A.Render.FlushIntervalMs = int64Env("AGENT_H2A_RENDER_FLUSH_INTERVAL_MS", c.H2A.Render.FlushIntervalMs)
 	c.H2A.Render.MaxBufferedChars = intEnv("AGENT_H2A_RENDER_MAX_BUFFERED_CHARS", c.H2A.Render.MaxBufferedChars)
@@ -640,9 +801,8 @@ func (c *Config) applyEnv() {
 	c.Auth.JWKSCacheSeconds = intEnv("AGENT_AUTH_JWKS_CACHE_SECONDS", c.Auth.JWKSCacheSeconds)
 	c.Auth.LocalPublicKeyFile = stringEnv("AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE", c.Auth.LocalPublicKeyFile)
 
-	c.ChatImage.Secret = stringEnv("CHAT_IMAGE_TOKEN_SECRET", c.ChatImage.Secret)
-	c.ChatImage.TTLSeconds = int64Env("CHAT_IMAGE_TOKEN_TTL_SECONDS", c.ChatImage.TTLSeconds)
-	c.ChatImage.ResourceTicketEnabled = boolEnv("CHAT_RESOURCE_TICKET_ENABLED", c.ChatImage.ResourceTicketEnabled)
+	c.ResourceTicket.Secret = stringEnv("CHAT_RESOURCE_TICKET_SECRET", c.ResourceTicket.Secret)
+	c.ResourceTicket.TTLSeconds = int64Env("CHAT_RESOURCE_TICKET_TTL_SECONDS", c.ResourceTicket.TTLSeconds)
 
 	c.ChatStorage.Dir = pathEnv("CHATS_DIR", c.ChatStorage.Dir)
 	c.ChatStorage.K = intEnv("CHAT_STORAGE_K", c.ChatStorage.K)
@@ -715,7 +875,7 @@ func (c *Config) applyEnv() {
 	}
 }
 
-func (c *Config) normalize() {
+func (c *Config) normalize() error {
 	c.Paths.RegistriesDir = filepath.Clean(c.Paths.RegistriesDir)
 	c.Paths.ToolsDir = filepath.Clean(c.Paths.ToolsDir)
 	c.Paths.OwnerDir = filepath.Clean(c.Paths.OwnerDir)
@@ -748,12 +908,76 @@ func (c *Config) normalize() {
 		c.Bash.WorkingDirectory = "."
 	}
 
-	c.normalizeGateways()
+	if err := c.normalizeChannels(); err != nil {
+		return err
+	}
+	if err := c.normalizeGateways(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // normalizeGateways 把 legacy 单 gateway 配置（GATEWAY_WS_URL/TOKEN）合成为 Gateways[0]。
 // 已有 Gateways 列表时补缺省字段（ID、reconnect 参数），不覆盖已显式设置的值。
-func (c *Config) normalizeGateways() {
+func (c *Config) normalizeChannels() error {
+	if len(c.Channels) == 0 {
+		return nil
+	}
+	seenChannelIDs := map[string]struct{}{}
+	existingGatewayIDs := map[string]struct{}{}
+	existingGatewayChannels := map[string]struct{}{}
+	for _, gateway := range c.Gateways {
+		id := strings.TrimSpace(gateway.ID)
+		if id != "" {
+			existingGatewayIDs[id] = struct{}{}
+		}
+		channel := strings.TrimSpace(gateway.Channel)
+		if channel != "" {
+			existingGatewayChannels[channel] = struct{}{}
+		}
+	}
+	if strings.TrimSpace(c.GatewayWS.URL) != "" {
+		existingGatewayIDs["default"] = struct{}{}
+		if legacyChannel := deriveChannelFromURL(c.GatewayWS.URL); legacyChannel != "" {
+			existingGatewayChannels[legacyChannel] = struct{}{}
+		}
+	}
+
+	for _, channelCfg := range c.Channels {
+		channelID := strings.TrimSpace(channelCfg.ID)
+		if channelID == "" {
+			return fmt.Errorf("channels config: channel id must not be empty")
+		}
+		if _, exists := seenChannelIDs[channelID]; exists {
+			return fmt.Errorf("channels config: duplicate channel id %q", channelID)
+		}
+		seenChannelIDs[channelID] = struct{}{}
+		if _, exists := existingGatewayChannels[channelID]; exists {
+			return fmt.Errorf("channels config: channel %q conflicts with an existing gateway channel", channelID)
+		}
+		if _, exists := existingGatewayIDs[channelID]; exists {
+			return fmt.Errorf("channels config: channel %q conflicts with an existing gateway id", channelID)
+		}
+		if strings.TrimSpace(channelCfg.Gateway.URL) == "" {
+			return fmt.Errorf("channels config: channel %q gateway.url is required", channelID)
+		}
+		c.Gateways = append(c.Gateways, GatewayEntry{
+			ID:                 channelID,
+			Channel:            channelID,
+			URL:                strings.TrimSpace(channelCfg.Gateway.URL),
+			JwtToken:           strings.TrimSpace(channelCfg.Gateway.JwtToken),
+			BaseURL:            strings.TrimSpace(channelCfg.Gateway.BaseURL),
+			HandshakeTimeoutMs: channelCfg.Gateway.HandshakeTimeoutMs,
+			ReconnectMinMs:     channelCfg.Gateway.ReconnectMinMs,
+			ReconnectMaxMs:     channelCfg.Gateway.ReconnectMaxMs,
+		})
+		existingGatewayIDs[channelID] = struct{}{}
+		existingGatewayChannels[channelID] = struct{}{}
+	}
+	return nil
+}
+
+func (c *Config) normalizeGateways() error {
 	if len(c.Gateways) == 0 && strings.TrimSpace(c.GatewayWS.URL) != "" {
 		c.Gateways = append(c.Gateways, GatewayEntry{
 			ID:                 "default",
@@ -793,6 +1017,24 @@ func (c *Config) normalizeGateways() {
 			g.Channel = deriveChannelFromURL(g.URL)
 		}
 	}
+	seenIDs := map[string]struct{}{}
+	seenChannels := map[string]struct{}{}
+	for _, gateway := range c.Gateways {
+		id := strings.TrimSpace(gateway.ID)
+		if _, exists := seenIDs[id]; exists {
+			return fmt.Errorf("gateway config: duplicate id %q", id)
+		}
+		seenIDs[id] = struct{}{}
+		channel := strings.TrimSpace(gateway.Channel)
+		if channel == "" {
+			continue
+		}
+		if _, exists := seenChannels[channel]; exists {
+			return fmt.Errorf("gateway config: duplicate channel %q", channel)
+		}
+		seenChannels[channel] = struct{}{}
+	}
+	return nil
 }
 
 // deriveChannelFromURL 从 gateway URL 的 ?channel=xxx 参数提取 channel 名；
@@ -858,6 +1100,24 @@ func pathEnv(key string, fallback string) string {
 		return ""
 	}
 	return filepath.Clean(value)
+}
+
+func validateExplicitDirEnv(key string, path string) error {
+	raw, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	stat, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%s does not exist: %s", key, path)
+		}
+		return fmt.Errorf("stat %s (%s): %w", key, path, err)
+	}
+	if !stat.IsDir() {
+		return fmt.Errorf("%s is not a directory: %s", key, path)
+	}
+	return nil
 }
 
 func boolEnv(key string, fallback bool) bool {
@@ -1085,6 +1345,9 @@ var deprecatedEnvVars = []string{
 	"AGENT_SCHEDULE_EXTERNAL_DIR",
 	"AGENT_DATA_EXTERNAL_DIR",
 	"AGENT_MEMORY_STORAGE_DIR",
+	"CHAT_IMAGE_TOKEN_SECRET",
+	"CHAT_IMAGE_TOKEN_TTL_SECONDS",
+	"CHAT_RESOURCE_TICKET_ENABLED",
 	"MEMORY_CHATS_DIR",
 	"MEMORY_CHATS_K",
 	"MEMORY_CHATS_CHARSET",

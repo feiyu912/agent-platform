@@ -544,12 +544,12 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 	testCases := []struct {
 		name      string
 		configure func(*config.Config)
-		act       func(t *testing.T, flow *awaitingPushQuestionFlow)
+		act       func(t *testing.T, flow *awaitingPushQuestionFlow, awaitAskData map[string]any)
 		errorCode string
 	}{
 		{
 			name: "user dismissed",
-			act: func(t *testing.T, flow *awaitingPushQuestionFlow) {
+			act: func(t *testing.T, flow *awaitingPushQuestionFlow, awaitAskData map[string]any) {
 				t.Helper()
 				submitRec := httptest.NewRecorder()
 				submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"runId":"`+flow.runID+`","awaitingId":"`+flow.awaitingID+`","params":[]}`))
@@ -564,10 +564,14 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 		{
 			name: "timeout",
 			configure: func(cfg *config.Config) {
+				cfg.BashHITL.DefaultTimeoutMs = 20
 				cfg.Defaults.Budget.Tool.TimeoutMs = 20
 			},
-			act: func(t *testing.T, flow *awaitingPushQuestionFlow) {
+			act: func(t *testing.T, flow *awaitingPushQuestionFlow, awaitAskData map[string]any) {
 				t.Helper()
+				if timeout, ok := awaitAskData["timeout"].(float64); !ok || timeout != 20 {
+					t.Fatalf("expected awaiting.ask timeout 20, got %#v", awaitAskData)
+				}
 			},
 			errorCode: "timeout",
 		},
@@ -580,8 +584,8 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 			defer flow.resp.Body.Close()
 			defer flow.server.Close()
 
-			waitForPushFrameType(t, flow.conn, "awaiting.ask")
-			tc.act(t, &flow)
+			awaitAsk := waitForPushFrameType(t, flow.conn, "awaiting.ask")
+			tc.act(t, &flow, pushFrameDataMap(t, awaitAsk))
 
 			awaitAnswer := waitForPushFrameType(t, flow.conn, "awaiting.answer")
 			awaitAnswerData := pushFrameDataMap(t, awaitAnswer)
@@ -638,7 +642,7 @@ func TestWebSocketPushAwaitingAnswerRunInterruptedClearsPendingChatSummary(t *te
 	}
 }
 
-func TestWebSocketQueryDebugVisibilityFollowsSSEConfig(t *testing.T) {
+func TestWebSocketQueryDebugVisibilityFollowsStreamConfig(t *testing.T) {
 	testCases := []struct {
 		name         string
 		includeDebug bool
@@ -662,7 +666,7 @@ func TestWebSocketQueryDebugVisibilityFollowsSSEConfig(t *testing.T) {
 					cfg.WebSocket.Enabled = true
 					cfg.WebSocket.WriteQueueSize = 8
 					cfg.WebSocket.PingIntervalMs = 30000
-					cfg.SSE.IncludeDebugEvents = tc.includeDebug
+					cfg.Stream.IncludeDebugEvents = tc.includeDebug
 				},
 			})
 
@@ -697,6 +701,78 @@ func TestWebSocketQueryDebugVisibilityFollowsSSEConfig(t *testing.T) {
 	}
 }
 
+func TestWebSocketQueryToolPayloadVisibilityFollowsStreamConfig(t *testing.T) {
+	testCases := []struct {
+		name           string
+		includePayload bool
+		wantPayload    bool
+	}{
+		{name: "hidden when disabled", includePayload: false, wantPayload: false},
+		{name: "visible when enabled", includePayload: true, wantPayload: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var providerCallCount atomic.Int32
+			fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+				call := providerCallCount.Add(1)
+				switch call {
+				case 1:
+					writeProviderSSE(t, w,
+						`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_datetime","type":"function","function":{"name":"datetime","arguments":"{"}}]}}]}`,
+						`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]},"finish_reason":"tool_calls"}]}`,
+						`[DONE]`,
+					)
+				case 2:
+					writeProviderSSE(t, w,
+						`{"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}`,
+						`[DONE]`,
+					)
+				default:
+					t.Fatalf("unexpected provider call %d", call)
+				}
+			}, testFixtureOptions{
+				notifications: ws.NewHub(),
+				configure: func(cfg *config.Config) {
+					cfg.WebSocket.Enabled = true
+					cfg.WebSocket.WriteQueueSize = 8
+					cfg.WebSocket.PingIntervalMs = 30000
+					cfg.Stream.IncludeToolPayloadEvents = tc.includePayload
+				},
+			})
+
+			server := httptest.NewServer(fixture.server)
+			defer server.Close()
+
+			wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+			conn, _, err := gws.DefaultDialer.Dial(wsURL, nil)
+			if err != nil {
+				t.Fatalf("dial websocket: %v", err)
+			}
+			defer conn.Close()
+
+			if err := conn.WriteJSON(ws.RequestFrame{
+				Frame: ws.FrameRequest,
+				Type:  "/api/query",
+				ID:    "req_query_payload",
+				Payload: ws.MarshalPayload(map[string]any{
+					"message": "websocket tool payload",
+				}),
+			}); err != nil {
+				t.Fatalf("write websocket query: %v", err)
+			}
+
+			eventTypes := collectWebSocketStreamEventTypes(t, conn, "req_query_payload")
+			assertStringSliceContains(t, eventTypes, "tool.start", "tool.end")
+			if tc.wantPayload {
+				assertStringSliceContains(t, eventTypes, "tool.args", "tool.result")
+				return
+			}
+			assertStringSliceExcludes(t, eventTypes, "tool.args", "tool.result")
+		})
+	}
+}
+
 type awaitingPushQuestionFlow struct {
 	fixture    testFixture
 	server     *loopbackServer
@@ -718,7 +794,7 @@ func startAwaitingPushQuestionFlow(t *testing.T, configure func(*config.Config))
 		switch call {
 		case 1:
 			writeProviderSSE(t, w,
-				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"tool_question","type":"function","function":{"name":"_ask_user_question_","arguments":"{\"mode\":\"question\",\"questions\":[{\"question\":\"Need confirmation\",\"type\":\"select\",\"options\":[{\"label\":\"Approve\",\"description\":\"Continue with the request\"}],\"allowFreeText\":false}]}"}}]},"finish_reason":"tool_calls"}]}`,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"tool_question","type":"function","function":{"name":"ask_user_question","arguments":"{\"mode\":\"question\",\"questions\":[{\"question\":\"Need confirmation\",\"type\":\"select\",\"options\":[{\"label\":\"Approve\",\"description\":\"Continue with the request\"}],\"allowFreeText\":false}]}"}}]},"finish_reason":"tool_calls"}]}`,
 				`[DONE]`,
 			)
 		case 2:
@@ -751,7 +827,7 @@ func startAwaitingPushQuestionFlow(t *testing.T, configure func(*config.Config))
 				"  modelKey: mock-model",
 				"toolConfig:",
 				"  tools:",
-				"    - _ask_user_question_",
+				"    - ask_user_question",
 				"mode: REACT",
 			}, "\n")), 0o644); err != nil {
 				t.Fatalf("write helper agent config: %v", err)

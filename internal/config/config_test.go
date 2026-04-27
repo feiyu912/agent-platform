@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,14 +25,14 @@ func TestLoadDefaults(t *testing.T) {
 		if cfg.Auth.LocalPublicKeyFile != ProjectFile(filepath.Join("configs", "local-public-key.pem")) {
 			t.Fatalf("unexpected default auth public key path: %q", cfg.Auth.LocalPublicKeyFile)
 		}
-		if !cfg.ChatImage.ResourceTicketEnabled {
-			t.Fatalf("expected resource ticket enabled by default")
+		if cfg.ResourceTicket.Enabled() {
+			t.Fatalf("expected resource ticket disabled by default")
 		}
-		if !cfg.SSE.IncludeToolPayloadEvents {
-			t.Fatalf("expected sse tool payload events enabled by default")
+		if !cfg.Stream.IncludeToolPayloadEvents {
+			t.Fatalf("expected stream tool payload events enabled by default")
 		}
-		if cfg.SSE.IncludeDebugEvents {
-			t.Fatalf("expected sse debug events disabled by default")
+		if cfg.Stream.IncludeDebugEvents {
+			t.Fatalf("expected stream debug events disabled by default")
 		}
 		if cfg.SSE.HeartbeatIntervalMs != 15000 {
 			t.Fatalf("expected default heartbeat interval 15000, got %d", cfg.SSE.HeartbeatIntervalMs)
@@ -56,6 +57,9 @@ func TestLoadDefaults(t *testing.T) {
 		}
 		if cfg.BashHITL.DefaultTimeoutMs != 120000 {
 			t.Fatalf("expected default bash HITL timeout 120000, got %d", cfg.BashHITL.DefaultTimeoutMs)
+		}
+		if cfg.Defaults.Budget.Hitl.TimeoutMs != 0 {
+			t.Fatalf("expected default HITL budget timeout 0, got %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
 		}
 		if cfg.Memory.Enabled {
 			t.Fatalf("expected memory disabled by default")
@@ -220,23 +224,23 @@ func TestLoadIgnoresDeprecatedEnv(t *testing.T) {
 
 func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_AUTH_ENABLED":                      "false",
-		"CHAT_IMAGE_TOKEN_SECRET":                 "secret",
-		"CHAT_RESOURCE_TICKET_ENABLED":            "true",
-		"AGENT_SSE_INCLUDE_TOOL_PAYLOAD_EVENTS":   "true",
-		"AGENT_SSE_INCLUDE_DEBUG_EVENTS":          "true",
-		"AGENT_SSE_HEARTBEAT_INTERVAL_MS":         "3000",
-		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS":      "25",
-		"AGENT_H2A_RENDER_MAX_BUFFERED_CHARS":     "256",
-		"AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS":    "3",
-		"AGENT_H2A_RENDER_HEARTBEAT_PASS_THROUGH": "false",
-		"AGENT_DEFAULT_REACT_MAX_STEPS":           "12",
-		"AGENT_MEMORY_REMEMBER_MODEL_KEY":         "demo-model",
-		"AGENT_SCHEDULE_ENABLED":                  "false",
-		"AGENT_SCHEDULE_DEFAULT_ZONE_ID":          "Asia/Shanghai",
-		"AGENT_SCHEDULE_POOL_SIZE":                "7",
-		"LOGGING_AGENT_REQUEST_ENABLED":           "false",
-		"AGENT_WS_ENABLED":                        "false",
+		"AGENT_AUTH_ENABLED":                       "false",
+		"CHAT_RESOURCE_TICKET_SECRET":              "secret",
+		"CHAT_RESOURCE_TICKET_TTL_SECONDS":         "300",
+		"AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS": "true",
+		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS":        "true",
+		"AGENT_SSE_HEARTBEAT_INTERVAL_MS":          "3000",
+		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS":       "25",
+		"AGENT_H2A_RENDER_MAX_BUFFERED_CHARS":      "256",
+		"AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS":     "3",
+		"AGENT_H2A_RENDER_HEARTBEAT_PASS_THROUGH":  "false",
+		"AGENT_DEFAULT_REACT_MAX_STEPS":            "12",
+		"AGENT_MEMORY_REMEMBER_MODEL_KEY":          "demo-model",
+		"AGENT_SCHEDULE_ENABLED":                   "false",
+		"AGENT_SCHEDULE_DEFAULT_ZONE_ID":           "Asia/Shanghai",
+		"AGENT_SCHEDULE_POOL_SIZE":                 "7",
+		"LOGGING_AGENT_REQUEST_ENABLED":            "false",
+		"AGENT_WS_ENABLED":                         "false",
 	}, func() {
 		cfg, err := Load()
 		if err != nil {
@@ -245,14 +249,17 @@ func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 		if cfg.Auth.Enabled {
 			t.Fatalf("expected auth disabled from env")
 		}
-		if cfg.ChatImage.Secret != "secret" {
-			t.Fatalf("unexpected chat image secret: %q", cfg.ChatImage.Secret)
+		if cfg.ResourceTicket.Secret != "secret" {
+			t.Fatalf("unexpected resource ticket secret: %q", cfg.ResourceTicket.Secret)
 		}
-		if !cfg.SSE.IncludeToolPayloadEvents {
-			t.Fatalf("expected sse tool payload flag enabled")
+		if cfg.ResourceTicket.TTLSeconds != 300 {
+			t.Fatalf("unexpected resource ticket ttl: %d", cfg.ResourceTicket.TTLSeconds)
 		}
-		if !cfg.SSE.IncludeDebugEvents {
-			t.Fatalf("expected sse debug event flag enabled")
+		if !cfg.Stream.IncludeToolPayloadEvents {
+			t.Fatalf("expected stream tool payload flag enabled")
+		}
+		if !cfg.Stream.IncludeDebugEvents {
+			t.Fatalf("expected stream debug event flag enabled")
 		}
 		if cfg.SSE.HeartbeatIntervalMs != 3000 {
 			t.Fatalf("unexpected heartbeat interval: %d", cfg.SSE.HeartbeatIntervalMs)
@@ -323,6 +330,7 @@ func TestLoadEnvOverridesStructuredConfig(t *testing.T) {
 		"AGENT_BASH_WORKING_DIRECTORY":          filepath.Join("var", "runner"),
 		"AGENT_BASH_PATH_CHECK_BYPASS_COMMANDS": "echo",
 		"AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS":    "45000",
+		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS":  "60000",
 	}, func() {
 		cfg, err := Load()
 		if err != nil {
@@ -348,6 +356,9 @@ func TestLoadEnvOverridesStructuredConfig(t *testing.T) {
 		}
 		if cfg.BashHITL.DefaultTimeoutMs != 45000 {
 			t.Fatalf("unexpected bash HITL timeout: %d", cfg.BashHITL.DefaultTimeoutMs)
+		}
+		if cfg.Defaults.Budget.Hitl.TimeoutMs != 60000 {
+			t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
 		}
 	})
 }
@@ -439,6 +450,124 @@ func TestGatewaysEmptyWhenNoLegacyConfig(t *testing.T) {
 	})
 }
 
+func TestLoadChannelsConfigFromFile(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"WECOM_BRIDGE_WS_URL":    "wss://bridge.example.com/ws/agent?channel=wecom:corp1",
+		"WECOM_BRIDGE_JWT_TOKEN": "jwt-wecom",
+	}, func() {
+		content := "" +
+			"channels:\n" +
+			"  wecom:\n" +
+			"    name: 企业微信\n" +
+			"    type: bridge\n" +
+			"    default-agent: customer-service\n" +
+			"    agents: \"*\"\n" +
+			"    gateway:\n" +
+			"      url: ${WECOM_BRIDGE_WS_URL}\n" +
+			"      jwt-token: ${WECOM_BRIDGE_JWT_TOKEN}\n" +
+			"  feishu:\n" +
+			"    name: 飞书\n" +
+			"    type: gateway\n" +
+			"    agents:\n" +
+			"      - assistant\n" +
+			"      - code-helper\n" +
+			"    gateway:\n" +
+			"      url: ws://gateway.example.com/ws/agent?channel=feishu\n" +
+			"      base-url: ${FEISHU_BASE_URL:http://gateway.example.com}\n"
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if len(cfg.Channels) != 2 {
+				t.Fatalf("expected 2 channels, got %d", len(cfg.Channels))
+			}
+			byID := map[string]ChannelConfig{}
+			for _, ch := range cfg.Channels {
+				byID[ch.ID] = ch
+			}
+			if !byID["wecom"].AllAgents || byID["wecom"].DefaultAgent != "customer-service" {
+				t.Fatalf("unexpected wecom channel: %#v", byID["wecom"])
+			}
+			if byID["wecom"].Gateway.URL != "wss://bridge.example.com/ws/agent?channel=wecom:corp1" {
+				t.Fatalf("unexpected wecom gateway url: %q", byID["wecom"].Gateway.URL)
+			}
+			if byID["wecom"].Gateway.JwtToken != "jwt-wecom" {
+				t.Fatalf("unexpected wecom gateway token: %q", byID["wecom"].Gateway.JwtToken)
+			}
+			if byID["feishu"].AllAgents {
+				t.Fatalf("expected feishu to use whitelist: %#v", byID["feishu"])
+			}
+			if len(byID["feishu"].Agents) != 2 || byID["feishu"].Agents[0] != "assistant" || byID["feishu"].Agents[1] != "code-helper" {
+				t.Fatalf("unexpected feishu agents: %#v", byID["feishu"].Agents)
+			}
+			if len(cfg.Gateways) != 2 {
+				t.Fatalf("expected 2 synthesized gateways, got %d", len(cfg.Gateways))
+			}
+			gatewaysByID := map[string]GatewayEntry{}
+			for _, gateway := range cfg.Gateways {
+				gatewaysByID[gateway.ID] = gateway
+			}
+			if gatewaysByID["wecom"].Channel != "wecom" {
+				t.Fatalf("unexpected synthesized wecom channel: %#v", gatewaysByID["wecom"])
+			}
+			if gatewaysByID["feishu"].BaseURL != "http://gateway.example.com" {
+				t.Fatalf("expected feishu baseURL from fallback interpolation, got %q", gatewaysByID["feishu"].BaseURL)
+			}
+		})
+	})
+}
+
+func TestLoadChannelsConfigRejectsInvalidType(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"channels:\n" +
+			"  wecom:\n" +
+			"    type: invalid\n" +
+			"    gateway:\n" +
+			"      url: ws://gateway.example.com/ws/agent?channel=wecom\n"
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
+			if _, err := Load(); err == nil {
+				t.Fatalf("expected invalid channel type to fail")
+			}
+		})
+	})
+}
+
+func TestLoadChannelsConfigRejectsGatewayConflicts(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"GATEWAY_WS_URL": "ws://legacy.example.com/ws/agent?channel=wecom:corp1",
+	}, func() {
+		content := "" +
+			"channels:\n" +
+			"  wecom:\n" +
+			"    type: bridge\n" +
+			"    gateway:\n" +
+			"      url: ws://bridge.example.com/ws/agent?channel=wecom:corp1\n"
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
+			if _, err := Load(); err == nil {
+				t.Fatalf("expected duplicate legacy/channel gateway conflict to fail")
+			}
+		})
+	})
+}
+
+func TestLoadChannelsConfigRejectsMissingGatewayURL(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"channels:\n" +
+			"  mobile:\n" +
+			"    type: gateway\n" +
+			"    gateway:\n" +
+			"      jwt-token: token\n"
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
+			if _, err := Load(); err == nil {
+				t.Fatalf("expected missing gateway url to fail")
+			}
+		})
+	})
+}
+
 func TestLoadGatewayWSConfigWhenWebSocketDisabled(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"AGENT_WS_ENABLED":  "false",
@@ -454,6 +583,39 @@ func TestLoadGatewayWSConfigWhenWebSocketDisabled(t *testing.T) {
 		}
 		if cfg.GatewayWS.URL != "ws://127.0.0.1:17999/gw" {
 			t.Fatalf("unexpected gateway ws url: %q", cfg.GatewayWS.URL)
+		}
+	})
+}
+
+func TestLoadFailsWhenExplicitPanDirDoesNotExist(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing-pan")
+	withIsolatedEnv(t, map[string]string{
+		"PAN_DIR": missing,
+	}, func() {
+		_, err := Load()
+		if err == nil {
+			t.Fatal("expected Load() to fail for missing PAN_DIR")
+		}
+		if !strings.Contains(err.Error(), "PAN_DIR does not exist: "+missing) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestLoadFailsWhenExplicitPanDirIsFile(t *testing.T) {
+	panFile := filepath.Join(t.TempDir(), "pan-file")
+	if err := os.WriteFile(panFile, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write pan file: %v", err)
+	}
+	withIsolatedEnv(t, map[string]string{
+		"PAN_DIR": panFile,
+	}, func() {
+		_, err := Load()
+		if err == nil {
+			t.Fatal("expected Load() to fail for file PAN_DIR")
+		}
+		if !strings.Contains(err.Error(), "PAN_DIR is not a directory: "+panFile) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }
@@ -498,11 +660,10 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_AUTH_JWKS_URI",
 		"AGENT_AUTH_ISSUER",
 		"AGENT_AUTH_JWKS_CACHE_SECONDS",
-		"CHAT_IMAGE_TOKEN_SECRET",
-		"CHAT_IMAGE_TOKEN_TTL_SECONDS",
-		"CHAT_RESOURCE_TICKET_ENABLED",
-		"AGENT_SSE_INCLUDE_TOOL_PAYLOAD_EVENTS",
-		"AGENT_SSE_INCLUDE_DEBUG_EVENTS",
+		"CHAT_RESOURCE_TICKET_SECRET",
+		"CHAT_RESOURCE_TICKET_TTL_SECONDS",
+		"AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS",
+		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
 		"AGENT_SSE_HEARTBEAT_INTERVAL_MS",
 		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS",
 		"AGENT_H2A_RENDER_MAX_BUFFERED_CHARS",
@@ -538,6 +699,7 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS",
 		"AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS",
 		"AGENT_DEFAULT_BUDGET_TOOL_RETRY_COUNT",
+		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS",
 		"AGENT_DEFAULT_REACT_MAX_STEPS",
 		"AGENT_DEFAULT_PLAN_EXECUTE_MAX_STEPS",
 		"AGENT_DEFAULT_PLAN_EXECUTE_MAX_WORK_ROUNDS_PER_TASK",

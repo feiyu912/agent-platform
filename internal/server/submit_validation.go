@@ -8,18 +8,18 @@ import (
 	"agent-platform-runner-go/internal/contracts"
 )
 
-func (s *Server) validateSubmitRequest(req api.SubmitRequest) (contracts.AwaitingSubmitContext, error) {
+func validateSubmitIdentity(req api.SubmitRequest) error {
 	if strings.TrimSpace(req.RunID) == "" || strings.TrimSpace(req.AwaitingID) == "" {
-		return contracts.AwaitingSubmitContext{}, fmt.Errorf("runId and awaitingId are required")
+		return fmt.Errorf("runId and awaitingId are required")
 	}
-	awaiting, ok := s.deps.Runs.LookupAwaiting(req.RunID, req.AwaitingID)
-	if !ok {
-		return contracts.AwaitingSubmitContext{}, fmt.Errorf("unknown awaitingId")
+	return nil
+}
+
+func (s *Server) lookupActiveAwaiting(req api.SubmitRequest) (contracts.AwaitingSubmitContext, bool) {
+	if s == nil || s.deps.Runs == nil {
+		return contracts.AwaitingSubmitContext{}, false
 	}
-	if err := validateSubmitParams(awaiting, req.Params); err != nil {
-		return contracts.AwaitingSubmitContext{}, err
-	}
-	return awaiting, nil
+	return s.deps.Runs.LookupAwaiting(req.RunID, req.AwaitingID)
 }
 
 func validateSubmitParams(ctx contracts.AwaitingSubmitContext, params api.SubmitParams) error {
@@ -35,6 +35,22 @@ func validateSubmitParams(ctx contracts.AwaitingSubmitContext, params api.Submit
 	}
 	for index, item := range items {
 		if err := validateSubmitItem(ctx.Mode, index, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateDeferredSubmitParams(mode string, params api.SubmitParams) error {
+	if len(params) == 0 {
+		return nil
+	}
+	items, err := api.DecodeSubmitParams(params)
+	if err != nil {
+		return err
+	}
+	for index, item := range items {
+		if err := validateSubmitItem(mode, index, item); err != nil {
 			return err
 		}
 	}
@@ -80,16 +96,30 @@ func validateSubmitItem(mode string, index int, item map[string]any) error {
 		if _, hasAnswers := item["answers"]; hasAnswers {
 			return fmt.Errorf("%s: form items do not allow answers", itemLabel)
 		}
-		_, hasPayload := item["payload"]
-		reason := strings.TrimSpace(stringValue(item["reason"]))
-		if hasPayload {
-			payload, ok := item["payload"].(map[string]any)
-			if !ok || payload == nil {
-				return fmt.Errorf("%s: form payload must be an object", itemLabel)
+		if _, hasPayload := item["payload"]; hasPayload {
+			return fmt.Errorf("%s: form items do not allow payload", itemLabel)
+		}
+		if _, hasReason := item["reason"]; hasReason {
+			return fmt.Errorf("%s: form items do not allow reason", itemLabel)
+		}
+		action := strings.ToLower(strings.TrimSpace(stringValue(item["action"])))
+		if action == "" {
+			return fmt.Errorf("%s: form items require action", itemLabel)
+		}
+		if rawForm, hasForm := item["form"]; hasForm {
+			form, ok := rawForm.(map[string]any)
+			if !ok || form == nil {
+				return fmt.Errorf("%s: form field must be an object", itemLabel)
 			}
-			if reason != "" {
-				return fmt.Errorf("%s: form items cannot include both payload and reason", itemLabel)
+		}
+		switch action {
+		case "submit":
+			if _, hasForm := item["form"]; !hasForm {
+				return fmt.Errorf("%s: submit action requires form", itemLabel)
 			}
+		case "reject", "cancel":
+		default:
+			return fmt.Errorf("%s: unsupported form action %q", itemLabel, action)
 		}
 	default:
 		return fmt.Errorf("unsupported awaiting mode: %s", mode)
