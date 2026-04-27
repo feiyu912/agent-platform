@@ -19,7 +19,7 @@ import (
 type Config struct {
 	// URL 已由部署侧提供完整入口（含 key/channel 等 query 参数），client 原样使用。
 	URL string
-	// Token 是握手使用的 Bearer JWT，由 GATEWAY_JWT_TOKEN 注入。
+	// Token 是握手使用的 Bearer JWT，来自 channel gateway.jwt-token。
 	Token            string
 	HandshakeTimeout time.Duration
 	ReconnectMin     time.Duration

@@ -338,6 +338,9 @@ const (
 )
 
 func Load() (Config, error) {
+	if err := checkDeprecatedEnvVars(); err != nil {
+		return Config{}, err
+	}
 	cfg := defaultConfig()
 	if err := cfg.applyStructuredConfig(); err != nil {
 		return Config{}, err
@@ -357,6 +360,19 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func checkDeprecatedEnvVars() error {
+	var found []string
+	for _, key := range deprecatedEnvVars {
+		if _, ok := os.LookupEnv(key); ok {
+			found = append(found, key)
+		}
+	}
+	if len(found) > 0 {
+		return fmt.Errorf("deprecated environment variable(s) detected: %s; remove or migrate them before starting", strings.Join(found, ", "))
+	}
+	return nil
 }
 
 func defaultConfig() Config {
@@ -489,7 +505,6 @@ func defaultConfig() Config {
 		},
 		ContainerHub: ContainerHubConfig{
 			Enabled:             false,
-			BaseURL:             "http://127.0.0.1:11960",
 			RequestTimeoutMs:    300000,
 			DefaultSandboxLevel: "run",
 			AgentIdleTimeoutMs:  600000,
@@ -559,7 +574,6 @@ func (c *Config) applyContainerHubFile(path string) {
 	if len(values) == 0 {
 		return
 	}
-	c.ContainerHub.Enabled = boolValue(anyValue(values["enabled"], c.ContainerHub.Enabled), c.ContainerHub.Enabled)
 	c.ContainerHub.BaseURL = stringValue(anyValue(values["base-url"], c.ContainerHub.BaseURL), c.ContainerHub.BaseURL)
 	c.ContainerHub.AuthToken = stringValue(anyValue(values["auth-token"], c.ContainerHub.AuthToken), c.ContainerHub.AuthToken)
 	c.ContainerHub.DefaultEnvironmentID = stringValue(anyValue(values["default-environment-id"], c.ContainerHub.DefaultEnvironmentID), c.ContainerHub.DefaultEnvironmentID)
@@ -787,8 +801,8 @@ func (c *Config) applyEnv() {
 	c.Defaults.Plan.MaxSteps = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_STEPS", c.Defaults.Plan.MaxSteps)
 	c.Defaults.Plan.MaxWorkRoundsPerTask = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_WORK_ROUNDS_PER_TASK", c.Defaults.Plan.MaxWorkRoundsPerTask)
 
-	c.Stream.IncludeToolPayloadEvents = boolEnv("AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS", c.Stream.IncludeToolPayloadEvents)
-	c.Stream.IncludeDebugEvents = boolEnv("AGENT_STREAM_INCLUDE_DEBUG_EVENTS", c.Stream.IncludeDebugEvents)
+	c.Stream.IncludeToolPayloadEvents = boolEnv("STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS", c.Stream.IncludeToolPayloadEvents)
+	c.Stream.IncludeDebugEvents = boolEnv("STREAM_INCLUDE_DEBUG_EVENTS", c.Stream.IncludeDebugEvents)
 	c.SSE.HeartbeatIntervalMs = int64Env("AGENT_SSE_HEARTBEAT_INTERVAL_MS", c.SSE.HeartbeatIntervalMs)
 	c.H2A.Render.FlushIntervalMs = int64Env("AGENT_H2A_RENDER_FLUSH_INTERVAL_MS", c.H2A.Render.FlushIntervalMs)
 	c.H2A.Render.MaxBufferedChars = intEnv("AGENT_H2A_RENDER_MAX_BUFFERED_CHARS", c.H2A.Render.MaxBufferedChars)
@@ -823,14 +837,13 @@ func (c *Config) applyEnv() {
 	c.Logging.LLMInteraction.Enabled = boolEnv("LOGGING_AGENT_LLM_INTERACTION_ENABLED", c.Logging.LLMInteraction.Enabled)
 	c.Logging.LLMInteraction.MaskSensitive = boolEnv("LOGGING_AGENT_LLM_INTERACTION_MASK_SENSITIVE", c.Logging.LLMInteraction.MaskSensitive)
 
-	c.ContainerHub.Enabled = boolEnv("AGENT_CONTAINER_HUB_ENABLED", c.ContainerHub.Enabled)
-	c.ContainerHub.BaseURL = stringEnv("AGENT_CONTAINER_HUB_BASE_URL", c.ContainerHub.BaseURL)
-	c.ContainerHub.AuthToken = stringEnv("AGENT_CONTAINER_HUB_AUTH_TOKEN", c.ContainerHub.AuthToken)
-	c.ContainerHub.DefaultEnvironmentID = stringEnv("AGENT_CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID", c.ContainerHub.DefaultEnvironmentID)
-	c.ContainerHub.RequestTimeoutMs = intEnv("AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS", c.ContainerHub.RequestTimeoutMs)
-	c.ContainerHub.DefaultSandboxLevel = strings.ToLower(stringEnv("AGENT_CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL", c.ContainerHub.DefaultSandboxLevel))
-	c.ContainerHub.AgentIdleTimeoutMs = int64Env("AGENT_CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS", c.ContainerHub.AgentIdleTimeoutMs)
-	c.ContainerHub.DestroyQueueDelayMs = int64Env("AGENT_CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS", c.ContainerHub.DestroyQueueDelayMs)
+	c.ContainerHub.BaseURL = stringEnv("CONTAINER_HUB_BASE_URL", c.ContainerHub.BaseURL)
+	c.ContainerHub.AuthToken = stringEnv("CONTAINER_HUB_AUTH_TOKEN", c.ContainerHub.AuthToken)
+	c.ContainerHub.DefaultEnvironmentID = stringEnv("CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID", c.ContainerHub.DefaultEnvironmentID)
+	c.ContainerHub.RequestTimeoutMs = intEnv("CONTAINER_HUB_REQUEST_TIMEOUT_MS", c.ContainerHub.RequestTimeoutMs)
+	c.ContainerHub.DefaultSandboxLevel = strings.ToLower(stringEnv("CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL", c.ContainerHub.DefaultSandboxLevel))
+	c.ContainerHub.AgentIdleTimeoutMs = int64Env("CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS", c.ContainerHub.AgentIdleTimeoutMs)
+	c.ContainerHub.DestroyQueueDelayMs = int64Env("CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS", c.ContainerHub.DestroyQueueDelayMs)
 
 	c.Bash.WorkingDirectory = pathEnv("AGENT_BASH_WORKING_DIRECTORY", c.Bash.WorkingDirectory)
 	c.Bash.AllowedPaths = csvEnv("AGENT_BASH_ALLOWED_PATHS", c.Bash.AllowedPaths)
@@ -854,25 +867,6 @@ func (c *Config) applyEnv() {
 	c.WebSocket.WriteTimeoutMs = int64Env("AGENT_WS_WRITE_TIMEOUT_MS", c.WebSocket.WriteTimeoutMs)
 	c.WebSocket.WriteQueueSize = intEnv("AGENT_WS_WRITE_QUEUE_SIZE", c.WebSocket.WriteQueueSize)
 	c.WebSocket.MaxObservesPerConn = intEnv("AGENT_WS_MAX_OBSERVES_PER_CONN", c.WebSocket.MaxObservesPerConn)
-	// 只保留 GATEWAY_WS_URL + GATEWAY_JWT_TOKEN 两个需要部署侧维护的 env；
-	// 其他握手参数（key/channel/userId）走 URL 内联，鉴权统一由 JWT 承担。
-	c.GatewayWS.URL = stringEnv("GATEWAY_WS_URL", stringEnv("AGENT_GATEWAY_WS_URL", c.GatewayWS.URL))
-	c.GatewayWS.JwtToken = stringEnv("GATEWAY_JWT_TOKEN", c.GatewayWS.JwtToken)
-	c.GatewayWS.HandshakeTimeoutMs = int64Env("AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS", c.GatewayWS.HandshakeTimeoutMs)
-	c.GatewayWS.ReconnectMinMs = int64Env("AGENT_GATEWAY_WS_RECONNECT_MIN_MS", c.GatewayWS.ReconnectMinMs)
-	c.GatewayWS.ReconnectMaxMs = int64Env("AGENT_GATEWAY_WS_RECONNECT_MAX_MS", c.GatewayWS.ReconnectMaxMs)
-	c.GatewayWS.BaseURL = stringEnv("GATEWAY_BASE_URL", c.GatewayWS.BaseURL)
-	// 若 BaseURL 未显式配置，从 GATEWAY_WS_URL 按 bridge 老规则派生：
-	// ws://host/path -> http://host，wss://host/path -> https://host。
-	if strings.TrimSpace(c.GatewayWS.BaseURL) == "" && strings.TrimSpace(c.GatewayWS.URL) != "" {
-		if parsed, err := neturl.Parse(strings.TrimSpace(c.GatewayWS.URL)); err == nil && parsed.Host != "" {
-			scheme := "http"
-			if parsed.Scheme == "wss" {
-				scheme = "https"
-			}
-			c.GatewayWS.BaseURL = scheme + "://" + parsed.Host
-		}
-	}
 }
 
 func (c *Config) normalize() error {
@@ -904,6 +898,7 @@ func (c *Config) normalize() error {
 	if c.ContainerHub.DefaultSandboxLevel == "" {
 		c.ContainerHub.DefaultSandboxLevel = "run"
 	}
+	c.ContainerHub.Enabled = strings.TrimSpace(c.ContainerHub.BaseURL) != ""
 	if c.Bash.WorkingDirectory == "" {
 		c.Bash.WorkingDirectory = "."
 	}
@@ -917,7 +912,7 @@ func (c *Config) normalize() error {
 	return nil
 }
 
-// normalizeGateways 把 legacy 单 gateway 配置（GATEWAY_WS_URL/TOKEN）合成为 Gateways[0]。
+// normalizeGateways 把 legacy 单 gateway 配置（GatewayWS）合成为 Gateways[0]。
 // 已有 Gateways 列表时补缺省字段（ID、reconnect 参数），不覆盖已显式设置的值。
 func (c *Config) normalizeChannels() error {
 	if len(c.Channels) == 0 {
@@ -1321,8 +1316,7 @@ func csvOrList(value any, fallback []string) []string {
 }
 
 var deprecatedEnvVars = []string{
-	// Gateway WS 老变量：统一替换为 GATEWAY_WS_URL（内联 key/channel）+ GATEWAY_JWT_TOKEN。
-	// /api/deliver 与 /api/download 已写死在代码中。
+	// Gateway 连接统一迁移到 configs/channels.yml。
 	"GATEWAY_USER_ID",
 	"GATEWAY_TICKET",
 	"GATEWAY_AGENT_KEY",
@@ -1330,7 +1324,24 @@ var deprecatedEnvVars = []string{
 	"GATEWAY_UPLOAD_PATH",
 	"GATEWAY_DOWNLOAD_PATH",
 	"GATEWAY_AUTH_TOKEN",
+	"GATEWAY_WS_URL",
+	"AGENT_GATEWAY_WS_URL",
+	"GATEWAY_JWT_TOKEN",
+	"GATEWAY_BASE_URL",
 	"AGENT_GATEWAY_WS_TOKEN",
+	"AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS",
+	"AGENT_GATEWAY_WS_RECONNECT_MIN_MS",
+	"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
+	"AGENT_CONTAINER_HUB_ENABLED",
+	"AGENT_CONTAINER_HUB_BASE_URL",
+	"AGENT_CONTAINER_HUB_AUTH_TOKEN",
+	"AGENT_CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID",
+	"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS",
+	"AGENT_CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL",
+	"AGENT_CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS",
+	"AGENT_CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS",
+	"AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS",
+	"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
 	"RUNTIME_DIR",
 	"AGENT_CONFIG_DIR",
 	"AGENT_AGENTS_EXTERNAL_DIR",

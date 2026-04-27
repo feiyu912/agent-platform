@@ -90,7 +90,7 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 //   - flat：{chatId, requestId, fileName, sha256?, url?, mimeType?, sizeBytes?}
 //
 // 下载 key 优先级：`url`（历史字段）非空时直接用；否则用 `sha256` 拼
-// {GATEWAY_BASE_URL}/api/download/{sha256}。下载完的字节复用 /api/upload
+// channel gateway.base-url + /api/download/{sha256}。下载完的字节复用 /api/upload
 // 内部管线落盘到 {ChatsDir}/{chatId}/，sandbox 会把该目录挂进容器 /workspace。
 func (s *Server) wsDownload(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
 	payload, err := ws.DecodePayload[struct {

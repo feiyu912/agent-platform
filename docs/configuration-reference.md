@@ -72,14 +72,13 @@
 
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `AGENT_CONTAINER_HUB_ENABLED` | `false` | `End user` | 是否启用 Container Hub |
-| `AGENT_CONTAINER_HUB_BASE_URL` | `http://127.0.0.1:11960` | `End user` | Container Hub 服务地址 |
-| `AGENT_CONTAINER_HUB_AUTH_TOKEN` | 空 | `End user` | Bearer token |
-| `AGENT_CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID` | 空 | `End user` | 默认 environment id |
-| `AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS` | `300000` | `Advanced / operator` | 请求超时 |
-| `AGENT_CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL` | `run` | `Advanced / operator` | 默认沙箱级别 |
-| `AGENT_CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS` | `600000` | `Advanced / operator` | agent 级沙箱闲置回收时间 |
-| `AGENT_CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS` | `5000` | `Advanced / operator` | 销毁队列延迟 |
+| `CONTAINER_HUB_BASE_URL` | 空 | `End user` | Container Hub 服务地址；非空即启用 Container Hub |
+| `CONTAINER_HUB_AUTH_TOKEN` | 空 | `Advanced / operator` | Bearer token；运行时支持但不展示在 `.env.example` |
+| `CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID` | 空 | `End user` | 默认 environment id |
+| `CONTAINER_HUB_REQUEST_TIMEOUT_MS` | `300000` | `Advanced / operator` | 请求超时 |
+| `CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL` | `run` | `Advanced / operator` | 默认沙箱级别 |
+| `CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS` | `600000` | `Advanced / operator` | agent 级沙箱闲置回收时间 |
+| `CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS` | `5000` | `Advanced / operator` | 销毁队列延迟 |
 
 Container Hub 默认基础挂载为：
 
@@ -173,12 +172,12 @@ agent definition 侧另有 `memoryConfig`：
 
 ### Stream / SSE / H2A Render
 
-`AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS` 和 `AGENT_STREAM_INCLUDE_DEBUG_EVENTS` 会出现在 `.env.example` 中，方便最终用户发现和按需启用 payload/debug 实时事件；这些开关同时影响 SSE 与 WebSocket stream。其余 `AGENT_SSE_*` / `AGENT_H2A_RENDER_*` 调优项仍只保留在本参考文档中。
+`STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS` 和 `STREAM_INCLUDE_DEBUG_EVENTS` 会出现在 `.env.example` 中，方便最终用户发现和按需启用 payload/debug 实时事件；这些开关同时影响 SSE 与 WebSocket stream。其余 `AGENT_SSE_*` / `AGENT_H2A_RENDER_*` 调优项仍只保留在本参考文档中。
 
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS` | `true` | `Debug / troubleshooting` | 是否把工具 payload 事件直接透传到实时流客户端 |
-| `AGENT_STREAM_INCLUDE_DEBUG_EVENTS` | `false` | `Debug / troubleshooting` | 是否把 `debug.preCall` / `debug.postCall` 暴露给实时流客户端 |
+| `STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS` | `true` | `Debug / troubleshooting` | 是否把工具 payload 事件直接透传到实时流客户端 |
+| `STREAM_INCLUDE_DEBUG_EVENTS` | `false` | `Debug / troubleshooting` | 是否把 `debug.preCall` / `debug.postCall` 暴露给实时流客户端 |
 | `AGENT_SSE_HEARTBEAT_INTERVAL_MS` | `15000` | `Debug / troubleshooting` | SSE heartbeat 间隔 |
 | `AGENT_H2A_RENDER_FLUSH_INTERVAL_MS` | `0` | `Debug / troubleshooting` | H2A render 定时 flush 间隔；`0` 表示逐事件 flush |
 | `AGENT_H2A_RENDER_MAX_BUFFERED_CHARS` | `0` | `Debug / troubleshooting` | H2A render 最大缓冲字符数 |
@@ -232,19 +231,11 @@ agent definition 侧另有 `memoryConfig`：
 
 ### Reverse WebSocket Gateway
 
-反向 WebSocket 用于让 `agent-platform` 主动连出到一个上游智能体网关；连接建立后，网关会像普通 `/ws` client 一样发送 `request` 帧，`agent-platform` 继续返回 `response` / `stream`，并复用当前 `broadcast()` 推送 `push` 事件。
-
-| 环境变量 | 默认值 | 标签 | 说明 |
-|---|---|---|---|
-| `AGENT_GATEWAY_WS_URL` | 空 | `Advanced / operator` | 反向 WebSocket 网关地址；空字符串表示禁用 |
-| `AGENT_GATEWAY_WS_TOKEN` | 空 | `Advanced / operator` | 握手时写入 `Authorization: Bearer <token>` 的凭据 |
-| `AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS` | `10000` | `Advanced / operator` | 反向连接握手超时 |
-| `AGENT_GATEWAY_WS_RECONNECT_MIN_MS` | `1000` | `Advanced / operator` | 最小重连退避 |
-| `AGENT_GATEWAY_WS_RECONNECT_MAX_MS` | `30000` | `Advanced / operator` | 最大重连退避 |
+反向 WebSocket 用于让 `agent-platform` 主动连出到一个上游智能体网关；连接建立后，网关会像普通 `/ws` client 一样发送 `request` 帧，`agent-platform` 继续返回 `response` / `stream`，并复用当前 `broadcast()` 推送 `push` 事件。Gateway 连接不再通过单个 env 配置，统一写入 `configs/channels.yml`。
 
 说明：
 
-- 反向连接同样受 `AGENT_WS_ENABLED` 总开关影响；只有 `AGENT_WS_ENABLED=true` 且 `AGENT_GATEWAY_WS_URL` 非空时才会启动
+- 反向连接同样受 `AGENT_WS_ENABLED` 总开关影响
 - 握手只使用 `Authorization` header 传递 Bearer token，不会把凭据放进 URL query
 - 建连成功后，网关端会先收到一条 `push.connected`
 - 断线重连期间的 `broadcast` 为有损投递，当前不提供离线缓冲
@@ -268,9 +259,8 @@ agent definition 侧另有 `memoryConfig`：
 
 行为说明：
 
-- `configs/channels.yml` 缺失时，仍保持 legacy 单 gateway 配置兼容
+- `configs/channels.yml` 缺失时，不会从 legacy gateway env 合成连接
 - `channels.yml` 中的 gateway entry 会在启动时合成为 `config.Gateways`
-- 若 `channels.yml` 与现有 gateway 配置出现重复 channel 或重复 gateway ID，启动会直接失败
 - `configs/channels.example.yml` 提供了 bridge 与 gateway 两种 channel 形态示例
 
 ## 不建议公开暴露的变量
@@ -361,7 +351,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 
 - `AGENT_AUTH_*`
 - `CHAT_RESOURCE_TICKET_*`
-- `AGENT_CONTAINER_HUB_*`
+- `CONTAINER_HUB_*`
 - `AGENT_DEFAULT_*`
 - `AGENT_SCHEDULE_*`
 - `AGENT_BASH_*`
@@ -369,7 +359,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 - `AGENT_MEMORY_*`
 - `CHAT_STORAGE_*`
 - `LOGGING_AGENT_*`
-- `AGENT_STREAM_*`
+- `STREAM_*`
 - `AGENT_SSE_*`
 - `AGENT_H2A_RENDER_*`
 - `AGENT_WS_*`
@@ -378,6 +368,9 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 
 - `CONFIGS_DIR`
 - `RUNTIME_DIR`
+- 旧 `AGENT_CONTAINER_HUB_*`
+- 旧 `AGENT_STREAM_*`
+- 旧单 gateway env：`GATEWAY_WS_URL`、`AGENT_GATEWAY_WS_URL`、`GATEWAY_JWT_TOKEN`、`GATEWAY_BASE_URL`、`AGENT_GATEWAY_WS_*`
 - `AGENT_MEMORY_STORAGE_DIR`
 - `MEMORY_CHATS_*`
 - 旧 `*_EXTERNAL_DIR`

@@ -86,7 +86,7 @@ openssl rsa -in configs/gateway-private-key.pem -pubout -out configs/gateway-pub
 go run ./scripts/gen-gateway-token.go -key configs/gateway-private-key.pem -sub local
 ```
 
-把输出的 token 填到 `.env`：
+如果沿用 `configs/channels.example.yml` 中的 `${MOBILE_GATEWAY_JWT_TOKEN}` 示例，可在本地 `.env` 自行添加这个变量；它不再出现在 `.env.example`：
 
 ```bash
 MOBILE_GATEWAY_JWT_TOKEN=<paste-token-here>
@@ -140,9 +140,10 @@ RUN_SOCKET_TESTS=1 make test-integration
 - `AGENT_AUTH_ISSUER`
 - `CHAT_RESOURCE_TICKET_SECRET`
 - `CHAT_RESOURCE_TICKET_TTL_SECONDS`
-- `AGENT_CONTAINER_HUB_*`
-- `AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS`
-- `AGENT_STREAM_INCLUDE_DEBUG_EVENTS`
+- `CONTAINER_HUB_BASE_URL`
+- `CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID`
+- `STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS`
+- `STREAM_INCLUDE_DEBUG_EVENTS`
 - `AGENT_DEFAULT_*`
 - `REGISTRIES_DIR` / `OWNER_DIR` / `AGENTS_DIR` / `TEAMS_DIR` / `ROOT_DIR` / `SCHEDULES_DIR` / `CHATS_DIR` / `MEMORY_DIR` / `SKILLS_MARKET_DIR` / `PAN_DIR`
 - `PROVIDER_APIKEY_KEY_PART`
@@ -200,6 +201,9 @@ Provider `apiKey` 支持两种写法：
 
 以下遗留变量如果显式设置，服务会在启动时直接报错，而不是静默忽略：
 
+- 旧 `AGENT_CONTAINER_HUB_*`（改用 `CONTAINER_HUB_*`；`Enabled` 由 `CONTAINER_HUB_BASE_URL` 是否非空派生）
+- 旧 `AGENT_STREAM_*`（改用 `STREAM_*`）
+- 旧单 gateway env：`GATEWAY_WS_URL`、`AGENT_GATEWAY_WS_URL`、`GATEWAY_JWT_TOKEN`、`GATEWAY_BASE_URL`、`AGENT_GATEWAY_WS_*`
 - 旧 `RUNTIME_DIR`
 - 旧 `AGENT_CONFIG_DIR`
 - 旧 `AGENT_MEMORY_STORAGE_DIR`
@@ -275,7 +279,7 @@ docker compose logs -f
 - 若 provider 使用 `apiKey: AES(...)`：确认 `.env` 或进程环境中已提供 `PROVIDER_APIKEY_KEY_PART`，且与当前密文匹配；旧 `AES(v1:...)` 需先重生成。
 - Schedule 看起来没有触发：先确认服务进程本身正在运行；如果是本地 `make run`，日志不会出现在 `docker compose logs` 里。随后检查 stdout 中是否有 `schedule orchestrator started`、`[schedule] registered ...`、`[schedule] dispatch ...`。
 - Query 看起来不像真流式：先检查是否启用了 `AGENT_H2A_RENDER_FLUSH_INTERVAL_MS`、`AGENT_H2A_RENDER_MAX_BUFFERED_CHARS` 或 `AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS` 这类传输层缓冲参数；默认 SSE writer 会逐事件 flush。
-- `bash` 执行失败：检查 `AGENT_CONTAINER_HUB_BASE_URL`、`default-environment-id`，以及 `.env` 中的目录变量是否为宿主机真实路径。
+- `bash` 执行失败：检查 `CONTAINER_HUB_BASE_URL`、`default-environment-id`，以及 `.env` 中的目录变量是否为宿主机真实路径。
 - chat 没有持久化：检查 `CHATS_DIR` 是否可写。
 - remember 没有输出文件：确认请求体里同时传了 `requestId` 和 `chatId`。
 - 上传后无法下载：确认文件已落到 `CHATS_DIR/<chatId>/`，并检查 `/api/resource?file=...` 是否原样使用。

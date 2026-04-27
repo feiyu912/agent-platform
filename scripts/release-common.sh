@@ -263,7 +263,7 @@ ${error_log_json}
     "bundleTopLevelDir": "$APP_NAME",
     "envBindings": [
       {
-        "key": "AGENT_CONTAINER_HUB_BASE_URL",
+        "key": "CONTAINER_HUB_BASE_URL",
         "fromService": "agent-container-hub",
         "template": "http://127.0.0.1:{{port}}",
         "onlyIfDefault": true,

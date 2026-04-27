@@ -206,8 +206,12 @@ func TestLoadIgnoresLegacyMemoryStorageEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"AGENT_MEMORY_STORAGE_DIR": filepath.Join("var", "custom-memory"),
 	}, func() {
-		if _, err := Load(); err != nil {
-			t.Fatalf("expected deprecated env to be ignored, got %v", err)
+		_, err := Load()
+		if err == nil {
+			t.Fatalf("expected deprecated env to fail")
+		}
+		if !strings.Contains(err.Error(), "AGENT_MEMORY_STORAGE_DIR") {
+			t.Fatalf("expected error to mention deprecated env, got %v", err)
 		}
 	})
 }
@@ -216,31 +220,65 @@ func TestLoadIgnoresDeprecatedEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"RUNTIME_DIR": "runtime",
 	}, func() {
-		if _, err := Load(); err != nil {
-			t.Fatalf("expected deprecated env to be ignored, got %v", err)
+		_, err := Load()
+		if err == nil {
+			t.Fatalf("expected deprecated env to fail")
+		}
+		if !strings.Contains(err.Error(), "RUNTIME_DIR") {
+			t.Fatalf("expected error to mention deprecated env, got %v", err)
+		}
+	})
+}
+
+func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"AGENT_CONTAINER_HUB_BASE_URL":           "http://127.0.0.1:18000",
+		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS":      "true",
+		"GATEWAY_WS_URL":                         "wss://gw.example.com/ws/agent?channel=wecom",
+		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS":      "6789",
+		"MEMORY_CHATS_INDEX_SQLITE_FILE":         "old.db",
+		"CHAT_RESOURCE_TICKET_ENABLED":           "true",
+		"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS": "1000",
+	}, func() {
+		_, err := Load()
+		if err == nil {
+			t.Fatalf("expected deprecated envs to fail")
+		}
+		for _, key := range []string{
+			"AGENT_CONTAINER_HUB_BASE_URL",
+			"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
+			"GATEWAY_WS_URL",
+			"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
+			"MEMORY_CHATS_INDEX_SQLITE_FILE",
+			"CHAT_RESOURCE_TICKET_ENABLED",
+			"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS",
+		} {
+			if !strings.Contains(err.Error(), key) {
+				t.Fatalf("expected error to mention %s, got %v", key, err)
+			}
 		}
 	})
 }
 
 func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_AUTH_ENABLED":                       "false",
-		"CHAT_RESOURCE_TICKET_SECRET":              "secret",
-		"CHAT_RESOURCE_TICKET_TTL_SECONDS":         "300",
-		"AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS": "true",
-		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS":        "true",
-		"AGENT_SSE_HEARTBEAT_INTERVAL_MS":          "3000",
-		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS":       "25",
-		"AGENT_H2A_RENDER_MAX_BUFFERED_CHARS":      "256",
-		"AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS":     "3",
-		"AGENT_H2A_RENDER_HEARTBEAT_PASS_THROUGH":  "false",
-		"AGENT_DEFAULT_REACT_MAX_STEPS":            "12",
-		"AGENT_MEMORY_REMEMBER_MODEL_KEY":          "demo-model",
-		"AGENT_SCHEDULE_ENABLED":                   "false",
-		"AGENT_SCHEDULE_DEFAULT_ZONE_ID":           "Asia/Shanghai",
-		"AGENT_SCHEDULE_POOL_SIZE":                 "7",
-		"LOGGING_AGENT_REQUEST_ENABLED":            "false",
-		"AGENT_WS_ENABLED":                         "false",
+		"AGENT_AUTH_ENABLED":                      "false",
+		"CHAT_RESOURCE_TICKET_SECRET":             "secret",
+		"CHAT_RESOURCE_TICKET_TTL_SECONDS":        "300",
+		"STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS":      "true",
+		"STREAM_INCLUDE_DEBUG_EVENTS":             "true",
+		"AGENT_SSE_HEARTBEAT_INTERVAL_MS":         "3000",
+		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS":      "25",
+		"AGENT_H2A_RENDER_MAX_BUFFERED_CHARS":     "256",
+		"AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS":    "3",
+		"AGENT_H2A_RENDER_HEARTBEAT_PASS_THROUGH": "false",
+		"AGENT_DEFAULT_REACT_MAX_STEPS":           "12",
+		"AGENT_MEMORY_REMEMBER_MODEL_KEY":         "demo-model",
+		"AGENT_SCHEDULE_ENABLED":                  "false",
+		"AGENT_SCHEDULE_DEFAULT_ZONE_ID":          "Asia/Shanghai",
+		"AGENT_SCHEDULE_POOL_SIZE":                "7",
+		"LOGGING_AGENT_REQUEST_ENABLED":           "false",
+		"AGENT_WS_ENABLED":                        "false",
 	}, func() {
 		cfg, err := Load()
 		if err != nil {
@@ -323,8 +361,7 @@ func TestLoadContainerHubAndBashConfigFromFiles(t *testing.T) {
 
 func TestLoadEnvOverridesStructuredConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_CONTAINER_HUB_ENABLED":           "false",
-		"AGENT_CONTAINER_HUB_BASE_URL":          "http://127.0.0.1:18000",
+		"CONTAINER_HUB_BASE_URL":                "http://127.0.0.1:18000",
 		"AGENT_BASH_ALLOWED_COMMANDS":           "pwd,echo",
 		"AGENT_BASH_SHELL_FEATURES_ENABLED":     "true",
 		"AGENT_BASH_WORKING_DIRECTORY":          filepath.Join("var", "runner"),
@@ -336,8 +373,8 @@ func TestLoadEnvOverridesStructuredConfig(t *testing.T) {
 		if err != nil {
 			t.Fatalf("load config: %v", err)
 		}
-		if cfg.ContainerHub.Enabled {
-			t.Fatalf("expected container hub env override to disable feature")
+		if !cfg.ContainerHub.Enabled {
+			t.Fatalf("expected container hub enabled when base url is set")
 		}
 		if cfg.ContainerHub.BaseURL != "http://127.0.0.1:18000" {
 			t.Fatalf("unexpected base url: %q", cfg.ContainerHub.BaseURL)
@@ -363,6 +400,28 @@ func TestLoadEnvOverridesStructuredConfig(t *testing.T) {
 	})
 }
 
+func TestLoadContainerHubDisabledWhenBaseURLMissing(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"auth-token:\n" +
+			"default-environment-id:\n" +
+			"request-timeout-ms: 300000\n" +
+			"default-sandbox-level: run\n"
+		withProjectFileContents(t, filepath.Join("configs", "container-hub.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.ContainerHub.Enabled {
+				t.Fatalf("expected container hub disabled when base url is missing")
+			}
+			if cfg.ContainerHub.BaseURL != "" {
+				t.Fatalf("expected empty base url, got %q", cfg.ContainerHub.BaseURL)
+			}
+		})
+	})
+}
+
 func TestLoadLLMInteractionMaskSensitiveFromEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"LOGGING_AGENT_LLM_INTERACTION_MASK_SENSITIVE": "true",
@@ -377,7 +436,7 @@ func TestLoadLLMInteractionMaskSensitiveFromEnv(t *testing.T) {
 	})
 }
 
-func TestLoadGatewayWSConfigFromEnv(t *testing.T) {
+func TestLoadRejectsGatewayWSConfigFromEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"GATEWAY_WS_URL":                        "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai",
 		"GATEWAY_JWT_TOKEN":                     "jwt-abc",
@@ -385,68 +444,63 @@ func TestLoadGatewayWSConfigFromEnv(t *testing.T) {
 		"AGENT_GATEWAY_WS_RECONNECT_MIN_MS":     "45",
 		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS":     "6789",
 	}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
+		_, err := Load()
+		if err == nil {
+			t.Fatalf("expected legacy gateway env to fail")
 		}
-		if cfg.GatewayWS.URL != "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai" {
-			t.Fatalf("unexpected gateway ws url: %q", cfg.GatewayWS.URL)
-		}
-		if cfg.GatewayWS.JwtToken != "jwt-abc" {
-			t.Fatalf("unexpected gateway jwt token: %q", cfg.GatewayWS.JwtToken)
-		}
-		if cfg.GatewayWS.HandshakeTimeoutMs != 3210 {
-			t.Fatalf("unexpected gateway ws handshake timeout: %d", cfg.GatewayWS.HandshakeTimeoutMs)
-		}
-		if cfg.GatewayWS.ReconnectMinMs != 45 {
-			t.Fatalf("unexpected gateway ws reconnect min: %d", cfg.GatewayWS.ReconnectMinMs)
-		}
-		if cfg.GatewayWS.ReconnectMaxMs != 6789 {
-			t.Fatalf("unexpected gateway ws reconnect max: %d", cfg.GatewayWS.ReconnectMaxMs)
+		for _, key := range []string{
+			"GATEWAY_WS_URL",
+			"GATEWAY_JWT_TOKEN",
+			"AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS",
+			"AGENT_GATEWAY_WS_RECONNECT_MIN_MS",
+			"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
+		} {
+			if !strings.Contains(err.Error(), key) {
+				t.Fatalf("expected error to mention %s, got %v", key, err)
+			}
 		}
 	})
 }
 
 func TestGatewaysSynthesizedFromLegacyURL(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
-		"GATEWAY_WS_URL":    "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai",
-		"GATEWAY_JWT_TOKEN": "jwt-abc",
-	}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
-		}
-		if len(cfg.Gateways) != 1 {
-			t.Fatalf("expected legacy URL to synthesize 1 gateway entry, got %d", len(cfg.Gateways))
-		}
-		g := cfg.Gateways[0]
-		if g.ID != "default" {
-			t.Fatalf("synthesized gateway id = %q, want default", g.ID)
-		}
-		if g.Channel != "wecom" {
-			t.Fatalf("channel derived from URL = %q, want wecom", g.Channel)
-		}
-		if g.URL != "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai" {
-			t.Fatalf("URL not propagated: %q", g.URL)
-		}
-		if g.JwtToken != "jwt-abc" {
-			t.Fatalf("token not propagated: %q", g.JwtToken)
-		}
-		if g.BaseURL != "https://gw.example.com" {
-			t.Fatalf("baseURL not derived: %q", g.BaseURL)
-		}
-	})
+	cfg := defaultConfig()
+	cfg.GatewayWS.URL = "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai"
+	cfg.GatewayWS.JwtToken = "jwt-abc"
+	if err := cfg.normalize(); err != nil {
+		t.Fatalf("normalize config: %v", err)
+	}
+	if len(cfg.Gateways) != 1 {
+		t.Fatalf("expected legacy URL to synthesize 1 gateway entry, got %d", len(cfg.Gateways))
+	}
+	g := cfg.Gateways[0]
+	if g.ID != "default" {
+		t.Fatalf("synthesized gateway id = %q, want default", g.ID)
+	}
+	if g.Channel != "wecom" {
+		t.Fatalf("channel derived from URL = %q, want wecom", g.Channel)
+	}
+	if g.URL != "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai" {
+		t.Fatalf("URL not propagated: %q", g.URL)
+	}
+	if g.JwtToken != "jwt-abc" {
+		t.Fatalf("token not propagated: %q", g.JwtToken)
+	}
+	if g.BaseURL != "https://gw.example.com" {
+		t.Fatalf("baseURL not derived: %q", g.BaseURL)
+	}
 }
 
 func TestGatewaysEmptyWhenNoLegacyConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
-		}
-		if len(cfg.Gateways) != 0 {
-			t.Fatalf("expected empty Gateways when no legacy config, got %d", len(cfg.Gateways))
-		}
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), nil, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if len(cfg.Gateways) != 0 {
+				t.Fatalf("expected empty Gateways when no channel config, got %d", len(cfg.Gateways))
+			}
+		})
 	})
 }
 
@@ -535,21 +589,20 @@ func TestLoadChannelsConfigRejectsInvalidType(t *testing.T) {
 }
 
 func TestLoadChannelsConfigRejectsGatewayConflicts(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
-		"GATEWAY_WS_URL": "ws://legacy.example.com/ws/agent?channel=wecom:corp1",
-	}, func() {
-		content := "" +
-			"channels:\n" +
-			"  wecom:\n" +
-			"    type: bridge\n" +
-			"    gateway:\n" +
-			"      url: ws://bridge.example.com/ws/agent?channel=wecom:corp1\n"
-		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
-			if _, err := Load(); err == nil {
-				t.Fatalf("expected duplicate legacy/channel gateway conflict to fail")
-			}
-		})
-	})
+	cfg := defaultConfig()
+	cfg.GatewayWS.URL = "ws://legacy.example.com/ws/agent?channel=wecom:corp1"
+	cfg.Channels = []ChannelConfig{
+		{
+			ID:   "wecom",
+			Type: ChannelTypeBridge,
+			Gateway: ChannelGatewayConfig{
+				URL: "ws://bridge.example.com/ws/agent?channel=wecom:corp1",
+			},
+		},
+	}
+	if err := cfg.normalize(); err == nil {
+		t.Fatalf("expected duplicate legacy/channel gateway conflict to fail")
+	}
 }
 
 func TestLoadChannelsConfigRejectsMissingGatewayURL(t *testing.T) {
@@ -570,20 +623,31 @@ func TestLoadChannelsConfigRejectsMissingGatewayURL(t *testing.T) {
 
 func TestLoadGatewayWSConfigWhenWebSocketDisabled(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_WS_ENABLED":  "false",
-		"GATEWAY_WS_URL":    "ws://127.0.0.1:17999/gw",
-		"GATEWAY_JWT_TOKEN": "jwt-abc",
+		"AGENT_WS_ENABLED": "false",
 	}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
-		}
-		if cfg.WebSocket.Enabled {
-			t.Fatalf("expected websocket disabled from env")
-		}
-		if cfg.GatewayWS.URL != "ws://127.0.0.1:17999/gw" {
-			t.Fatalf("unexpected gateway ws url: %q", cfg.GatewayWS.URL)
-		}
+		content := "" +
+			"channels:\n" +
+			"  mobile:\n" +
+			"    type: gateway\n" +
+			"    agents: \"*\"\n" +
+			"    gateway:\n" +
+			"      url: ws://127.0.0.1:17999/gw?channel=mobile\n" +
+			"      jwt-token: jwt-abc\n"
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.WebSocket.Enabled {
+				t.Fatalf("expected websocket disabled from env")
+			}
+			if len(cfg.Gateways) != 1 {
+				t.Fatalf("expected one gateway from channels config, got %d", len(cfg.Gateways))
+			}
+			if cfg.Gateways[0].URL != "ws://127.0.0.1:17999/gw?channel=mobile" {
+				t.Fatalf("unexpected gateway url: %q", cfg.Gateways[0].URL)
+			}
+		})
 	})
 }
 
@@ -637,14 +701,13 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"MEMORY_DIR",
 		"PAN_DIR",
 		"SKILLS_MARKET_DIR",
-		"AGENT_CONTAINER_HUB_ENABLED",
-		"AGENT_CONTAINER_HUB_BASE_URL",
-		"AGENT_CONTAINER_HUB_AUTH_TOKEN",
-		"AGENT_CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID",
-		"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS",
-		"AGENT_CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL",
-		"AGENT_CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS",
-		"AGENT_CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS",
+		"CONTAINER_HUB_BASE_URL",
+		"CONTAINER_HUB_AUTH_TOKEN",
+		"CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID",
+		"CONTAINER_HUB_REQUEST_TIMEOUT_MS",
+		"CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL",
+		"CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS",
+		"CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS",
 		"AGENT_BASH_WORKING_DIRECTORY",
 		"AGENT_BASH_ALLOWED_PATHS",
 		"AGENT_BASH_ALLOWED_COMMANDS",
@@ -662,8 +725,8 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_AUTH_JWKS_CACHE_SECONDS",
 		"CHAT_RESOURCE_TICKET_SECRET",
 		"CHAT_RESOURCE_TICKET_TTL_SECONDS",
-		"AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS",
-		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
+		"STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS",
+		"STREAM_INCLUDE_DEBUG_EVENTS",
 		"AGENT_SSE_HEARTBEAT_INTERVAL_MS",
 		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS",
 		"AGENT_H2A_RENDER_MAX_BUFFERED_CHARS",
@@ -721,6 +784,19 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_GATEWAY_WS_RECONNECT_MIN_MS",
 		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
 	)
+	for key := range values {
+		keys = append(keys, key)
+	}
+	seenKeys := map[string]struct{}{}
+	uniqueKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if _, ok := seenKeys[key]; ok {
+			continue
+		}
+		seenKeys[key] = struct{}{}
+		uniqueKeys = append(uniqueKeys, key)
+	}
+	keys = uniqueKeys
 
 	previous := map[string]*string{}
 	for _, key := range keys {
