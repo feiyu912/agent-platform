@@ -138,6 +138,10 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	if err != nil {
 		return preparedQuery{}, err
 	}
+	if !created && agentKey != "" && agentKey != summary.AgentKey {
+		_ = s.deps.Chats.UpdateAgentKey(chatID, agentKey)
+		summary.AgentKey = agentKey
+	}
 	if created {
 		// hidden run（schedule 等自发触发）也照常广播 chat.created —— 否则 webclient
 		// 要刷新整个列表才能看到新建的 schedule 会话。隐藏语义只影响 chat 内部消息记录

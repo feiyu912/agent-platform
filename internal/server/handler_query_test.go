@@ -122,6 +122,44 @@ func (r queryMemoryRegistry) AgentDefinition(key string) (catalog.AgentDefinitio
 	return catalog.AgentDefinition{}, false
 }
 
+func TestPrepareQueryUpdatesExistingChatAgentKey(t *testing.T) {
+	chats, err := chat.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new chat store: %v", err)
+	}
+	if _, _, err := chats.EnsureChat("chat-agent-drift", "", "", "uploaded image"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	server := &Server{deps: Dependencies{
+		Chats: chats,
+		Registry: queryMemoryRegistry{
+			def: catalog.AgentDefinition{
+				Key:      "agent-a",
+				Name:     "Agent A",
+				ModelKey: "mock-model",
+			},
+		},
+	}}
+
+	req := httptest.NewRequest("POST", "/api/query", bytes.NewBufferString(`{"agentKey":"agent-a","chatId":"chat-agent-drift","message":"use uploaded image"}`))
+	prepared, err := server.prepareQuery(req)
+	if err != nil {
+		t.Fatalf("prepareQuery: %v", err)
+	}
+	if prepared.summary.AgentKey != "agent-a" {
+		t.Fatalf("expected prepared summary agent-a, got %q", prepared.summary.AgentKey)
+	}
+
+	summary, err := chats.Summary("chat-agent-drift")
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if summary.AgentKey != "agent-a" {
+		t.Fatalf("expected stored agent-a, got %q", summary.AgentKey)
+	}
+}
+
 func TestPrepareQueryBuildsLayeredMemoryContexts(t *testing.T) {
 	chats, err := chat.NewFileStore(t.TempDir())
 	if err != nil {

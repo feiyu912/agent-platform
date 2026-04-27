@@ -48,6 +48,28 @@ func TestFileStoreSetPendingAwaitingPersistsIntoSummaryAndListChats(t *testing.T
 	}
 }
 
+func TestFileStoreUpdateAgentKeyPersistsIntoSummary(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-agent-key", "", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.UpdateAgentKey("chat-agent-key", "agent-b"); err != nil {
+		t.Fatalf("update agent key: %v", err)
+	}
+
+	summary, err := store.Summary("chat-agent-key")
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if summary.AgentKey != "agent-b" {
+		t.Fatalf("expected agent-b, got %q", summary.AgentKey)
+	}
+}
+
 func TestFileStoreClearPendingAwaitingClearsMatchingAwaitingID(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

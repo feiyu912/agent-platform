@@ -22,6 +22,7 @@ var ErrChatNotFound = errors.New("chat not found")
 
 type Store interface {
 	EnsureChat(chatID string, agentKey string, teamID string, firstMessage string) (Summary, bool, error)
+	UpdateAgentKey(chatID string, agentKey string) error
 	Summary(chatID string) (*Summary, error)
 	LoadAllPendingAwaitings() ([]PendingAwaitingWithChat, error)
 	LoadAwaitingAsk(chatID string, awaitingID string) (*PersistedAwaitingAsk, error)
@@ -476,6 +477,14 @@ func (s *FileStore) Summary(chatID string) (*Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.loadSummary(chatID)
+}
+
+func (s *FileStore) UpdateAgentKey(chatID string, agentKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec("UPDATE CHATS SET AGENT_KEY_=?, UPDATED_AT_=? WHERE CHAT_ID_=?", agentKey, time.Now().UnixMilli(), chatID)
+	return err
 }
 
 func (s *FileStore) LoadAllPendingAwaitings() ([]PendingAwaitingWithChat, error) {

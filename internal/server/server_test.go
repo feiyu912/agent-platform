@@ -1015,6 +1015,14 @@ func TestUploadAndResourceRoundTrip(t *testing.T) {
 	if len(matches) != 1 {
 		t.Fatalf("expected uploaded file under %s, got %v", fixture.cfg.Paths.ChatsDir, matches)
 	}
+
+	summary, err := fixture.chats.Summary(response.Data.ChatID)
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if summary.AgentKey != "" {
+		t.Fatalf("expected upload without agentKey to leave chat agent empty, got %q", summary.AgentKey)
+	}
 }
 
 func TestRememberEndpointReturnsStoredMemory(t *testing.T) {
