@@ -107,7 +107,7 @@ func TestLoadPromptsConfigFromFile(t *testing.T) {
 
 func TestLoadAuthLocalPublicKeyPathUnderConfigs(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE": "local-public-key.pem",
+		"AUTH_LOCAL_PUBLIC_KEY_FILE": "local-public-key.pem",
 	}, func() {
 		cfg, err := Load()
 		if err != nil {
@@ -122,7 +122,7 @@ func TestLoadAuthLocalPublicKeyPathUnderConfigs(t *testing.T) {
 
 func TestLoadAuthLocalPublicKeyPathPreservesExplicitConfigsPath(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE": filepath.Join("configs", "custom.pem"),
+		"AUTH_LOCAL_PUBLIC_KEY_FILE": filepath.Join("configs", "custom.pem"),
 	}, func() {
 		cfg, err := Load()
 		if err != nil {
@@ -137,7 +137,7 @@ func TestLoadAuthLocalPublicKeyPathPreservesExplicitConfigsPath(t *testing.T) {
 
 func TestLoadAuthLocalPublicKeyPathPreservesAbsolutePath(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE": filepath.Join(string(os.PathSeparator), "tmp", "custom.pem"),
+		"AUTH_LOCAL_PUBLIC_KEY_FILE": filepath.Join(string(os.PathSeparator), "tmp", "custom.pem"),
 	}, func() {
 		cfg, err := Load()
 		if err != nil {
@@ -239,6 +239,7 @@ func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
 		"MEMORY_CHATS_INDEX_SQLITE_FILE":         "old.db",
 		"CHAT_RESOURCE_TICKET_ENABLED":           "true",
 		"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS": "1000",
+		"AGENT_AUTH_ENABLED":                     "false",
 	}, func() {
 		_, err := Load()
 		if err == nil {
@@ -252,6 +253,7 @@ func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
 			"MEMORY_CHATS_INDEX_SQLITE_FILE",
 			"CHAT_RESOURCE_TICKET_ENABLED",
 			"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS",
+			"AGENT_AUTH_ENABLED",
 		} {
 			if !strings.Contains(err.Error(), key) {
 				t.Fatalf("expected error to mention %s, got %v", key, err)
@@ -262,7 +264,7 @@ func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
 
 func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_AUTH_ENABLED":                      "false",
+		"AUTH_ENABLED":                            "false",
 		"CHAT_RESOURCE_TICKET_SECRET":             "secret",
 		"CHAT_RESOURCE_TICKET_TTL_SECONDS":        "300",
 		"STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS":      "true",
@@ -714,11 +716,11 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_BASH_SHELL_TIMEOUT_MS",
 		"AGENT_BASH_MAX_COMMAND_CHARS",
 		"AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS",
-		"AGENT_AUTH_ENABLED",
-		"AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE",
-		"AGENT_AUTH_JWKS_URI",
-		"AGENT_AUTH_ISSUER",
-		"AGENT_AUTH_JWKS_CACHE_SECONDS",
+		"AUTH_ENABLED",
+		"AUTH_LOCAL_PUBLIC_KEY_FILE",
+		"AUTH_JWKS_URI",
+		"AUTH_ISSUER",
+		"AUTH_JWKS_CACHE_SECONDS",
 		"CHAT_RESOURCE_TICKET_SECRET",
 		"CHAT_RESOURCE_TICKET_TTL_SECONDS",
 		"STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS",

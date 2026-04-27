@@ -37,18 +37,18 @@
 
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `AGENT_AUTH_ENABLED` | `true` | `End user` | 是否开启 `/api/**` JWT 鉴权 |
-| `AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE` | `configs/local-public-key.pem` | `Advanced / operator` | 本地公钥模式下的公钥文件路径 |
-| `AGENT_AUTH_JWKS_URI` | 空 | `End user` | JWKS 模式的公钥地址 |
-| `AGENT_AUTH_ISSUER` | 空 | `End user` | JWT issuer 校验值 |
-| `AGENT_AUTH_JWKS_CACHE_SECONDS` | `0` | `Advanced / operator` | JWKS 缓存秒数，仅在 JWKS 模式下生效 |
+| `AUTH_ENABLED` | `true` | `End user` | 是否开启 `/api/**` JWT 鉴权 |
+| `AUTH_LOCAL_PUBLIC_KEY_FILE` | `configs/local-public-key.pem` | `Advanced / operator` | 本地公钥模式下的公钥文件路径 |
+| `AUTH_JWKS_URI` | 空 | `End user` | JWKS 模式的公钥地址 |
+| `AUTH_ISSUER` | 空 | `End user` | JWT issuer 校验值 |
+| `AUTH_JWKS_CACHE_SECONDS` | `0` | `Advanced / operator` | JWKS 缓存秒数，仅在 JWKS 模式下生效 |
 | `CHAT_RESOURCE_TICKET_SECRET` | 空 | `End user` | resource ticket 签名密钥；设置后启用 `/api/resource` ticket 校验 |
 | `CHAT_RESOURCE_TICKET_TTL_SECONDS` | `86400` | `Advanced / operator` | resource ticket 过期时间；未设置 secret 时不生效 |
 
 本地 JWT 公钥规则：
 
 - 默认值是 `configs/local-public-key.pem`
-- `AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE` 若是绝对路径，则原样使用
+- `AUTH_LOCAL_PUBLIC_KEY_FILE` 若是绝对路径，则原样使用
 - 若是相对路径，则按项目根目录解析
 - 若为了兼容仍写成单文件名 `local-public-key.pem`，会自动解析到 `configs/local-public-key.pem`
 
@@ -327,7 +327,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 说明：
 
 - `cors.yml` 会直接驱动 `/api/**` 的 CORS 行为
-- `local-public-key.pem` 会在启用 `AGENT_AUTH_ENABLED=true` 且使用本地公钥模式时参与 JWT 验签
+- `local-public-key.pem` 会在启用 `AUTH_ENABLED=true` 且使用本地公钥模式时参与 JWT 验签
 - 当前 Go 版仍不支持 `CONFIGS_DIR`，配置目录固定为项目根下 `configs/`
 
 ## 配置优先级
@@ -347,7 +347,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 
 以下变量族当前都已接入 Go runner；其中只有一部分会默认出现在 `.env.example` 中：
 
-- `AGENT_AUTH_*`
+- `AUTH_*`
 - `CHAT_RESOURCE_TICKET_*`
 - `CONTAINER_HUB_*`
 - `AGENT_DEFAULT_*`
@@ -366,6 +366,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 
 - `CONFIGS_DIR`
 - `RUNTIME_DIR`
+- 旧 `AGENT_AUTH_*`
 - 旧 `AGENT_CONTAINER_HUB_*`
 - 旧 `AGENT_STREAM_*`
 - 旧单 gateway env：`GATEWAY_WS_URL`、`AGENT_GATEWAY_WS_URL`、`GATEWAY_JWT_TOKEN`、`GATEWAY_BASE_URL`、`AGENT_GATEWAY_WS_*`

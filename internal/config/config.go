@@ -789,11 +789,11 @@ func (c *Config) applyEnv() {
 	c.H2A.Render.MaxBufferedEvents = intEnv("AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS", c.H2A.Render.MaxBufferedEvents)
 	c.H2A.Render.HeartbeatPassThrough = boolEnv("AGENT_H2A_RENDER_HEARTBEAT_PASS_THROUGH", c.H2A.Render.HeartbeatPassThrough)
 
-	c.Auth.Enabled = boolEnv("AGENT_AUTH_ENABLED", c.Auth.Enabled)
-	c.Auth.JWKSURI = stringEnv("AGENT_AUTH_JWKS_URI", c.Auth.JWKSURI)
-	c.Auth.Issuer = stringEnv("AGENT_AUTH_ISSUER", c.Auth.Issuer)
-	c.Auth.JWKSCacheSeconds = intEnv("AGENT_AUTH_JWKS_CACHE_SECONDS", c.Auth.JWKSCacheSeconds)
-	c.Auth.LocalPublicKeyFile = stringEnv("AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE", c.Auth.LocalPublicKeyFile)
+	c.Auth.Enabled = boolEnv("AUTH_ENABLED", c.Auth.Enabled)
+	c.Auth.JWKSURI = stringEnv("AUTH_JWKS_URI", c.Auth.JWKSURI)
+	c.Auth.Issuer = stringEnv("AUTH_ISSUER", c.Auth.Issuer)
+	c.Auth.JWKSCacheSeconds = intEnv("AUTH_JWKS_CACHE_SECONDS", c.Auth.JWKSCacheSeconds)
+	c.Auth.LocalPublicKeyFile = stringEnv("AUTH_LOCAL_PUBLIC_KEY_FILE", c.Auth.LocalPublicKeyFile)
 
 	c.ResourceTicket.Secret = stringEnv("CHAT_RESOURCE_TICKET_SECRET", c.ResourceTicket.Secret)
 	c.ResourceTicket.TTLSeconds = int64Env("CHAT_RESOURCE_TICKET_TTL_SECONDS", c.ResourceTicket.TTLSeconds)
@@ -1312,6 +1312,11 @@ var deprecatedEnvVars = []string{
 	"AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS",
 	"AGENT_GATEWAY_WS_RECONNECT_MIN_MS",
 	"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
+	"AGENT_AUTH_ENABLED",
+	"AGENT_AUTH_JWKS_URI",
+	"AGENT_AUTH_ISSUER",
+	"AGENT_AUTH_JWKS_CACHE_SECONDS",
+	"AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE",
 	"AGENT_CONTAINER_HUB_ENABLED",
 	"AGENT_CONTAINER_HUB_BASE_URL",
 	"AGENT_CONTAINER_HUB_AUTH_TOKEN",

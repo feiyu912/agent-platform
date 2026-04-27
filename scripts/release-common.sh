@@ -284,11 +284,11 @@ ${error_log_json}
         "value": "true"
       },
       {
-        "key": "AGENT_AUTH_ENABLED",
+        "key": "AUTH_ENABLED",
         "value": "true"
       },
       {
-        "key": "AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE",
+        "key": "AUTH_LOCAL_PUBLIC_KEY_FILE",
         "value": "configs/local-public-key.pem"
       }
     ]

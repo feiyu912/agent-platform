@@ -134,10 +134,10 @@ RUN_SOCKET_TESTS=1 make test-integration
 
 - `HOST_PORT`
 - `SERVER_PORT`
-- `AGENT_AUTH_ENABLED`
-- `AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE`
-- `AGENT_AUTH_JWKS_URI`
-- `AGENT_AUTH_ISSUER`
+- `AUTH_ENABLED`
+- `AUTH_LOCAL_PUBLIC_KEY_FILE`
+- `AUTH_JWKS_URI`
+- `AUTH_ISSUER`
 - `CHAT_RESOURCE_TICKET_SECRET`
 - `CHAT_RESOURCE_TICKET_TTL_SECONDS`
 - `CONTAINER_HUB_BASE_URL`
@@ -188,7 +188,7 @@ Provider `apiKey` 支持两种写法：
 本地 JWT 公钥规则：
 
 - 默认值是 `configs/local-public-key.pem`
-- `AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE` 若是绝对路径，则原样使用
+- `AUTH_LOCAL_PUBLIC_KEY_FILE` 若是绝对路径，则原样使用
 - 若是相对路径，则按项目根目录解析
 - 若为了兼容仍写成单文件名 `local-public-key.pem`，会自动解析到 `configs/local-public-key.pem`
 
@@ -202,6 +202,7 @@ Provider `apiKey` 支持两种写法：
 以下遗留变量如果显式设置，服务会在启动时直接报错，而不是静默忽略：
 
 - 旧 `AGENT_CONTAINER_HUB_*`（改用 `CONTAINER_HUB_*`；`Enabled` 由 `CONTAINER_HUB_BASE_URL` 是否非空派生）
+- 旧 `AGENT_AUTH_*`（改用 `AUTH_*`）
 - 旧 `AGENT_STREAM_*`（改用 `STREAM_*`）
 - 旧单 gateway env：`GATEWAY_WS_URL`、`AGENT_GATEWAY_WS_URL`、`GATEWAY_JWT_TOKEN`、`GATEWAY_BASE_URL`、`AGENT_GATEWAY_WS_*`
 - 旧 `RUNTIME_DIR`
