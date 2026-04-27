@@ -47,6 +47,7 @@ type ModelDefinition struct {
 	ModelID       string
 	IsFunction    bool
 	IsReasoner    bool
+	IsVision      bool
 	ContextWindow int
 	Headers       map[string]string
 	Compat        map[string]any
@@ -412,6 +413,7 @@ func loadModels(dir string) (map[string]ModelDefinition, error) {
 			ModelID:       strings.TrimSpace(stringNode(values["modelId"])),
 			IsFunction:    parseTruthy(stringNode(values["isFunction"])),
 			IsReasoner:    parseTruthy(stringNode(values["isReasoner"])),
+			IsVision:      parseTruthyDefault(values["isVision"], true),
 			ContextWindow: contracts.AnyIntNode(values["contextWindow"]),
 			Headers:       stringMapNode(values["headers"]),
 			Compat:        cloneAnyMap(contracts.AnyMapNode(values["compat"])),
@@ -480,6 +482,13 @@ func parseTruthy(raw string) bool {
 	default:
 		return false
 	}
+}
+
+func parseTruthyDefault(value any, defaultValue bool) bool {
+	if value == nil {
+		return defaultValue
+	}
+	return parseTruthy(stringNode(value))
 }
 
 func cloneAnyMap(values map[string]any) map[string]any {

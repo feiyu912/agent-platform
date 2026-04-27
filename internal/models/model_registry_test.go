@@ -88,7 +88,43 @@ func TestLoadModelRegistryParsesProviderMemoryEmbedding(t *testing.T) {
 	}
 }
 
-func writeTestProviderAndModel(t *testing.T, root string, apiKeyLine string) {
+func TestLoadModelRegistryDefaultsModelVisionToTrue(t *testing.T) {
+	root := t.TempDir()
+	writeTestProviderAndModel(t, root, "apiKey: plain-text")
+
+	registry, err := LoadModelRegistry(root)
+	if err != nil {
+		t.Fatalf("LoadModelRegistry returned error: %v", err)
+	}
+
+	model, _, err := registry.Get("mock-model")
+	if err != nil {
+		t.Fatalf("registry.Get returned error: %v", err)
+	}
+	if !model.IsVision {
+		t.Fatal("expected model IsVision to default to true")
+	}
+}
+
+func TestLoadModelRegistryParsesModelVisionFalse(t *testing.T) {
+	root := t.TempDir()
+	writeTestProviderAndModel(t, root, "apiKey: plain-text", "isVision: false")
+
+	registry, err := LoadModelRegistry(root)
+	if err != nil {
+		t.Fatalf("LoadModelRegistry returned error: %v", err)
+	}
+
+	model, _, err := registry.Get("mock-model")
+	if err != nil {
+		t.Fatalf("registry.Get returned error: %v", err)
+	}
+	if model.IsVision {
+		t.Fatal("expected model IsVision to parse false")
+	}
+}
+
+func writeTestProviderAndModel(t *testing.T, root string, apiKeyLine string, modelLines ...string) {
 	t.Helper()
 
 	providersDir := filepath.Join(root, "providers")
@@ -116,6 +152,9 @@ func writeTestProviderAndModel(t *testing.T, root string, apiKeyLine string) {
 		"protocol: OPENAI",
 		"modelId: mock-model-id",
 	}, "\n")
+	if len(modelLines) > 0 {
+		modelConfig += "\n" + strings.Join(modelLines, "\n")
+	}
 	if err := os.WriteFile(filepath.Join(modelsDir, "mock-model.yml"), []byte(modelConfig), 0o644); err != nil {
 		t.Fatalf("write model config: %v", err)
 	}

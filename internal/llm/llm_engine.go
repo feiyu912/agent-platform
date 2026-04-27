@@ -136,7 +136,7 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 		}
 		messages = append(messages, openAIMessage{
 			Role:    "user",
-			Content: buildUserMessageContent(e.cfg.Paths.ChatsDir, req.ChatID, req.Message, req.References),
+			Content: buildUserMessageContent(e.cfg.Paths.ChatsDir, req.ChatID, req.Message, req.References, model.IsVision),
 		})
 	}
 	maxSteps := options.MaxSteps

@@ -25,7 +25,11 @@ const (
 // When the request has image references in the chat dir, it returns an
 // OpenAI-compatible multimodal content array: [{type:text,...},{type:image_url,...},...].
 // Otherwise it returns the plain text string so existing callers keep working.
-func buildUserMessageContent(chatsDir string, chatID string, text string, references []api.Reference) any {
+func buildUserMessageContent(chatsDir string, chatID string, text string, references []api.Reference, isVision bool) any {
+	if !isVision {
+		return text
+	}
+
 	imageBlocks := collectImageBlocks(chatsDir, chatID, references)
 	if len(imageBlocks) == 0 {
 		return text
