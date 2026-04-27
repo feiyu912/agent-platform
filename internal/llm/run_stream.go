@@ -117,6 +117,7 @@ type pendingHITLApprovalBatch struct {
 	awaitingID  string
 	awaitArgs   map[string]any
 	invocations []*preparedToolInvocation
+	timeoutMs   int
 }
 
 type hitlDecisionState struct {
@@ -1295,6 +1296,7 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 		awaitingID:  awaitingID,
 		awaitArgs:   CloneMap(args),
 		invocations: invocations,
+		timeoutMs:   maxRuleTimeout,
 	}
 	awaitDelta := s.buildHITLAwaitDelta(awaitingID, args, maxRuleTimeout)
 	s.pending = append(s.pending, awaitDelta)
@@ -1350,7 +1352,7 @@ func (s *llmRunStream) awaitHITLApprovalBatchAndContinue() error {
 	submitResult, err := s.runControl.AwaitSubmitWithTimeout(
 		s.ctx,
 		batch.awaitingID,
-		time.Duration(s.resolveHITLTimeout())*time.Millisecond,
+		time.Duration(s.resolveHITLTimeoutWithRule(batch.timeoutMs))*time.Millisecond,
 	)
 	if err != nil {
 		if errors.Is(err, ErrRunInterrupted) {
@@ -1465,7 +1467,7 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 		s.runControl.TransitionState(RunLoopStateWaitingSubmit)
 	}
 
-	submitResult, err := s.runControl.AwaitSubmitWithTimeout(s.ctx, awaitingID, time.Duration(s.resolveHITLTimeout())*time.Millisecond)
+	submitResult, err := s.runControl.AwaitSubmitWithTimeout(s.ctx, awaitingID, time.Duration(s.resolveHITLTimeoutWithRule(match.Rule.TimeoutMs))*time.Millisecond)
 	if err != nil {
 		if errors.Is(err, ErrRunInterrupted) {
 			return s.handleInterruptIfNeeded()
@@ -1710,6 +1712,13 @@ func (s *llmRunStream) resolveHITLTimeout() int64 {
 		return int64(s.engine.cfg.BashHITL.DefaultTimeoutMs)
 	}
 	return 120000
+}
+
+func (s *llmRunStream) resolveHITLTimeoutWithRule(ruleTimeoutMs int) int64 {
+	if ruleTimeoutMs > 0 {
+		return int64(ruleTimeoutMs)
+	}
+	return s.resolveHITLTimeout()
 }
 
 func (s *llmRunStream) appendOriginalToolResult(invocation *preparedToolInvocation, result ToolExecutionResult) {
@@ -2061,10 +2070,7 @@ func frontendSubmitInvalidPayloadResult(invocation *preparedToolInvocation, awai
 }
 
 func (s *llmRunStream) buildHITLAwaitDelta(awaitingID string, args map[string]any, ruleTimeoutMs int) DeltaAwaitAsk {
-	timeout := s.resolveHITLTimeout()
-	if ruleTimeoutMs > 0 {
-		timeout = int64(ruleTimeoutMs)
-	}
+	timeout := s.resolveHITLTimeoutWithRule(ruleTimeoutMs)
 	await := DeltaAwaitAsk{
 		AwaitingID: awaitingID,
 		Mode:       strings.ToLower(strings.TrimSpace(AnyStringNode(args["mode"]))),

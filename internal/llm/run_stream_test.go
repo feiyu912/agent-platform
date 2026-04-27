@@ -343,6 +343,22 @@ func TestResolveHITLTimeoutUsesHitlBudgetGlobalAndFallback(t *testing.T) {
 	}
 }
 
+func TestResolveHITLTimeoutWithRuleUsesRuleOverride(t *testing.T) {
+	stream := &llmRunStream{
+		engine: &LLMAgentEngine{cfg: config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 300000}}},
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 600000}},
+		},
+	}
+
+	if got := stream.resolveHITLTimeoutWithRule(150000); got != 150000 {
+		t.Fatalf("expected rule timeout 150000, got %d", got)
+	}
+	if got := stream.resolveHITLTimeoutWithRule(0); got != 600000 {
+		t.Fatalf("expected fallback hitl budget timeout 600000, got %d", got)
+	}
+}
+
 func TestPreToolInvocationDeltasUsesHitlTimeoutForFrontendAwaiting(t *testing.T) {
 	handler := &captureFrontendHandler{}
 	tool := api.ToolDetailResponse{
@@ -431,6 +447,113 @@ func TestEmitHITLConfirmDeltasUsesRuleTimeoutOverride(t *testing.T) {
 	}
 	if ask.Timeout != 60000 {
 		t.Fatalf("expected rule timeout 60000, got %#v", ask)
+	}
+}
+
+func TestAwaitHITLSubmitAndExecuteUsesRuleTimeoutOverride(t *testing.T) {
+	runControl := contracts.NewRunControl(context.Background(), "run_1")
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools: &recordingToolExecutor{
+				defs:   []api.ToolDetailResponse{bashToolDefinition()},
+				result: contracts.ToolExecutionResult{Output: "approved", ExitCode: 0},
+			},
+			frontend: frontendtools.NewDefaultRegistry(),
+			cfg:      config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 40}},
+		},
+		session: contracts.QuerySession{
+			RequestID: "req_1",
+			ChatID:    "chat_1",
+			RunID:     "run_1",
+		},
+		runControl: runControl,
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 40}},
+		},
+		hitlPendingCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "bash",
+			args: map[string]any{
+				"command": "docker rmi nginx:latest",
+			},
+		},
+		hitlMatch: &hitl.InterceptResult{
+			Intercepted: true,
+			Rule: hitl.FlatRule{
+				Match:        "rmi",
+				Level:        1,
+				ViewportType: "builtin",
+				ViewportKey:  "confirm_dialog",
+				TimeoutMs:    1000,
+			},
+		},
+		hitlAwaitingID: buildHITLAwaitingID("tool_1"),
+		hitlAwaitArgs: map[string]any{
+			"mode": "approval",
+			"approvals": []any{
+				map[string]any{
+					"id":                  "tool_1",
+					"command":             "docker rmi nginx:latest",
+					"description":         "删除镜像",
+					"options":             buildApprovalOptions(),
+					"allowFreeText":       true,
+					"freeTextPlaceholder": "可选：填写理由",
+				},
+			},
+		},
+	}
+	runControl.ExpectSubmit(contracts.AwaitingSubmitContext{
+		AwaitingID: stream.hitlAwaitingID,
+		Mode:       "approval",
+		ItemCount:  1,
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- stream.awaitHITLSubmitAndExecute()
+	}()
+
+	time.Sleep(120 * time.Millisecond)
+	ack := runControl.ResolveSubmit(api.SubmitRequest{
+		RunID:      "run_1",
+		AwaitingID: buildHITLAwaitingID("tool_1"),
+		Params:     encodedSubmitParams(t, []map[string]any{{"id": "tool_1", "decision": "reject", "reason": "风险过高"}}),
+	})
+	if !ack.Accepted {
+		t.Fatalf("expected delayed submit to be accepted by rule timeout, got %#v", ack)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("awaitHITLSubmitAndExecute returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for HITL submit path")
+	}
+
+	foundRejectAnswer := false
+	for _, delta := range stream.pending {
+		switch typed := delta.(type) {
+		case contracts.DeltaAwaitingAnswer:
+			if typed.AwaitingID == buildHITLAwaitingID("tool_1") {
+				approvals, _ := typed.Answer["approvals"].([]map[string]any)
+				if len(approvals) == 1 && approvals[0]["decision"] == "reject" {
+					foundRejectAnswer = true
+				}
+				if errPayload, _ := typed.Answer["error"].(map[string]any); errPayload["code"] == "timeout" {
+					t.Fatalf("did not expect timeout answer when rule timeout is longer, got %#v", typed.Answer)
+				}
+			}
+		case contracts.DeltaToolResult:
+			if typed.Result.Error == "hitl_timeout" {
+				t.Fatalf("did not expect hitl_timeout tool result: %#v", typed.Result)
+			}
+		}
+	}
+	if !foundRejectAnswer {
+		t.Fatalf("expected delayed reject answer, got %#v", stream.pending)
 	}
 }
 
@@ -2088,6 +2211,102 @@ func TestPrepareQueuedBashApprovalBatch_UsesLargestRuleTimeout(t *testing.T) {
 	}
 	if ask.Timeout != 60000 {
 		t.Fatalf("expected largest rule timeout 60000, got %#v", ask)
+	}
+}
+
+func TestAwaitHITLApprovalBatchAndContinueUsesLargestRuleTimeout(t *testing.T) {
+	runControl := contracts.NewRunControl(context.Background(), "run_1")
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools: stubToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}},
+			cfg:   config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 40}},
+		},
+		session: contracts.QuerySession{
+			RequestID: "req_1",
+			ChatID:    "chat_1",
+			RunID:     "run_1",
+		},
+		runControl: runControl,
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 40}},
+		},
+		checker: commandResultChecker{
+			results: map[string]hitl.InterceptResult{
+				"chmod 777 ~/a.sh": {
+					Intercepted:     true,
+					Rule:            hitl.FlatRule{Level: 1, ViewportType: "builtin", ViewportKey: "confirm_dialog", TimeoutMs: 400},
+					OriginalCommand: "chmod 777 ~/a.sh",
+				},
+				"chmod 777 ~/b.sh": {
+					Intercepted:     true,
+					Rule:            hitl.FlatRule{Level: 2, ViewportType: "builtin", ViewportKey: "confirm_dialog", TimeoutMs: 1000},
+					OriginalCommand: "chmod 777 ~/b.sh",
+				},
+			},
+			tools: map[string]api.ToolDetailResponse{
+				strings.ToLower(bashToolDefinition().Name): bashToolDefinition(),
+			},
+		},
+		queuedToolCalls: []*preparedToolInvocation{
+			{toolID: "tool_1", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/a.sh", "description": "a"}},
+			{toolID: "tool_2", toolName: "bash", args: map[string]any{"command": "chmod 777 ~/b.sh", "description": "b"}},
+		},
+	}
+
+	if !stream.prepareQueuedBashApprovalBatch() {
+		t.Fatal("expected batch approval await to be prepared")
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok {
+		t.Fatalf("expected await ask delta, got %#v", stream.pending)
+	}
+	if ask.Timeout != 1000 {
+		t.Fatalf("expected largest rule timeout 1000, got %#v", ask)
+	}
+	runControl.ExpectSubmit(contracts.AwaitingSubmitContext{
+		AwaitingID: ask.AwaitingID,
+		Mode:       "approval",
+		ItemCount:  2,
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- stream.awaitHITLApprovalBatchAndContinue()
+	}()
+
+	time.Sleep(120 * time.Millisecond)
+	ack := runControl.ResolveSubmit(api.SubmitRequest{
+		RunID:      "run_1",
+		AwaitingID: ask.AwaitingID,
+		Params: encodedSubmitParams(t, []map[string]any{
+			{"id": "tool_1", "decision": "approve"},
+			{"id": "tool_2", "decision": "reject", "reason": "风险过高"},
+		}),
+	})
+	if !ack.Accepted {
+		t.Fatalf("expected delayed batch submit to be accepted by rule timeout, got %#v", ack)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("awaitHITLApprovalBatchAndContinue returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for HITL approval batch path")
+	}
+
+	if stream.queuedToolCalls[0].hitlDecision == nil || stream.queuedToolCalls[0].hitlDecision.Decision != "approve" {
+		t.Fatalf("expected first delayed approval decision, got %#v", stream.queuedToolCalls[0].hitlDecision)
+	}
+	if stream.queuedToolCalls[1].hitlDecision == nil || stream.queuedToolCalls[1].hitlDecision.Decision != "reject" || stream.queuedToolCalls[1].hitlDecision.Reason != "风险过高" {
+		t.Fatalf("expected second delayed reject decision, got %#v", stream.queuedToolCalls[1].hitlDecision)
+	}
+	for _, invocation := range stream.queuedToolCalls {
+		if invocation.queuedResult != nil && invocation.queuedResult.Error == "hitl_timeout" {
+			t.Fatalf("did not expect timeout queued result for %#v", invocation)
+		}
 	}
 }
 
