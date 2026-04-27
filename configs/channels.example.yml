@@ -8,6 +8,15 @@ channels:
       url: ${WECOM_BRIDGE_WS_URL}
       jwt-token: ${WECOM_BRIDGE_JWT_TOKEN}
 
+  weixin:
+    name: 微信
+    type: bridge
+    default-agent: assistant
+    agents: "*"
+    gateway:
+      url: ${WEIXIN_BRIDGE_WS_URL}
+      jwt-token: ${WEIXIN_BRIDGE_JWT_TOKEN}
+
   feishu:
     name: 飞书
     type: bridge
