@@ -87,9 +87,6 @@ func validateSubmitItem(mode string, index int, item map[string]any) error {
 			return fmt.Errorf("%s: approval items do not allow answers", itemLabel)
 		}
 	case "form":
-		if _, hasDecision := item["decision"]; hasDecision {
-			return fmt.Errorf("%s: form items do not allow decision", itemLabel)
-		}
 		if _, hasAnswer := item["answer"]; hasAnswer {
 			return fmt.Errorf("%s: form items do not allow answer", itemLabel)
 		}
@@ -99,12 +96,12 @@ func validateSubmitItem(mode string, index int, item map[string]any) error {
 		if _, hasPayload := item["payload"]; hasPayload {
 			return fmt.Errorf("%s: form items do not allow payload", itemLabel)
 		}
-		if _, hasReason := item["reason"]; hasReason {
-			return fmt.Errorf("%s: form items do not allow reason", itemLabel)
+		if _, hasAction := item["action"]; hasAction {
+			return fmt.Errorf("%s: form items no longer use action, use decision instead", itemLabel)
 		}
-		action := strings.ToLower(strings.TrimSpace(stringValue(item["action"])))
-		if action == "" {
-			return fmt.Errorf("%s: form items require action", itemLabel)
+		decision := strings.ToLower(strings.TrimSpace(stringValue(item["decision"])))
+		if decision == "" {
+			return fmt.Errorf("%s: form items require decision", itemLabel)
 		}
 		if rawForm, hasForm := item["form"]; hasForm {
 			form, ok := rawForm.(map[string]any)
@@ -112,14 +109,17 @@ func validateSubmitItem(mode string, index int, item map[string]any) error {
 				return fmt.Errorf("%s: form field must be an object", itemLabel)
 			}
 		}
-		switch action {
-		case "submit":
+		switch decision {
+		case "approve":
 			if _, hasForm := item["form"]; !hasForm {
-				return fmt.Errorf("%s: submit action requires form", itemLabel)
+				return fmt.Errorf("%s: approve decision requires form", itemLabel)
 			}
-		case "reject", "cancel":
+			if _, hasReason := item["reason"]; hasReason {
+				return fmt.Errorf("%s: form approve does not allow reason", itemLabel)
+			}
+		case "reject":
 		default:
-			return fmt.Errorf("%s: unsupported form action %q", itemLabel, action)
+			return fmt.Errorf("%s: unsupported form decision %q", itemLabel, decision)
 		}
 	default:
 		return fmt.Errorf("unsupported awaiting mode: %s", mode)

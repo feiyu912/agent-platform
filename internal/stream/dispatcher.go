@@ -341,19 +341,22 @@ func formatAwaitingForms(raw any) []map[string]any {
 		for _, item := range typed {
 			form := anyMap(item)
 			id := strings.TrimSpace(anyString(form["id"]))
-			action := strings.ToLower(strings.TrimSpace(anyString(form["action"])))
-			if id == "" || action == "" {
+			decision := strings.ToLower(strings.TrimSpace(anyString(form["decision"])))
+			if id == "" || decision == "" {
 				continue
 			}
 			entry := map[string]any{
-				"id":     id,
-				"action": action,
+				"id":       id,
+				"decision": decision,
 			}
 			if submittedForm, ok := form["form"].(map[string]any); ok && len(submittedForm) > 0 {
 				entry["form"] = clonePayload(submittedForm)
 			}
 			if command := strings.TrimSpace(anyString(form["command"])); command != "" {
 				entry["command"] = command
+			}
+			if reason := strings.TrimSpace(anyString(form["reason"])); reason != "" {
+				entry["reason"] = reason
 			}
 			formatted = append(formatted, entry)
 		}

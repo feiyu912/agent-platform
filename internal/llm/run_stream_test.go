@@ -835,7 +835,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 		expectedKey              string
 		expectedInitialPayload   map[string]any
 		expectedSubmittedPayload map[string]any
-		expectedAnswerAction     string
+		expectedAnswerDecision   string
 	}{
 		{
 			name: "builtin confirm dialog",
@@ -876,9 +876,9 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			},
 			submitParams: encodedSubmitParams(t, []map[string]any{
 				{
-					"id":     "form-1",
-					"action": "submit",
-					"form":   sampleLeavePayload(2),
+					"id":       "form-1",
+					"decision": "approve",
+					"form":     sampleLeavePayload(2),
 				},
 			}),
 			expectedCommand:          sampleLeaveCommand(2),
@@ -886,7 +886,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			expectedKey:              "leave_form",
 			expectedInitialPayload:   sampleLeavePayload(3),
 			expectedSubmittedPayload: sampleLeavePayload(2),
-			expectedAnswerAction:     "submit",
+			expectedAnswerDecision:   "approve",
 		},
 		{
 			name: "expense html viewport override",
@@ -903,8 +903,8 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			},
 			submitParams: encodedSubmitParams(t, []map[string]any{
 				{
-					"id":     "form-1",
-					"action": "submit",
+					"id":       "form-1",
+					"decision": "approve",
 					"form": map[string]any{
 						"employee":     map[string]any{"id": "E1001", "name": "张三"},
 						"department":   map[string]any{"code": "engineering", "name": "工程部"},
@@ -961,7 +961,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 				"submitted_at": "2026-04-14T10:30:00+08:00",
 				"total_amount": 1280.5,
 			},
-			expectedAnswerAction: "submit",
+			expectedAnswerDecision: "approve",
 		},
 		{
 			name: "procurement html viewport override",
@@ -978,8 +978,8 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			},
 			submitParams: encodedSubmitParams(t, []map[string]any{
 				{
-					"id":     "form-1",
-					"action": "submit",
+					"id":       "form-1",
+					"decision": "approve",
 					"form": map[string]any{
 						"delivery_city": "Hangzhou",
 						"requester_id":  "E1001",
@@ -991,7 +991,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			expectedKey:              "procurement_form",
 			expectedInitialPayload:   map[string]any{"delivery_city": "Shanghai", "requester_id": "E1001"},
 			expectedSubmittedPayload: map[string]any{"delivery_city": "Hangzhou", "requester_id": "E1001"},
-			expectedAnswerAction:     "submit",
+			expectedAnswerDecision:   "approve",
 		},
 	}
 
@@ -1149,10 +1149,10 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 				case contracts.DeltaAwaitingAnswer:
 					if typed.AwaitingID == buildHITLAwaitingID("tool_1") {
 						foundAwaitingAnswer = true
-						if tc.expectedAnswerAction != "" {
+						if tc.expectedAnswerDecision != "" {
 							forms, _ := typed.Answer["forms"].([]map[string]any)
-							if len(forms) == 0 || forms[0]["action"] != tc.expectedAnswerAction {
-								t.Fatalf("expected awaiting.answer action %q, got %#v", tc.expectedAnswerAction, typed.Answer)
+							if len(forms) == 0 || forms[0]["decision"] != tc.expectedAnswerDecision {
+								t.Fatalf("expected awaiting.answer decision %q, got %#v", tc.expectedAnswerDecision, typed.Answer)
 							}
 						}
 					}
@@ -1571,7 +1571,7 @@ func TestAwaitHITLSubmitAndExecute_RejectEmitsCancelledAnswer(t *testing.T) {
 	}
 }
 
-func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *testing.T) {
+func TestAwaitHITLSubmitAndExecute_FormRejectWithReasonEmitsHITLMetadataAndSummary(t *testing.T) {
 	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
 	runControl := contracts.NewRunControl(context.Background(), "run_1")
 	stream := &llmRunStream{
@@ -1617,7 +1617,7 @@ func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *test
 		RunID:      "run_1",
 		AwaitingID: stream.hitlAwaitingID,
 		Params: encodedSubmitParams(t, []map[string]any{
-			{"id": "form-1", "action": "reject"},
+			{"id": "form-1", "decision": "reject", "reason": "风险过高"},
 		}),
 	})
 	if !ack.Accepted {
@@ -1643,8 +1643,8 @@ func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *test
 		if typed.Result.HITL["mode"] != "form" || typed.Result.HITL["decision"] != "reject" {
 			t.Fatalf("expected form reject HITL metadata, got %#v", typed.Result.HITL)
 		}
-		if _, ok := typed.Result.HITL["reason"]; ok {
-			t.Fatalf("did not expect reject reason for form reject, got %#v", typed.Result.HITL)
+		if typed.Result.HITL["reason"] != "风险过高" {
+			t.Fatalf("expected reject reason for form reject, got %#v", typed.Result.HITL)
 		}
 		if _, ok := typed.Result.HITL["submittedPayload"]; ok {
 			t.Fatalf("did not expect submitted payload for form reject, got %#v", typed.Result.HITL)
@@ -1657,7 +1657,7 @@ func TestAwaitHITLSubmitAndExecute_FormRejectEmitsHITLMetadataAndSummary(t *test
 		t.Fatalf("expected form reject tool message and HITL summary, got %#v", stream.messages)
 	}
 	noticeText, _ := stream.messages[len(stream.messages)-1].Content.(string)
-	if !strings.Contains(noticeText, `[HITL] `) || !strings.Contains(noticeText, ` → reject`) || strings.Contains(noticeText, "用户取消") || strings.Contains(noticeText, "提交参数:") {
+	if !strings.Contains(noticeText, `[HITL] `) || !strings.Contains(noticeText, ` → reject`) || !strings.Contains(noticeText, "风险过高") || strings.Contains(noticeText, "用户取消") || strings.Contains(noticeText, "提交参数:") {
 		t.Fatalf("expected form reject HITL summary without submitted payload, got %#v", stream.messages[len(stream.messages)-1])
 	}
 }
@@ -1708,7 +1708,7 @@ func TestAwaitHITLSubmitAndExecute_FormPayloadRebuildFailureEmitsRejectHITLMetad
 		RunID:      "run_1",
 		AwaitingID: stream.hitlAwaitingID,
 		Params: encodedSubmitParams(t, []map[string]any{
-			{"id": "form-1", "action": "submit", "form": sampleLeavePayload(2)},
+			{"id": "form-1", "decision": "approve", "form": sampleLeavePayload(2)},
 		}),
 	})
 	if !ack.Accepted {

@@ -276,11 +276,10 @@ runtimeConfig:
   - `awaiting.ask`：`{"awaitingId":"...","mode":"form","viewportType":"html","viewportKey":"leave_form","timeout":...,"runId":"...","forms":[{"id":"form-1","html?":"...","form":{...}}]}`
   - form 是唯一保留 `viewportType:"html"` + `viewportKey` 的形态
   - `/api/submit.params`：
-    - submit：`[{"id":"form-1","action":"submit","form":{...}}]`（`id` 可省略，仅作审计字段）
-    - reject：`[{"id":"form-1","action":"reject"}]`（`id` 可省略，仅作审计字段）
-    - cancel：`[{"id":"form-1","action":"cancel"}]`（`id` 可省略，仅作审计字段）
+    - approve：`[{"id":"form-1","decision":"approve","form":{...}}]`（`id` 可省略；`form` 必填，允许修改后回传）
+    - reject：`[{"id":"form-1","decision":"reject","reason?":"..."}]`（`id` 可省略；`reason` 可选；cancel 合并为 reject）
   - `awaiting.answer`：
-    - answered：`{"awaitingId":"...","mode":"form","status":"answered","forms":[{"id":"form-1","command":"...","action":"submit|reject|cancel","form?":{...}}]}`
+    - answered：`{"awaitingId":"...","mode":"form","status":"answered","forms":[{"id":"form-1","command":"...","decision":"approve|reject","form?":{...},"reason?":"..."}]}`
     - error：`{"awaitingId":"...","mode":"form","status":"error","error":{"code":"user_dismissed|timeout|invalid_submit","message":"..."}}`
   - 整批取消：`params: []`，归一化为 `status:"error" + error.code:"user_dismissed"`
 

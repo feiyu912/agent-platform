@@ -14,9 +14,9 @@ func TestValidateDeferredSubmitParamsAcceptsDismissAndValidShapes(t *testing.T) 
 		{name: "question dismiss", mode: "question", params: []map[string]any{}},
 		{name: "question answer", mode: "question", params: []map[string]any{{"answer": "Approve"}}},
 		{name: "approval decision", mode: "approval", params: []map[string]any{{"decision": "approve"}}},
-		{name: "form submit", mode: "form", params: []map[string]any{{"action": "submit", "form": map[string]any{"days": 2}}}},
-		{name: "form reject", mode: "form", params: []map[string]any{{"action": "reject"}}},
-		{name: "form cancel", mode: "form", params: []map[string]any{{"action": "cancel"}}},
+		{name: "form approve", mode: "form", params: []map[string]any{{"decision": "approve", "form": map[string]any{"days": 2}}}},
+		{name: "form reject", mode: "form", params: []map[string]any{{"decision": "reject"}}},
+		{name: "form reject with reason", mode: "form", params: []map[string]any{{"decision": "reject", "reason": "不同意"}}},
 	}
 
 	for _, tt := range tests {
@@ -36,24 +36,34 @@ func TestValidateDeferredSubmitParamsRejectsInvalidShape(t *testing.T) {
 		wantSubstr string
 	}{
 		{
-			name:       "missing action",
+			name:       "missing decision",
 			params:     []map[string]any{{"form": map[string]any{"days": 2}}},
-			wantSubstr: "items[0]: form items require action",
+			wantSubstr: "items[0]: form items require decision",
 		},
 		{
-			name:       "invalid action",
-			params:     []map[string]any{{"action": "approve", "form": map[string]any{"days": 2}}},
-			wantSubstr: `items[0]: unsupported form action "approve"`,
+			name:       "invalid decision",
+			params:     []map[string]any{{"decision": "cancel", "form": map[string]any{"days": 2}}},
+			wantSubstr: `items[0]: unsupported form decision "cancel"`,
 		},
 		{
-			name:       "submit missing form",
-			params:     []map[string]any{{"action": "submit"}},
-			wantSubstr: "items[0]: submit action requires form",
+			name:       "approve missing form",
+			params:     []map[string]any{{"decision": "approve"}},
+			wantSubstr: "items[0]: approve decision requires form",
 		},
 		{
 			name:       "form not object",
-			params:     []map[string]any{{"action": "submit", "form": "bad"}},
+			params:     []map[string]any{{"decision": "approve", "form": "bad"}},
 			wantSubstr: "items[0]: form field must be an object",
+		},
+		{
+			name:       "approve reason rejected",
+			params:     []map[string]any{{"decision": "approve", "form": map[string]any{"days": 2}, "reason": "nope"}},
+			wantSubstr: "items[0]: form approve does not allow reason",
+		},
+		{
+			name:       "action field rejected",
+			params:     []map[string]any{{"action": "submit", "form": map[string]any{"days": 2}}},
+			wantSubstr: "items[0]: form items no longer use action, use decision instead",
 		},
 	}
 

@@ -413,7 +413,7 @@ func loadModels(dir string) (map[string]ModelDefinition, error) {
 			ModelID:       strings.TrimSpace(stringNode(values["modelId"])),
 			IsFunction:    parseTruthy(stringNode(values["isFunction"])),
 			IsReasoner:    parseTruthy(stringNode(values["isReasoner"])),
-			IsVision:      parseTruthyDefault(values["isVision"], true),
+			IsVision:      parseTruthyDefault(values["isVision"], false),
 			ContextWindow: contracts.AnyIntNode(values["contextWindow"]),
 			Headers:       stringMapNode(values["headers"]),
 			Compat:        cloneAnyMap(contracts.AnyMapNode(values["compat"])),
@@ -447,6 +447,11 @@ func stringNode(value any) string {
 		return fmt.Sprintf("%d", v)
 	case int:
 		return fmt.Sprintf("%d", v)
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
 	default:
 		return ""
 	}

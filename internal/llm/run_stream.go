@@ -1519,8 +1519,8 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 
 	if strings.EqualFold(AnyStringNode(normalized["mode"]), "form") {
 		selectedForm := firstAwaitItem(normalized["forms"])
-		action := strings.ToLower(strings.TrimSpace(AnyStringNode(selectedForm["action"])))
-		if action == "submit" {
+		decision := strings.ToLower(strings.TrimSpace(AnyStringNode(selectedForm["decision"])))
+		if decision == "approve" {
 			formPayload := AnyMapNode(selectedForm["form"])
 			rebuiltCommand, rebuildErr := reconstructCommandWithPayload(mapStringArg(invocation.args, "command"), formPayload)
 			if rebuildErr != nil {
@@ -1550,7 +1550,8 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 			invocation.hitlDecision.FormPayload = formPayload
 			return s.executeOriginalBash(invocation)
 		}
-		s.applyHITLDecision(invocation, *match, awaitingID, "reject", "", false)
+		reason := strings.TrimSpace(AnyStringNode(selectedForm["reason"]))
+		s.applyHITLDecision(invocation, *match, awaitingID, "reject", reason, false)
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
 	}

@@ -2,7 +2,7 @@ package hitlsubmit
 
 import "testing"
 
-func TestNormalizeFormUsesExplicitActionAndForm(t *testing.T) {
+func TestNormalizeFormUsesExplicitDecisionAndForm(t *testing.T) {
 	args := map[string]any{
 		"forms": []any{
 			map[string]any{
@@ -14,8 +14,8 @@ func TestNormalizeFormUsesExplicitActionAndForm(t *testing.T) {
 
 	normalized, err := NormalizeForm(args, []any{
 		map[string]any{
-			"id":     "form-1",
-			"action": "submit",
+			"id":       "form-1",
+			"decision": "approve",
 			"form": map[string]any{
 				"days": 2,
 			},
@@ -30,12 +30,12 @@ func TestNormalizeFormUsesExplicitActionAndForm(t *testing.T) {
 		t.Fatalf("expected one normalized form, got %#v", normalized)
 	}
 	form, _ := forms[0]["form"].(map[string]any)
-	if forms[0]["action"] != "submit" || form["days"] != 2 {
+	if forms[0]["decision"] != "approve" || form["days"] != 2 {
 		t.Fatalf("unexpected normalized form %#v", forms[0])
 	}
 }
 
-func TestNormalizeFormHandlesRejectCancelAndDismiss(t *testing.T) {
+func TestNormalizeFormHandlesRejectAndDismiss(t *testing.T) {
 	args := map[string]any{
 		"forms": []any{
 			map[string]any{"id": "form-1", "command": "cmd-1"},
@@ -44,8 +44,8 @@ func TestNormalizeFormHandlesRejectCancelAndDismiss(t *testing.T) {
 	}
 
 	normalized, err := NormalizeForm(args, []any{
-		map[string]any{"id": "form-1", "action": "reject"},
-		map[string]any{"id": "form-2", "action": "cancel"},
+		map[string]any{"id": "form-1", "decision": "reject"},
+		map[string]any{"id": "form-2", "decision": "reject", "reason": "不同意"},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeForm returned error: %v", err)
@@ -55,14 +55,14 @@ func TestNormalizeFormHandlesRejectCancelAndDismiss(t *testing.T) {
 	if len(forms) != 2 {
 		t.Fatalf("expected two normalized forms, got %#v", normalized)
 	}
-	if forms[0]["action"] != "reject" || forms[1]["action"] != "cancel" {
-		t.Fatalf("unexpected normalized actions %#v", forms)
+	if forms[0]["decision"] != "reject" || forms[1]["decision"] != "reject" || forms[1]["reason"] != "不同意" {
+		t.Fatalf("unexpected normalized decisions %#v", forms)
 	}
 	if _, ok := forms[0]["form"]; ok {
 		t.Fatalf("did not expect reject to retain form data, got %#v", forms[0])
 	}
 	if _, ok := forms[1]["form"]; ok {
-		t.Fatalf("did not expect cancel to retain form data, got %#v", forms[1])
+		t.Fatalf("did not expect reject to retain form data, got %#v", forms[1])
 	}
 
 	dismissed, err := NormalizeForm(args, []any{})
@@ -74,7 +74,7 @@ func TestNormalizeFormHandlesRejectCancelAndDismiss(t *testing.T) {
 	}
 }
 
-func TestNormalizeFormRejectsMissingActionOrForm(t *testing.T) {
+func TestNormalizeFormRejectsMissingDecisionOrForm(t *testing.T) {
 	args := map[string]any{
 		"forms": []any{
 			map[string]any{"id": "form-1", "command": "cmd-1"},
@@ -85,9 +85,9 @@ func TestNormalizeFormRejectsMissingActionOrForm(t *testing.T) {
 		name string
 		item map[string]any
 	}{
-		{name: "missing action", item: map[string]any{"id": "form-1"}},
-		{name: "submit missing form", item: map[string]any{"id": "form-1", "action": "submit"}},
-		{name: "invalid action", item: map[string]any{"id": "form-1", "action": "approve"}},
+		{name: "missing decision", item: map[string]any{"id": "form-1"}},
+		{name: "approve missing form", item: map[string]any{"id": "form-1", "decision": "approve"}},
+		{name: "invalid decision", item: map[string]any{"id": "form-1", "decision": "cancel"}},
 	}
 
 	for _, tt := range tests {
@@ -96,5 +96,28 @@ func TestNormalizeFormRejectsMissingActionOrForm(t *testing.T) {
 				t.Fatalf("expected error for %#v", tt.item)
 			}
 		})
+	}
+}
+
+func TestNormalizeFormOmitsEmptyReason(t *testing.T) {
+	args := map[string]any{
+		"forms": []any{
+			map[string]any{"id": "form-1", "command": "cmd-1"},
+		},
+	}
+
+	normalized, err := NormalizeForm(args, []any{
+		map[string]any{"id": "form-1", "decision": "reject", "reason": "  "},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeForm returned error: %v", err)
+	}
+
+	forms, _ := normalized["forms"].([]map[string]any)
+	if len(forms) != 1 {
+		t.Fatalf("expected one normalized form, got %#v", normalized)
+	}
+	if _, ok := forms[0]["reason"]; ok {
+		t.Fatalf("did not expect empty reason to be retained, got %#v", forms[0])
 	}
 }

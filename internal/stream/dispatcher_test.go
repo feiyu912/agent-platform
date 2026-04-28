@@ -638,8 +638,8 @@ func TestDispatcherEmitsAwaitingAnswerForApprovalFormSubmit(t *testing.T) {
 			"status": "answered",
 			"forms": []any{
 				map[string]any{
-					"id":     "form-1",
-					"action": "submit",
+					"id":       "form-1",
+					"decision": "approve",
 					"form": map[string]any{
 						"applicant_id":  "E1001",
 						"department_id": "engineering",
@@ -662,7 +662,7 @@ func TestDispatcherEmitsAwaitingAnswerForApprovalFormSubmit(t *testing.T) {
 		t.Fatalf("expected one form answer, got %#v", payload)
 	}
 	formPayload, _ := forms[0]["form"].(map[string]any)
-	if forms[0]["action"] != "submit" || formPayload["applicant_id"] != "E1001" || formPayload["days"] != 2 {
+	if forms[0]["decision"] != "approve" || formPayload["applicant_id"] != "E1001" || formPayload["days"] != 2 {
 		t.Fatalf("unexpected approval form payload %#v", payload)
 	}
 }
@@ -790,8 +790,8 @@ func TestEventDataMarshalsAwaitingAnswerFormSubmitWithContractKeyOrder(t *testin
 		"status":     "answered",
 		"forms": []any{
 			map[string]any{
-				"id":     "form-1",
-				"action": "submit",
+				"id":       "form-1",
+				"decision": "approve",
 				"form": map[string]any{
 					"applicant_id": "E1001",
 				},
@@ -810,7 +810,7 @@ func TestEventDataMarshalsAwaitingAnswerFormSubmitWithContractKeyOrder(t *testin
 		`"awaitingId":"tool_1"`,
 		`"mode":"form"`,
 		`"status":"answered"`,
-		`"forms":[{"action":"submit","form":{"applicant_id":"E1001"},"id":"form-1"}]`,
+		`"forms":[{"decision":"approve","form":{"applicant_id":"E1001"},"id":"form-1"}]`,
 		`"timestamp":`,
 	}
 	prev := -1

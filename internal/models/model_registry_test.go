@@ -88,7 +88,7 @@ func TestLoadModelRegistryParsesProviderMemoryEmbedding(t *testing.T) {
 	}
 }
 
-func TestLoadModelRegistryDefaultsModelVisionToTrue(t *testing.T) {
+func TestLoadModelRegistryDefaultsModelVisionToFalse(t *testing.T) {
 	root := t.TempDir()
 	writeTestProviderAndModel(t, root, "apiKey: plain-text")
 
@@ -101,8 +101,26 @@ func TestLoadModelRegistryDefaultsModelVisionToTrue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry.Get returned error: %v", err)
 	}
+	if model.IsVision {
+		t.Fatal("expected model IsVision to default to false")
+	}
+}
+
+func TestLoadModelRegistryParsesModelVisionTrue(t *testing.T) {
+	root := t.TempDir()
+	writeTestProviderAndModel(t, root, "apiKey: plain-text", "isVision: true")
+
+	registry, err := LoadModelRegistry(root)
+	if err != nil {
+		t.Fatalf("LoadModelRegistry returned error: %v", err)
+	}
+
+	model, _, err := registry.Get("mock-model")
+	if err != nil {
+		t.Fatalf("registry.Get returned error: %v", err)
+	}
 	if !model.IsVision {
-		t.Fatal("expected model IsVision to default to true")
+		t.Fatal("expected model IsVision to parse true")
 	}
 }
 

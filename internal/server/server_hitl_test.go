@@ -943,7 +943,7 @@ func TestBashHITLApproveFlow(t *testing.T) {
 	}
 	if !strings.Contains(body, `"type":"awaiting.answer"`) ||
 		!strings.Contains(body, `"status":"answered"`) ||
-		!strings.Contains(body, `"action":"submit"`) ||
+		!strings.Contains(body, `"decision":"approve"`) ||
 		!strings.Contains(body, `"id":"form-1"`) ||
 		!strings.Contains(body, `"form":`+expectedSubmitPayload) {
 		t.Fatalf("expected approve awaiting.answer in stream, got %s", body)
@@ -1193,7 +1193,7 @@ func TestBashHITLModifyFlow(t *testing.T) {
 	}
 	if !strings.Contains(body, `"type":"awaiting.answer"`) ||
 		!strings.Contains(body, `"status":"answered"`) ||
-		!strings.Contains(body, `"action":"submit"`) ||
+		!strings.Contains(body, `"decision":"approve"`) ||
 		!strings.Contains(body, `"id":"form-1"`) ||
 		!strings.Contains(body, `"form":`+string(expectedSubmitPayload)) {
 		t.Fatalf("expected modify awaiting.answer in stream, got %s", body)
@@ -1214,7 +1214,7 @@ func TestBashHITLRejectFlow(t *testing.T) {
 	}
 	if !strings.Contains(body, `"type":"awaiting.answer"`) ||
 		!strings.Contains(body, `"status":"answered"`) ||
-		!strings.Contains(body, `"action":"reject"`) ||
+		!strings.Contains(body, `"decision":"reject"`) ||
 		!strings.Contains(body, `"id":"form-1"`) {
 		t.Fatalf("expected reject awaiting.answer in stream, got %s", body)
 	}
@@ -1223,23 +1223,26 @@ func TestBashHITLRejectFlow(t *testing.T) {
 	}
 }
 
-func TestBashHITLCancelFlow(t *testing.T) {
-	body, executed := runBashHITLFlow(t, bashHITLFlowOptions{action: "cancel"})
+func TestBashHITLRejectWithReasonFlow(t *testing.T) {
+	body, executed := runBashHITLFlow(t, bashHITLFlowOptions{action: "reject", reason: "user_cancelled"})
 	if len(executed) != 0 {
-		t.Fatalf("expected cancelled command not to execute, got %#v", executed)
+		t.Fatalf("expected rejected command not to execute, got %#v", executed)
 	}
 	resultPayload := findToolResultPayload(t, body, "tool_bash")
 	if got, ok := resultPayload["result"].(string); !ok || got != "user_rejected: User rejected this command. Do NOT retry with a different command. End the turn now." {
-		t.Fatalf("expected hard-stop cancelled tool result, got %s", body)
+		t.Fatalf("expected hard-stop rejected tool result, got %s", body)
 	}
-	if !strings.Contains(body, `"type":"request.submit"`) || !strings.Contains(body, `"action":"cancel"`) {
-		t.Fatalf("expected cancel request.submit payload in stream, got %s", body)
+	if !strings.Contains(body, `"type":"request.submit"`) ||
+		!strings.Contains(body, `"decision":"reject"`) ||
+		!strings.Contains(body, `"reason":"user_cancelled"`) {
+		t.Fatalf("expected reject request.submit payload in stream, got %s", body)
 	}
 	if !strings.Contains(body, `"type":"awaiting.answer"`) ||
 		!strings.Contains(body, `"status":"answered"`) ||
-		!strings.Contains(body, `"action":"cancel"`) ||
-		!strings.Contains(body, `"id":"form-1"`) {
-		t.Fatalf("expected cancel awaiting.answer in stream, got %s", body)
+		!strings.Contains(body, `"decision":"reject"`) ||
+		!strings.Contains(body, `"id":"form-1"`) ||
+		!strings.Contains(body, `"reason":"user_cancelled"`) {
+		t.Fatalf("expected reject awaiting.answer in stream, got %s", body)
 	}
 }
 
@@ -1458,6 +1461,7 @@ func TestBashHITLDockerImageRMRejectFlow(t *testing.T) {
 type bashHITLFlowOptions struct {
 	toolName        string
 	action          string
+	reason          string
 	modifiedCommand string
 	command         string
 	rulesContent    string
@@ -1589,18 +1593,20 @@ submit:
 		var submitPayload string
 		if strings.EqualFold(stringValue(awaitAskPayload["mode"]), "form") {
 			if options.action == "reject" {
-				submitPayload = `[{"id":"form-1","action":"reject"}]`
-			} else if options.action == "cancel" {
-				submitPayload = `[{"id":"form-1","action":"cancel"}]`
+				if strings.TrimSpace(options.reason) == "" {
+					submitPayload = `[{"id":"form-1","decision":"reject"}]`
+				} else {
+					submitPayload = `[{"id":"form-1","decision":"reject","reason":"` + options.reason + `"}]`
+				}
 			} else {
 				submitCommand := command
 				if options.action == "modify" {
 					submitCommand = options.modifiedCommand
 				}
 				payloadJSON, err := json.Marshal([]map[string]any{{
-					"id":     "form-1",
-					"action": "submit",
-					"form":   payloadFromCommandForTest(t, submitCommand),
+					"id":       "form-1",
+					"decision": "approve",
+					"form":     payloadFromCommandForTest(t, submitCommand),
 				}})
 				if err != nil {
 					t.Fatalf("marshal html submit payload: %v", err)
@@ -1878,7 +1884,7 @@ func TestValidateSubmitParamsAllowsOrderedItemsWithoutIDs(t *testing.T) {
 			mode:      "form",
 			itemCount: 1,
 			params: mustEncodeSubmitParams(t, []map[string]any{
-				{"action": "submit", "form": map[string]any{"days": 2}},
+				{"decision": "approve", "form": map[string]any{"days": 2}},
 			}),
 		},
 	}
@@ -1926,7 +1932,7 @@ func TestValidateSubmitParamsIgnoresSubmittedIDsWhenCountMatches(t *testing.T) {
 			mode:      "form",
 			itemCount: 1,
 			params: mustEncodeSubmitParams(t, []map[string]any{
-				{"id": "wrong-form", "action": "cancel"},
+				{"id": "wrong-form", "decision": "reject"},
 			}),
 		},
 	}
@@ -1978,28 +1984,34 @@ func TestValidateSubmitParamsRejectsInvalidShape(t *testing.T) {
 			wantSubstr: "items[0]: approval items require decision",
 		},
 		{
-			name:       "form missing action",
+			name:       "form missing decision",
 			mode:       "form",
 			item:       map[string]any{"form": map[string]any{"days": 2}},
-			wantSubstr: "items[0]: form items require action",
+			wantSubstr: "items[0]: form items require decision",
 		},
 		{
-			name:       "form invalid action",
+			name:       "form invalid decision",
 			mode:       "form",
-			item:       map[string]any{"action": "approve"},
-			wantSubstr: `items[0]: unsupported form action "approve"`,
+			item:       map[string]any{"decision": "cancel"},
+			wantSubstr: `items[0]: unsupported form decision "cancel"`,
 		},
 		{
-			name:       "form submit missing form",
+			name:       "form approve missing form",
 			mode:       "form",
-			item:       map[string]any{"action": "submit"},
-			wantSubstr: "items[0]: submit action requires form",
+			item:       map[string]any{"decision": "approve"},
+			wantSubstr: "items[0]: approve decision requires form",
 		},
 		{
 			name:       "form field not object",
 			mode:       "form",
-			item:       map[string]any{"action": "submit", "form": "bad"},
+			item:       map[string]any{"decision": "approve", "form": "bad"},
 			wantSubstr: "items[0]: form field must be an object",
+		},
+		{
+			name:       "form approve reason rejected",
+			mode:       "form",
+			item:       map[string]any{"decision": "approve", "form": map[string]any{"days": 2}, "reason": "nope"},
+			wantSubstr: "items[0]: form approve does not allow reason",
 		},
 	}
 
