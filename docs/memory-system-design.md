@@ -963,7 +963,7 @@ observation 不是永久记忆，系统会自动整理它。
 |------|-------------|--------|
 | 存储 | 文件式（MEMORY.md + USER.md，硬字符上限） | SQLite + FTS5 + 可选向量嵌入 |
 | 作用域 | 单 agent，全局两个文件 | 多 agent / 多 scope（user/agent/team/chat/global） |
-| 检索 | frozen snapshot，每次会话启动时全量加载 | 每次 query 动态构建，支持语义检索 |
+| 检索 | frozen snapshot，每次会话启动时全量加载 | 首次 query 生成 stable memory frozen snapshot；session / observation 仍按 query 动态构建 |
 | 上下文管理 | protect_first_n + protect_last_n 压缩策略 | 三层渐进式披露 + 动态预算分配 |
 | 记忆进化 | 无自动进化 | 有效重要度衰减/强化 + 反馈循环 + 生命周期整理 |
 | 安全 | 注入检测 + 凭据检测 | 同上 + 不可见 Unicode 检测 |
@@ -976,9 +976,10 @@ observation 不是永久记忆，系统会自动整理它。
 
 ## 当前局限
 
-1. **还没有 frozen snapshot**
-- 当前是每次 query 动态构建 memory bundle
-- 如果同一个 session 内记忆发生变化，prompt 也会变化
+1. **frozen snapshot 只覆盖 stable memory**
+- 当前会按 `chatId + agentKey` 固定 stable facts
+- session memory 和 observation memory 仍会按 query 动态构建
+- 更完整的 bundle 级文本快照还没有实现
 
 2. **skill candidate 还不能正式升格为 skill**
 - 现在只有候选写入和查询
@@ -1000,8 +1001,10 @@ observation 不是永久记忆，系统会自动整理它。
 1. **做 memory/session/candidate 面板**
 - 让用户能看见系统到底记住了什么
 
-2. **做 session-start frozen snapshot**
-- 让一个 session 内的长期记忆更稳定
+2. **增强 frozen snapshot 可见性和生命周期**
+- 在前端展示本轮使用的 snapshot、stable facts 和 selection reason
+- 在 chat 删除、归档或 memory 清理时同步清理 snapshot
+- 评估是否需要完整 prompt 文本快照用于严格复现
 
 3. **打通 candidate 到正式 skill 的升格流程**
 - 把"学到的方法"真正变成可复用能力

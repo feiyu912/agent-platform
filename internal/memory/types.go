@@ -42,6 +42,7 @@ type ContextRequest struct {
 	TopObs          int
 	MaxChars        int
 	AvailableTokens int
+	FreezeStable    bool
 }
 
 type Layer string

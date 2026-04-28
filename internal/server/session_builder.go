@@ -49,14 +49,15 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 			userKey = strings.TrimSpace(principal.Subject)
 		}
 		if bundle, err := s.deps.Memory.BuildContextBundle(memory.ContextRequest{
-			AgentKey: req.AgentKey,
-			TeamID:   req.TeamID,
-			ChatID:   req.ChatID,
-			UserKey:  userKey,
-			Query:    req.Message,
-			TopFacts: topN,
-			TopObs:   topN,
-			MaxChars: maxChars,
+			AgentKey:     req.AgentKey,
+			TeamID:       req.TeamID,
+			ChatID:       req.ChatID,
+			UserKey:      userKey,
+			Query:        req.Message,
+			TopFacts:     topN,
+			TopObs:       topN,
+			MaxChars:     maxChars,
+			FreezeStable: true,
 		}); err != nil {
 			log.Printf("[memory][context] build context bundle failed (chatId=%s agentKey=%s): %v", req.ChatID, req.AgentKey, err)
 		} else {

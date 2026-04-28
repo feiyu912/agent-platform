@@ -638,6 +638,88 @@ func TestBuildContextBundleSeparatesFactsAndObservations(t *testing.T) {
 	}
 }
 
+func TestSQLiteBuildContextBundleFreezesStableSnapshot(t *testing.T) {
+	store, err := NewSQLiteStore(t.TempDir(), "memory.db")
+	if err != nil {
+		t.Fatalf("new sqlite store: %v", err)
+	}
+	now := time.Now().UnixMilli()
+	firstFact := api.StoredMemoryResponse{
+		ID:         "fact-initial",
+		AgentKey:   "agent-a",
+		Kind:       KindFact,
+		ScopeType:  ScopeAgent,
+		ScopeKey:   "agent:agent-a",
+		Title:      "Initial convention",
+		Summary:    "Run focused tests before reporting completion.",
+		SourceType: "tool-write",
+		Category:   "convention",
+		Importance: 8,
+		Confidence: 0.9,
+		Status:     StatusActive,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	if err := store.Write(firstFact); err != nil {
+		t.Fatalf("write initial fact: %v", err)
+	}
+
+	firstBundle, err := store.BuildContextBundle(ContextRequest{
+		AgentKey:     "agent-a",
+		ChatID:       "chat-freeze",
+		Query:        "tests",
+		TopFacts:     5,
+		TopObs:       5,
+		MaxChars:     4000,
+		FreezeStable: true,
+	})
+	if err != nil {
+		t.Fatalf("first BuildContextBundle: %v", err)
+	}
+	if len(firstBundle.StableFacts) != 1 || firstBundle.StableFacts[0].ID != "fact-initial" {
+		t.Fatalf("expected initial stable fact, got %#v", firstBundle.StableFacts)
+	}
+	if firstBundle.SnapshotID == "" {
+		t.Fatalf("expected frozen snapshot id")
+	}
+
+	newerFact := firstFact
+	newerFact.ID = "fact-newer"
+	newerFact.Title = "Newer convention"
+	newerFact.Summary = "Always run the full regression suite before reporting completion."
+	newerFact.Importance = 10
+	newerFact.CreatedAt = now + 1000
+	newerFact.UpdatedAt = now + 1000
+	if err := store.Write(newerFact); err != nil {
+		t.Fatalf("write newer fact: %v", err)
+	}
+
+	secondBundle, err := store.BuildContextBundle(ContextRequest{
+		AgentKey:     "agent-a",
+		ChatID:       "chat-freeze",
+		Query:        "regression tests",
+		TopFacts:     5,
+		TopObs:       5,
+		MaxChars:     4000,
+		FreezeStable: true,
+	})
+	if err != nil {
+		t.Fatalf("second BuildContextBundle: %v", err)
+	}
+	if secondBundle.SnapshotID != firstBundle.SnapshotID {
+		t.Fatalf("expected reused snapshot id %q, got %q", firstBundle.SnapshotID, secondBundle.SnapshotID)
+	}
+	if len(secondBundle.StableFacts) != 1 || secondBundle.StableFacts[0].ID != "fact-initial" {
+		t.Fatalf("expected frozen initial stable fact, got %#v", secondBundle.StableFacts)
+	}
+	if strings.Contains(secondBundle.StablePrompt, "full regression suite") {
+		t.Fatalf("stable prompt leaked post-snapshot fact: %q", secondBundle.StablePrompt)
+	}
+	if len(secondBundle.Decisions) == 0 || secondBundle.Decisions[0].Reason != string(SelectionReasonSnapshotPin) {
+		t.Fatalf("expected snapshot pinned decision, got %#v", secondBundle.Decisions)
+	}
+}
+
 func TestBuildContextBundleDeduplicatesBeforePromptDisclosure(t *testing.T) {
 	items := []api.StoredMemoryResponse{
 		{

@@ -207,6 +207,16 @@ func (s *SQLiteStore) initDB() error {
 			WEIGHT_ REAL NOT NULL DEFAULT 1.0,
 			CREATED_AT_ INTEGER NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS MEMORY_SNAPSHOTS (
+			ID_ TEXT PRIMARY KEY,
+			CHAT_ID_ TEXT NOT NULL,
+			AGENT_KEY_ TEXT NOT NULL DEFAULT '',
+			STABLE_ITEM_IDS_ TEXT NOT NULL DEFAULT '[]',
+			OBSERVED_ITEM_IDS_ TEXT NOT NULL DEFAULT '[]',
+			CREATED_AT_ INTEGER NOT NULL,
+			UPDATED_AT_ INTEGER NOT NULL,
+			UNIQUE(CHAT_ID_, AGENT_KEY_)
+		)`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS MEMORIES_FTS USING fts5(
 			SUMMARY_, SUBJECT_KEY_, CATEGORY_, TAGS_,
 			content=MEMORIES, content_rowid=rowid
@@ -907,6 +917,16 @@ func (s *SQLiteStore) BuildContextBundle(request ContextRequest) (ContextBundle,
 	if err != nil {
 		return ContextBundle{}, err
 	}
+	var snapshot *MemorySnapshot
+	if request.FreezeStable {
+		snapshot, err = s.loadMemorySnapshotLocked(request.AgentKey, request.ChatID)
+		if err != nil {
+			return ContextBundle{}, err
+		}
+		if snapshot != nil {
+			items = pinStableSnapshotItems(items, snapshot.StableItemIDs)
+		}
+	}
 
 	hp := hybridParams{
 		vectorWeight: s.ftsVectorWeight,
@@ -921,6 +941,22 @@ func (s *SQLiteStore) BuildContextBundle(request ContextRequest) (ContextBundle,
 	}
 
 	bundle := buildContextBundleWithHybrid(request, items, hp)
+	if request.FreezeStable && strings.TrimSpace(request.ChatID) != "" {
+		if snapshot == nil {
+			snapshot = &MemorySnapshot{
+				ID:              bundle.SnapshotID,
+				ChatID:          strings.TrimSpace(request.ChatID),
+				AgentKey:        strings.TrimSpace(request.AgentKey),
+				StableItemIDs:   memoryIDs(bundle.StableFacts),
+				ObservedItemIDs: memoryIDs(bundle.RelevantObservations),
+			}
+			if err := s.saveMemorySnapshotLocked(*snapshot); err != nil {
+				return ContextBundle{}, err
+			}
+		}
+		bundle.SnapshotID = snapshot.ID
+		markStableSnapshotPinned(&bundle, snapshot.StableItemIDs)
+	}
 	logMemoryOperation("build_context_bundle", map[string]any{
 		"agentKey":         request.AgentKey,
 		"teamId":           request.TeamID,
@@ -940,6 +976,114 @@ func (s *SQLiteStore) BuildContextBundle(request ContextRequest) (ContextBundle,
 		"maxChars":         request.MaxChars,
 	})
 	return bundle, nil
+}
+
+func (s *SQLiteStore) loadMemorySnapshotLocked(agentKey string, chatID string) (*MemorySnapshot, error) {
+	agentKey = strings.TrimSpace(agentKey)
+	chatID = strings.TrimSpace(chatID)
+	if chatID == "" {
+		return nil, nil
+	}
+	var snapshot MemorySnapshot
+	var stableJSON string
+	var observedJSON string
+	err := s.db.QueryRow(
+		`SELECT ID_, CHAT_ID_, AGENT_KEY_, STABLE_ITEM_IDS_, OBSERVED_ITEM_IDS_
+		FROM MEMORY_SNAPSHOTS
+		WHERE CHAT_ID_ = ? AND AGENT_KEY_ = ?`,
+		chatID, agentKey,
+	).Scan(&snapshot.ID, &snapshot.ChatID, &snapshot.AgentKey, &stableJSON, &observedJSON)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	snapshot.StableItemIDs = decodeStringList(stableJSON)
+	snapshot.ObservedItemIDs = decodeStringList(observedJSON)
+	return &snapshot, nil
+}
+
+func (s *SQLiteStore) saveMemorySnapshotLocked(snapshot MemorySnapshot) error {
+	if strings.TrimSpace(snapshot.ChatID) == "" {
+		return nil
+	}
+	now := time.Now().UnixMilli()
+	stableJSON, err := json.Marshal(snapshot.StableItemIDs)
+	if err != nil {
+		return err
+	}
+	observedJSON, err := json.Marshal(snapshot.ObservedItemIDs)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO MEMORY_SNAPSHOTS (ID_, CHAT_ID_, AGENT_KEY_, STABLE_ITEM_IDS_, OBSERVED_ITEM_IDS_, CREATED_AT_, UPDATED_AT_)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(CHAT_ID_, AGENT_KEY_) DO NOTHING`,
+		strings.TrimSpace(snapshot.ID),
+		strings.TrimSpace(snapshot.ChatID),
+		strings.TrimSpace(snapshot.AgentKey),
+		string(stableJSON),
+		string(observedJSON),
+		now,
+		now,
+	)
+	return err
+}
+
+func pinStableSnapshotItems(items []api.StoredMemoryResponse, stableIDs []string) []api.StoredMemoryResponse {
+	pinned := make(map[string]struct{}, len(stableIDs))
+	for _, id := range stableIDs {
+		if strings.TrimSpace(id) != "" {
+			pinned[strings.TrimSpace(id)] = struct{}{}
+		}
+	}
+	out := make([]api.StoredMemoryResponse, 0, len(items))
+	for _, item := range items {
+		if item.Kind == KindFact {
+			if _, ok := pinned[item.ID]; !ok {
+				continue
+			}
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func markStableSnapshotPinned(bundle *ContextBundle, stableIDs []string) {
+	if bundle == nil || len(stableIDs) == 0 {
+		return
+	}
+	pinned := make(map[string]struct{}, len(stableIDs))
+	for _, id := range stableIDs {
+		pinned[strings.TrimSpace(id)] = struct{}{}
+	}
+	for i, decision := range bundle.Decisions {
+		if decision.Layer != LayerStable {
+			continue
+		}
+		for _, id := range decision.ItemIDs {
+			if _, ok := pinned[strings.TrimSpace(id)]; ok {
+				bundle.Decisions[i].Reason = string(SelectionReasonSnapshotPin)
+				return
+			}
+		}
+	}
+}
+
+func decodeStringList(raw string) []string {
+	var values []string
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &values); err != nil {
+		return []string{}
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			out = append(out, strings.TrimSpace(value))
+		}
+	}
+	return out
 }
 
 func (s *SQLiteStore) loadEmbeddingsLocked(items []api.StoredMemoryResponse) map[string][]float64 {
