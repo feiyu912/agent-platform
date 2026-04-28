@@ -265,6 +265,7 @@ agent definition 侧另有 `memoryConfig`：
 - `configs/channels.yml` 缺失时，不会从 legacy gateway env 合成连接
 - `channels.yml` 中的 gateway entry 会在启动时合成为 `config.Gateways`
 - `configs/channels.example.yml` 提供了 bridge 与 gateway 两种 channel 形态示例
+- `channels.yml` 支持运行时热加载：文件变更后约 300ms 内会自动触发 reconcile，增量更新 gateway 连接（新增/变更/移除均生效），无需重启进程
 
 ## 不建议公开暴露的变量
 

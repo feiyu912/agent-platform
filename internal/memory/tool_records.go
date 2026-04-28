@@ -6,6 +6,52 @@ import (
 	"agent-platform-runner-go/internal/api"
 )
 
+const (
+	CategoryGeneral         = "general"
+	CategoryPreference      = "preference"
+	CategoryConstraint      = "constraint"
+	CategoryProfile         = "profile"
+	CategoryWorkflow        = "workflow"
+	CategoryDecision        = "decision"
+	CategoryGlossary        = "glossary"
+	CategoryUnresolvedIssue = "unresolved_issue"
+	CategoryBugfix          = "bugfix"
+	CategoryTodo            = "todo"
+	CategoryProject         = "project"
+	CategoryRemember        = "remember"
+)
+
+var standardMemoryCategories = map[string]struct{}{
+	CategoryGeneral:         {},
+	CategoryPreference:      {},
+	CategoryConstraint:      {},
+	CategoryProfile:         {},
+	CategoryWorkflow:        {},
+	CategoryDecision:        {},
+	CategoryGlossary:        {},
+	CategoryUnresolvedIssue: {},
+	CategoryBugfix:          {},
+	CategoryTodo:            {},
+	CategoryProject:         {},
+	CategoryRemember:        {},
+}
+
+var memoryCategoryAliases = map[string]string{
+	"preferences":   CategoryPreference,
+	"pref":          CategoryPreference,
+	"constraints":   CategoryConstraint,
+	"profiles":      CategoryProfile,
+	"workflows":     CategoryWorkflow,
+	"runbook":       CategoryWorkflow,
+	"decisions":     CategoryDecision,
+	"terminology":   CategoryGlossary,
+	"unresolved":    CategoryUnresolvedIssue,
+	"open_question": CategoryUnresolvedIssue,
+	"blocked":       CategoryUnresolvedIssue,
+	"blocker":       CategoryUnresolvedIssue,
+	"bug":           CategoryBugfix,
+}
+
 type ToolRecord struct {
 	ID             string
 	AgentKey       string
@@ -36,18 +82,55 @@ type ScoredRecord struct {
 	MatchType string
 }
 
-func normalizeCategory(category string) string {
-	if strings.TrimSpace(category) == "" {
-		return "general"
+func NormalizeCategory(category string) string {
+	return normalizeCategory(category)
+}
+
+func StandardCategories() []string {
+	return []string{
+		CategoryGeneral,
+		CategoryPreference,
+		CategoryConstraint,
+		CategoryProfile,
+		CategoryWorkflow,
+		CategoryDecision,
+		CategoryGlossary,
+		CategoryUnresolvedIssue,
+		CategoryBugfix,
+		CategoryTodo,
+		CategoryProject,
+		CategoryRemember,
 	}
-	return strings.ToLower(strings.TrimSpace(category))
+}
+
+func IsStandardCategory(category string) bool {
+	_, ok := standardMemoryCategories[normalizeCategory(category)]
+	return ok
+}
+
+func normalizeCategory(category string) string {
+	normalized := normalizeCategoryToken(category)
+	if normalized == "" {
+		return CategoryGeneral
+	}
+	if alias, ok := memoryCategoryAliases[normalized]; ok {
+		return alias
+	}
+	return normalized
 }
 
 func normalizeOptionalCategory(category string) string {
 	if strings.TrimSpace(category) == "" {
 		return ""
 	}
-	return strings.ToLower(strings.TrimSpace(category))
+	return normalizeCategory(category)
+}
+
+func normalizeCategoryToken(category string) string {
+	normalized := strings.ToLower(strings.TrimSpace(category))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.Join(strings.Fields(normalized), "_")
+	return normalized
 }
 
 func normalizeSort(sortBy string) string {

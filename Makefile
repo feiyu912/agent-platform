@@ -1,7 +1,11 @@
 COMPOSE_FILE ?= compose.yml
 CGO_ENABLED ?= 0
 VERSION := $(shell cat VERSION 2>/dev/null || echo "dev")
-ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
+
+# ARCH detection: use uname on Unix, default to amd64 on Windows
+ARCH_DETECT := $(shell command -v uname >/dev/null 2>&1 && uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/' || echo "amd64")
+ARCH ?= $(ARCH_DETECT)
+
 PASS_PROGRAM_TARGETS = $(if $(filter undefined,$(origin PROGRAM_TARGETS)),,PROGRAM_TARGETS=$(PROGRAM_TARGETS))
 PASS_PROGRAM_TARGET_MATRIX = $(if $(filter undefined,$(origin PROGRAM_TARGET_MATRIX)),,PROGRAM_TARGET_MATRIX=$(PROGRAM_TARGET_MATRIX))
 
@@ -55,8 +59,13 @@ docker-down:
 release:
 	$(MAKE) release-program VERSION=$(VERSION) ARCH=$(ARCH) $(PASS_PROGRAM_TARGETS) $(PASS_PROGRAM_TARGET_MATRIX)
 
+ifeq ($(OS),Windows_NT)
+release-program:
+	powershell -ExecutionPolicy Bypass -File scripts/release-program.ps1
+else
 release-program:
 	VERSION=$(VERSION) ARCH=$(ARCH) $(PASS_PROGRAM_TARGETS) $(PASS_PROGRAM_TARGET_MATRIX) bash scripts/release-program.sh
+endif
 
 clean:
 	rm -rf dist/release

@@ -1,6 +1,6 @@
 name: _memory_write_
 label: 写入记忆
-description: Write persisted agent memory with optional category, importance, and tags.
+description: Write persisted agent memory with semantic category, importance, and tags.
 type: function
 clientVisible: false
 inputSchema:
@@ -11,7 +11,7 @@ inputSchema:
       description: Required. Memory content.
     category:
       type: string
-      description: Category to store with the memory. Defaults to general.
+      description: Category to store with the memory. Prefer preference, constraint, profile, workflow, decision, glossary, unresolved_issue, bugfix, todo, project, or remember. Defaults to general.
     importance:
       type: integer
       description: Importance level from 1 to 10. Defaults to 5.

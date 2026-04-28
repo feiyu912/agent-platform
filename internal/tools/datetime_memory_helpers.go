@@ -258,10 +258,7 @@ func clampMemoryLimit(limit int, fallback int) int {
 }
 
 func normalizeMemoryCategory(category string) string {
-	if strings.TrimSpace(category) == "" {
-		return "general"
-	}
-	return strings.ToLower(strings.TrimSpace(category))
+	return memory.NormalizeCategory(category)
 }
 
 func normalizeMemorySourceType(sourceType string) string {

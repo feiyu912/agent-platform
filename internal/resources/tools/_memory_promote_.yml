@@ -17,7 +17,7 @@ inputSchema:
       description: Optional new content for the promoted fact.
     category:
       type: string
-      description: Optional new category.
+      description: Optional new category. Prefer preference, constraint, profile, workflow, decision, glossary, unresolved_issue, bugfix, todo, project, or remember.
     scopeType:
       type: string
       description: Optional target scope type. Supports user, agent, team, or global.

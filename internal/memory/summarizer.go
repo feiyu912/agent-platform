@@ -313,7 +313,7 @@ func buildMemorySummarizerSystemPrompt(task string) string {
 		"Use history to merge overlapping memories into a better consolidated summary instead of repeating near-duplicates.",
 		"Skip transient chatter, raw step-by-step reasoning, tool noise, and low-value one-off details.",
 		"Each item must be concise, factual, and safe to inject into future prompts.",
-		"Allowed categories include: general, preference, constraint, decision, bugfix, workflow, profile, project, remember.",
+		"Allowed categories include: general, preference, constraint, profile, workflow, decision, glossary, unresolved_issue, bugfix, todo, project, remember.",
 	}
 	if task == "learn" {
 		base = append(base, "For learn mode, extract only reusable outcomes or durable observations from the run.")
