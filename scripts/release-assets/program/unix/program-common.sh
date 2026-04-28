@@ -51,7 +51,7 @@ program_load_env() {
   . "$ENV_FILE"
   set +a
 
-  LOCAL_CLI_ACP_RELAY_ENABLED="${LOCAL_CLI_ACP_RELAY_ENABLED:-true}"
+  LOCAL_CLI_ACP_RELAY_ENABLED="${LOCAL_CLI_ACP_RELAY_ENABLED:-false}"
   LOCAL_CLI_ACP_RELAY_PORT="${LOCAL_CLI_ACP_RELAY_PORT:-3220}"
   LOCAL_CLI_ACP_HANDSHAKE_TIMEOUT_MS="${LOCAL_CLI_ACP_HANDSHAKE_TIMEOUT_MS:-60000}"
   LOCAL_CLI_ACP_RUN_TIMEOUT_MS="${LOCAL_CLI_ACP_RUN_TIMEOUT_MS:-600000}"
@@ -180,7 +180,7 @@ program_stop_pid_file() {
 }
 
 program_relay_enabled() {
-  case "$(printf '%s' "${LOCAL_CLI_ACP_RELAY_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" in
+  case "$(printf '%s' "${LOCAL_CLI_ACP_RELAY_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')" in
     false|0|no|off) return 1 ;;
     *) return 0 ;;
   esac
