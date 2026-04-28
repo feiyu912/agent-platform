@@ -1551,8 +1551,12 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 			return s.executeOriginalBash(invocation)
 		}
 		reason := strings.TrimSpace(AnyStringNode(selectedForm["reason"]))
+		rejectedForm := AnyMapNode(selectedForm["form"])
 		s.applyHITLDecision(invocation, *match, awaitingID, "reject", reason, false)
-		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
+		if len(rejectedForm) > 0 {
+			invocation.hitlDecision.FormPayload = rejectedForm
+		}
+		s.appendOriginalToolResult(invocation, hitlRejectedFormToolResult(invocation, reason, rejectedForm))
 		return nil
 	}
 
@@ -1860,9 +1864,13 @@ func formatHITLFormSummaryLine(entry hitlNoticeEntry) string {
 	if reason := strings.TrimSpace(entry.reason); reason != "" {
 		line += "（" + reason + "）"
 	}
-	if strings.EqualFold(entry.decision, "approve") && entry.formPayload != nil {
+	if entry.formPayload != nil {
 		if payloadJSON, err := json.Marshal(entry.formPayload); err == nil {
-			line += "\n  提交参数: " + string(payloadJSON)
+			if strings.EqualFold(entry.decision, "approve") {
+				line += "\n  提交参数: " + string(payloadJSON)
+			} else {
+				line += "\n  修改参数: " + string(payloadJSON)
+			}
 		}
 	}
 	return line
@@ -2027,6 +2035,37 @@ func hitlRejectedToolResult(invocation *preparedToolInvocation) ToolExecutionRes
 		Output:     formatToolErrorOutput("user_rejected", "User rejected this command. Do NOT retry with a different command. End the turn now."),
 		Structured: payload,
 		Error:      "user_rejected",
+		ExitCode:   -1,
+	}
+}
+
+func hitlRejectedFormToolResult(invocation *preparedToolInvocation, reason string, form map[string]any) ToolExecutionResult {
+	reason = strings.TrimSpace(reason)
+	if len(form) == 0 && reason == "" {
+		return hitlRejectedToolResult(invocation)
+	}
+	feedback := map[string]any{
+		"status": "rejected_with_feedback",
+		"toolId": invocation.toolID,
+	}
+	if reason != "" {
+		feedback["reason"] = reason
+	}
+	if len(form) > 0 {
+		feedback["revisedForm"] = form
+	}
+	msg := "User rejected this command with feedback. Review the reason and revised form, then try again with corrections."
+	payload := NewErrorPayload(
+		"hitl_rejected_with_feedback",
+		msg,
+		ErrorScopeTool,
+		ErrorCategorySystem,
+		feedback,
+	)
+	return ToolExecutionResult{
+		Output:     formatToolErrorOutput("user_rejected_with_feedback", msg),
+		Structured: payload,
+		Error:      "user_rejected_with_feedback",
 		ExitCode:   -1,
 	}
 }

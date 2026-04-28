@@ -1224,25 +1224,32 @@ func TestBashHITLRejectFlow(t *testing.T) {
 }
 
 func TestBashHITLRejectWithReasonFlow(t *testing.T) {
-	body, executed := runBashHITLFlow(t, bashHITLFlowOptions{action: "reject", reason: "user_cancelled"})
+	rejectedForm := map[string]any{"days": float64(1), "reason": "too_long"}
+	body, executed := runBashHITLFlow(t, bashHITLFlowOptions{action: "reject", reason: "user_cancelled", rejectedForm: rejectedForm})
 	if len(executed) != 0 {
 		t.Fatalf("expected rejected command not to execute, got %#v", executed)
 	}
 	resultPayload := findToolResultPayload(t, body, "tool_bash")
-	if got, ok := resultPayload["result"].(string); !ok || got != "user_rejected: User rejected this command. Do NOT retry with a different command. End the turn now." {
-		t.Fatalf("expected hard-stop rejected tool result, got %s", body)
+	if got, ok := resultPayload["result"].(string); !ok || !strings.Contains(got, "user_rejected_with_feedback: User rejected this command with feedback") {
+		t.Fatalf("expected retryable feedback rejected tool result, got %s", body)
 	}
 	if !strings.Contains(body, `"type":"request.submit"`) ||
 		!strings.Contains(body, `"decision":"reject"`) ||
-		!strings.Contains(body, `"reason":"user_cancelled"`) {
+		!strings.Contains(body, `"reason":"user_cancelled"`) ||
+		!strings.Contains(body, `"form":{"days":1,"reason":"too_long"}`) {
 		t.Fatalf("expected reject request.submit payload in stream, got %s", body)
 	}
 	if !strings.Contains(body, `"type":"awaiting.answer"`) ||
 		!strings.Contains(body, `"status":"answered"`) ||
 		!strings.Contains(body, `"decision":"reject"`) ||
 		!strings.Contains(body, `"id":"form-1"`) ||
-		!strings.Contains(body, `"reason":"user_cancelled"`) {
+		!strings.Contains(body, `"reason":"user_cancelled"`) ||
+		!strings.Contains(body, `"form":{"days":1,"reason":"too_long"}`) {
 		t.Fatalf("expected reject awaiting.answer in stream, got %s", body)
+	}
+	if !strings.Contains(body, `"submittedPayload":{"days":1,"reason":"too_long"}`) ||
+		!strings.Contains(body, `"revisedForm":{"days":1,"reason":"too_long"}`) {
+		t.Fatalf("expected reject feedback payload in stream, got %s", body)
 	}
 }
 
@@ -1462,6 +1469,7 @@ type bashHITLFlowOptions struct {
 	toolName        string
 	action          string
 	reason          string
+	rejectedForm    map[string]any
 	modifiedCommand string
 	command         string
 	rulesContent    string
@@ -1593,11 +1601,21 @@ submit:
 		var submitPayload string
 		if strings.EqualFold(stringValue(awaitAskPayload["mode"]), "form") {
 			if options.action == "reject" {
-				if strings.TrimSpace(options.reason) == "" {
-					submitPayload = `[{"id":"form-1","decision":"reject"}]`
-				} else {
-					submitPayload = `[{"id":"form-1","decision":"reject","reason":"` + options.reason + `"}]`
+				item := map[string]any{
+					"id":       "form-1",
+					"decision": "reject",
 				}
+				if reason := strings.TrimSpace(options.reason); reason != "" {
+					item["reason"] = reason
+				}
+				if len(options.rejectedForm) > 0 {
+					item["form"] = options.rejectedForm
+				}
+				payloadJSON, err := json.Marshal([]map[string]any{item})
+				if err != nil {
+					t.Fatalf("marshal html reject payload: %v", err)
+				}
+				submitPayload = string(payloadJSON)
 			} else {
 				submitCommand := command
 				if options.action == "modify" {
@@ -2006,12 +2024,6 @@ func TestValidateSubmitParamsRejectsInvalidShape(t *testing.T) {
 			mode:       "form",
 			item:       map[string]any{"decision": "approve", "form": "bad"},
 			wantSubstr: "items[0]: form field must be an object",
-		},
-		{
-			name:       "form approve reason rejected",
-			mode:       "form",
-			item:       map[string]any{"decision": "approve", "form": map[string]any{"days": 2}, "reason": "nope"},
-			wantSubstr: "items[0]: form approve does not allow reason",
 		},
 	}
 

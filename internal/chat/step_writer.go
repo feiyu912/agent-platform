@@ -434,8 +434,8 @@ func (w *StepWriter) flushCurrentStep() {
 		line.Usage = w.pendingUsage
 	}
 	if w.pendingPreCallData != nil {
-		line.System = map[string]any{
-			"debugPreCall": cloneStepSystemPayload(w.pendingPreCallData),
+		line.Debug = map[string]any{
+			"preCall": cloneStepSystemPayload(w.pendingPreCallData),
 		}
 	}
 	if w.pendingUsage != nil || w.pendingContextWindowMax > 0 || w.pendingEstimated > 0 {

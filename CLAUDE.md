@@ -277,7 +277,7 @@ runtimeConfig:
   - form 是唯一保留 `viewportType:"html"` + `viewportKey` 的形态
   - `/api/submit.params`：
     - approve：`[{"id":"form-1","decision":"approve","form":{...}}]`（`id` 可省略；`form` 必填，允许修改后回传）
-    - reject：`[{"id":"form-1","decision":"reject","reason?":"..."}]`（`id` 可省略；`reason` 可选；cancel 合并为 reject）
+    - reject：`[{"id":"form-1","decision":"reject","reason?":"...","form?":{...}}]`（`id` 可省略；`reason` 和修改后的 `form` 可选；cancel 合并为 reject）
   - `awaiting.answer`：
     - answered：`{"awaitingId":"...","mode":"form","status":"answered","forms":[{"id":"form-1","command":"...","decision":"approve|reject","form?":{...},"reason?":"..."}]}`
     - error：`{"awaitingId":"...","mode":"form","status":"error","error":{"code":"user_dismissed|timeout|invalid_submit","message":"..."}}`

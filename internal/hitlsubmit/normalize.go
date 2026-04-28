@@ -119,6 +119,9 @@ func NormalizeForm(args map[string]any, params any) (map[string]any, error) {
 			if reason := strings.TrimSpace(contracts.AnyStringNode(item["reason"])); reason != "" {
 				entry["reason"] = reason
 			}
+			if form := contracts.AnyMapNode(item["form"]); len(form) > 0 {
+				entry["form"] = form
+			}
 		default:
 			return nil, fmt.Errorf("items[%d]: unsupported decision %q", index, decision)
 		}

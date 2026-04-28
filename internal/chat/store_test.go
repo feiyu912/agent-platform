@@ -2618,8 +2618,8 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 			"completion_tokens": 50,
 			"total_tokens":      150,
 		},
-		System: map[string]any{
-			"debugPreCall": map[string]any{
+		Debug: map[string]any{
+			"preCall": map[string]any{
 				"provider": map[string]any{
 					"key":      "minimax",
 					"endpoint": "https://api.minimaxi.com/v1/chat/completions",
@@ -2694,6 +2694,88 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 	llmUsage, _ := postCallUsage["llmReturnUsage"].(map[string]any)
 	if toIntValue(llmUsage["promptTokens"]) != 100 || toIntValue(llmUsage["completionTokens"]) != 50 || toIntValue(llmUsage["totalTokens"]) != 150 {
 		t.Fatalf("unexpected debug.postCall usage %#v", detail.Events[5])
+	}
+}
+
+func TestLoadChatReplaysLegacySystemDebugPreCall(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-legacy-debug", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-legacy-debug", QueryLine{
+		ChatID:    "chat-legacy-debug",
+		RunID:     "run-legacy-debug",
+		UpdatedAt: 1000,
+		Query: map[string]any{
+			"chatId":  "chat-legacy-debug",
+			"message": "hello",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+
+	contentTs := int64(1002)
+	if err := store.AppendStepLine("chat-legacy-debug", StepLine{
+		ChatID:    "chat-legacy-debug",
+		RunID:     "run-legacy-debug",
+		UpdatedAt: 1003,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{
+			{
+				Role:      "assistant",
+				Content:   textContent("answer"),
+				ContentID: "content-1",
+				MsgID:     "msg-1",
+				Ts:        &contentTs,
+			},
+		},
+		System: map[string]any{
+			"debugPreCall": map[string]any{
+				"provider": map[string]any{
+					"key": "legacy-provider",
+				},
+				"requestBody": map[string]any{
+					"model": "legacy-model",
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append step line: %v", err)
+	}
+
+	detail, err := store.LoadChat("chat-legacy-debug")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+
+	expectedTypes := []string{
+		"chat.start",
+		"run.start",
+		"request.query",
+		"debug.preCall",
+		"content.snapshot",
+		"run.complete",
+	}
+	if len(detail.Events) != len(expectedTypes) {
+		t.Fatalf("expected %d replayed events, got %d: %#v", len(expectedTypes), len(detail.Events), detail.Events)
+	}
+	for i, eventType := range expectedTypes {
+		if detail.Events[i].Type != eventType {
+			t.Fatalf("expected event %d to be %s, got %#v", i, eventType, detail.Events[i])
+		}
+	}
+	preCallData, _ := detail.Events[3].Value("data").(map[string]any)
+	preCallProvider, _ := preCallData["provider"].(map[string]any)
+	preCallRequestBody, _ := preCallData["requestBody"].(map[string]any)
+	if preCallProvider["key"] != "legacy-provider" || preCallRequestBody["model"] != "legacy-model" {
+		t.Fatalf("unexpected legacy debug.preCall payload %#v", detail.Events[3])
 	}
 }
 

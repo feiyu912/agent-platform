@@ -17,6 +17,7 @@ func TestValidateDeferredSubmitParamsAcceptsDismissAndValidShapes(t *testing.T) 
 		{name: "form approve", mode: "form", params: []map[string]any{{"decision": "approve", "form": map[string]any{"days": 2}}}},
 		{name: "form reject", mode: "form", params: []map[string]any{{"decision": "reject"}}},
 		{name: "form reject with reason", mode: "form", params: []map[string]any{{"decision": "reject", "reason": "不同意"}}},
+		{name: "form reject with form", mode: "form", params: []map[string]any{{"decision": "reject", "reason": "已修改", "form": map[string]any{"days": 1}}}},
 	}
 
 	for _, tt := range tests {
@@ -54,11 +55,6 @@ func TestValidateDeferredSubmitParamsRejectsInvalidShape(t *testing.T) {
 			name:       "form not object",
 			params:     []map[string]any{{"decision": "approve", "form": "bad"}},
 			wantSubstr: "items[0]: form field must be an object",
-		},
-		{
-			name:       "approve reason rejected",
-			params:     []map[string]any{{"decision": "approve", "form": map[string]any{"days": 2}, "reason": "nope"}},
-			wantSubstr: "items[0]: form approve does not allow reason",
 		},
 		{
 			name:       "action field rejected",

@@ -3084,8 +3084,7 @@ func TestBashHITLRejectFlow(t *testing.T) {
 	if !strings.Contains(body, `"type":"awaiting.answer"`) ||
 		!strings.Contains(body, `"status":"answered"`) ||
 		!strings.Contains(body, `"decision":"reject"`) ||
-		!strings.Contains(body, `"id":"form-1"`) ||
-		!strings.Contains(body, `"reason":"user_cancelled"`) {
+		!strings.Contains(body, `"id":"form-1"`) {
 		t.Fatalf("expected reject awaiting.answer in stream, got %s", body)
 	}
 	if strings.Contains(body, "map[") {
@@ -3442,9 +3441,10 @@ submit:
 			if options.action == "reject" {
 				reason := strings.TrimSpace(options.reason)
 				if reason == "" {
-					reason = "user_cancelled"
+					submitPayload = `[{"id":"form-1","decision":"reject"}]`
+				} else {
+					submitPayload = `[{"id":"form-1","decision":"reject","reason":"` + reason + `"}]`
 				}
-				submitPayload = `[{"id":"form-1","decision":"reject","reason":"` + reason + `"}]`
 			} else {
 				submitCommand := command
 				if options.action == "modify" {
@@ -3779,6 +3779,14 @@ func TestValidateSubmitParamsAllowsOrderedItemsWithoutIDs(t *testing.T) {
 				{"decision": "approve", "form": map[string]any{"days": 2}},
 			}),
 		},
+		{
+			name:      "form reject with form",
+			mode:      "form",
+			itemCount: 1,
+			params: mustEncodeSubmitParams(t, []map[string]any{
+				{"decision": "reject", "reason": "已修改", "form": map[string]any{"days": 1}},
+			}),
+		},
 	}
 
 	for _, tt := range tests {
@@ -3898,12 +3906,6 @@ func TestValidateSubmitParamsRejectsInvalidShape(t *testing.T) {
 			mode:       "form",
 			item:       map[string]any{"decision": "approve", "form": "bad"},
 			wantSubstr: "items[0]: form field must be an object",
-		},
-		{
-			name:       "form approve reason rejected",
-			mode:       "form",
-			item:       map[string]any{"decision": "approve", "form": map[string]any{"days": 2}, "reason": "nope"},
-			wantSubstr: "items[0]: form approve does not allow reason",
 		},
 		{
 			name:       "form action field rejected",

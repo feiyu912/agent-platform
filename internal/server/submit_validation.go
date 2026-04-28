@@ -114,9 +114,6 @@ func validateSubmitItem(mode string, index int, item map[string]any) error {
 			if _, hasForm := item["form"]; !hasForm {
 				return fmt.Errorf("%s: approve decision requires form", itemLabel)
 			}
-			if _, hasReason := item["reason"]; hasReason {
-				return fmt.Errorf("%s: form approve does not allow reason", itemLabel)
-			}
 		case "reject":
 		default:
 			return fmt.Errorf("%s: unsupported form decision %q", itemLabel, decision)

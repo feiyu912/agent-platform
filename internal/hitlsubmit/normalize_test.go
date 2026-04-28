@@ -45,7 +45,7 @@ func TestNormalizeFormHandlesRejectAndDismiss(t *testing.T) {
 
 	normalized, err := NormalizeForm(args, []any{
 		map[string]any{"id": "form-1", "decision": "reject"},
-		map[string]any{"id": "form-2", "decision": "reject", "reason": "不同意"},
+		map[string]any{"id": "form-2", "decision": "reject", "reason": "不同意", "form": map[string]any{"days": 1}},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeForm returned error: %v", err)
@@ -55,14 +55,12 @@ func TestNormalizeFormHandlesRejectAndDismiss(t *testing.T) {
 	if len(forms) != 2 {
 		t.Fatalf("expected two normalized forms, got %#v", normalized)
 	}
-	if forms[0]["decision"] != "reject" || forms[1]["decision"] != "reject" || forms[1]["reason"] != "不同意" {
+	revisedForm, _ := forms[1]["form"].(map[string]any)
+	if forms[0]["decision"] != "reject" || forms[1]["decision"] != "reject" || forms[1]["reason"] != "不同意" || revisedForm["days"] != 1 {
 		t.Fatalf("unexpected normalized decisions %#v", forms)
 	}
 	if _, ok := forms[0]["form"]; ok {
 		t.Fatalf("did not expect reject to retain form data, got %#v", forms[0])
-	}
-	if _, ok := forms[1]["form"]; ok {
-		t.Fatalf("did not expect reject to retain form data, got %#v", forms[1])
 	}
 
 	dismissed, err := NormalizeForm(args, []any{})
@@ -107,7 +105,7 @@ func TestNormalizeFormOmitsEmptyReason(t *testing.T) {
 	}
 
 	normalized, err := NormalizeForm(args, []any{
-		map[string]any{"id": "form-1", "decision": "reject", "reason": "  "},
+		map[string]any{"id": "form-1", "decision": "reject", "reason": "  ", "form": map[string]any{}},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeForm returned error: %v", err)
@@ -119,5 +117,8 @@ func TestNormalizeFormOmitsEmptyReason(t *testing.T) {
 	}
 	if _, ok := forms[0]["reason"]; ok {
 		t.Fatalf("did not expect empty reason to be retained, got %#v", forms[0])
+	}
+	if _, ok := forms[0]["form"]; ok {
+		t.Fatalf("did not expect empty form to be retained, got %#v", forms[0])
 	}
 }

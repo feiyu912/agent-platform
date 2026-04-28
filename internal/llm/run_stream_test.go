@@ -1571,7 +1571,7 @@ func TestAwaitHITLSubmitAndExecute_RejectEmitsCancelledAnswer(t *testing.T) {
 	}
 }
 
-func TestAwaitHITLSubmitAndExecute_FormRejectWithReasonEmitsHITLMetadataAndSummary(t *testing.T) {
+func TestAwaitHITLSubmitAndExecute_FormRejectWithFeedbackEmitsRetryableResultAndSummary(t *testing.T) {
 	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
 	runControl := contracts.NewRunControl(context.Background(), "run_1")
 	stream := &llmRunStream{
@@ -1617,7 +1617,7 @@ func TestAwaitHITLSubmitAndExecute_FormRejectWithReasonEmitsHITLMetadataAndSumma
 		RunID:      "run_1",
 		AwaitingID: stream.hitlAwaitingID,
 		Params: encodedSubmitParams(t, []map[string]any{
-			{"id": "form-1", "decision": "reject", "reason": "风险过高"},
+			{"id": "form-1", "decision": "reject", "reason": "风险过高", "form": sampleLeavePayload(1)},
 		}),
 	})
 	if !ack.Accepted {
@@ -1637,8 +1637,8 @@ func TestAwaitHITLSubmitAndExecute_FormRejectWithReasonEmitsHITLMetadataAndSumma
 			continue
 		}
 		foundResult = true
-		if typed.Result.Error != "user_rejected" {
-			t.Fatalf("expected user_rejected result, got %#v", typed.Result)
+		if typed.Result.Error != "user_rejected_with_feedback" {
+			t.Fatalf("expected user_rejected_with_feedback result, got %#v", typed.Result)
 		}
 		if typed.Result.HITL["mode"] != "form" || typed.Result.HITL["decision"] != "reject" {
 			t.Fatalf("expected form reject HITL metadata, got %#v", typed.Result.HITL)
@@ -1646,8 +1646,15 @@ func TestAwaitHITLSubmitAndExecute_FormRejectWithReasonEmitsHITLMetadataAndSumma
 		if typed.Result.HITL["reason"] != "风险过高" {
 			t.Fatalf("expected reject reason for form reject, got %#v", typed.Result.HITL)
 		}
-		if _, ok := typed.Result.HITL["submittedPayload"]; ok {
-			t.Fatalf("did not expect submitted payload for form reject, got %#v", typed.Result.HITL)
+		if !reflect.DeepEqual(typed.Result.HITL["submittedPayload"], sampleLeavePayload(1)) {
+			t.Fatalf("expected submitted payload for form reject, got %#v", typed.Result.HITL)
+		}
+		if typed.Result.Structured["final"] == true {
+			t.Fatalf("did not expect feedback rejection to mark result final, got %#v", typed.Result.Structured)
+		}
+		diagnostics, _ := typed.Result.Structured["diagnostics"].(map[string]any)
+		if diagnostics["reason"] != "风险过高" || !reflect.DeepEqual(diagnostics["revisedForm"], sampleLeavePayload(1)) {
+			t.Fatalf("expected feedback diagnostics, got %#v", typed.Result.Structured)
 		}
 	}
 	if !foundResult {
@@ -1657,8 +1664,8 @@ func TestAwaitHITLSubmitAndExecute_FormRejectWithReasonEmitsHITLMetadataAndSumma
 		t.Fatalf("expected form reject tool message and HITL summary, got %#v", stream.messages)
 	}
 	noticeText, _ := stream.messages[len(stream.messages)-1].Content.(string)
-	if !strings.Contains(noticeText, `[HITL] `) || !strings.Contains(noticeText, ` → reject`) || !strings.Contains(noticeText, "风险过高") || strings.Contains(noticeText, "用户取消") || strings.Contains(noticeText, "提交参数:") {
-		t.Fatalf("expected form reject HITL summary without submitted payload, got %#v", stream.messages[len(stream.messages)-1])
+	if !strings.Contains(noticeText, `[HITL] `) || !strings.Contains(noticeText, ` → reject`) || !strings.Contains(noticeText, "风险过高") || !strings.Contains(noticeText, "修改参数:") || strings.Contains(noticeText, "用户取消") || strings.Contains(noticeText, "提交参数:") {
+		t.Fatalf("expected form reject HITL summary with revised payload, got %#v", stream.messages[len(stream.messages)-1])
 	}
 }
 
@@ -2947,6 +2954,31 @@ func TestHITLRejectedToolResultMarksResultFinal(t *testing.T) {
 	}
 	if result.Structured["message"] != "User rejected this command. Do NOT retry with a different command. End the turn now." {
 		t.Fatalf("unexpected reject message %#v", result.Structured)
+	}
+}
+
+func TestHITLRejectedFormToolResultUsesRetryableFeedbackWhenPresent(t *testing.T) {
+	invocation := &preparedToolInvocation{
+		toolID:   "tool_1",
+		toolName: "bash",
+	}
+
+	pureReject := hitlRejectedFormToolResult(invocation, "", nil)
+	if pureReject.Error != "user_rejected" || pureReject.Structured["final"] != true {
+		t.Fatalf("expected pure form reject to use final rejection, got %#v", pureReject)
+	}
+
+	feedback := hitlRejectedFormToolResult(invocation, "风险过高", map[string]any{"days": 1})
+	if feedback.Error != "user_rejected_with_feedback" || feedback.ExitCode != -1 {
+		t.Fatalf("unexpected feedback rejection result %#v", feedback)
+	}
+	if feedback.Structured["code"] != "hitl_rejected_with_feedback" || feedback.Structured["final"] == true {
+		t.Fatalf("expected non-final feedback payload, got %#v", feedback.Structured)
+	}
+	diagnostics, _ := feedback.Structured["diagnostics"].(map[string]any)
+	revisedForm, _ := diagnostics["revisedForm"].(map[string]any)
+	if diagnostics["reason"] != "风险过高" || revisedForm["days"] != 1 {
+		t.Fatalf("unexpected feedback diagnostics %#v", feedback.Structured)
 	}
 }
 
