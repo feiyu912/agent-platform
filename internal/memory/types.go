@@ -280,13 +280,69 @@ func classifyObservationCategory(text string) string {
 	needle := strings.ToLower(strings.TrimSpace(text))
 	switch {
 	case strings.Contains(needle, "bug"):
-		return "bugfix"
+		return CategoryBugfix
 	case strings.Contains(needle, "fix"):
-		return "bugfix"
+		return CategoryBugfix
+	case strings.Contains(needle, "偏好"):
+		return CategoryPreference
+	case strings.Contains(needle, "prefer"):
+		return CategoryPreference
+	case strings.Contains(needle, "习惯"):
+		return CategoryPreference
+	case strings.Contains(needle, "待确认"):
+		return CategoryUnresolvedIssue
+	case strings.Contains(needle, "风险"):
+		return CategoryUnresolvedIssue
+	case strings.Contains(needle, "unresolved"):
+		return CategoryUnresolvedIssue
+	case strings.Contains(needle, "open question"):
+		return CategoryUnresolvedIssue
+	case strings.Contains(needle, "blocked"):
+		return CategoryUnresolvedIssue
+	case strings.Contains(needle, "必须"):
+		return CategoryConstraint
+	case strings.Contains(needle, "规则"):
+		return CategoryConstraint
+	case strings.Contains(needle, "权限"):
+		return CategoryConstraint
+	case strings.Contains(needle, "合规"):
+		return CategoryConstraint
+	case strings.Contains(needle, "constraint"):
+		return CategoryConstraint
+	case strings.Contains(needle, "policy"):
+		return CategoryConstraint
+	case strings.Contains(needle, "已确认"):
+		return CategoryDecision
+	case strings.Contains(needle, "决定"):
+		return CategoryDecision
+	case strings.Contains(needle, "决策"):
+		return CategoryDecision
+	case strings.Contains(needle, "选型"):
+		return CategoryDecision
+	case strings.Contains(needle, "decision"):
+		return CategoryDecision
+	case strings.Contains(needle, "流程"):
+		return CategoryWorkflow
+	case strings.Contains(needle, "步骤"):
+		return CategoryWorkflow
+	case strings.Contains(needle, "workflow"):
+		return CategoryWorkflow
+	case strings.Contains(needle, "runbook"):
+		return CategoryWorkflow
+	case strings.Contains(needle, "术语"):
+		return CategoryGlossary
+	case strings.Contains(needle, "缩写"):
+		return CategoryGlossary
+	case strings.Contains(needle, "glossary"):
+		return CategoryGlossary
+	case strings.Contains(needle, "terminology"):
+		return CategoryGlossary
 	case strings.Contains(needle, "todo"):
-		return "todo"
+		return CategoryTodo
+	case strings.Contains(needle, "待办"):
+		return CategoryTodo
 	default:
-		return "general"
+		return CategoryGeneral
 	}
 }
 
