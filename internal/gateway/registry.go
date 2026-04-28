@@ -12,6 +12,8 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"log"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -213,6 +215,82 @@ func (r *Registry) StopAll() {
 	for _, e := range entries {
 		_ = e.client.Stop()
 	}
+}
+
+// Reconcile 把当前注册表对齐到 desired 列表：
+//   - desired 里有、注册表里没 → Register
+//   - 注册表里有、desired 里没 → Unregister 并关闭连接
+//   - 双方都有但内容变化（任意字段不同）→ Unregister 旧的 + Register 新的
+func (r *Registry) Reconcile(desired []config.GatewayEntry) error {
+	r.mu.Lock()
+	currentIDs := make(map[string]*Entry, len(r.entries))
+	for id, e := range r.entries {
+		currentIDs[id] = e
+	}
+	r.mu.Unlock()
+
+	desiredIDs := make(map[string]config.GatewayEntry, len(desired))
+	for _, entry := range desired {
+		desiredIDs[entry.ID] = entry
+	}
+
+	// Unregister entries that are no longer desired
+	for id := range currentIDs {
+		if _, stillDesired := desiredIDs[id]; !stillDesired {
+			if err := r.Unregister(id); err != nil {
+				log.Printf("[gateway] reconcile: unregister %s failed: %v", id, err)
+			} else {
+				log.Printf("[gateway] reconcile: unregistered %s", id)
+			}
+		}
+	}
+
+	// Register or update entries
+	for _, entry := range desired {
+		id := entry.ID
+		current, exists := currentIDs[id]
+		if !exists {
+			// New entry, register it
+			if err := r.Register(entry); err != nil {
+				log.Printf("[gateway] reconcile: register %s failed: %v", id, err)
+			} else {
+				log.Printf("[gateway] reconcile: registered %s", id)
+			}
+			continue
+		}
+
+		// Entry exists, check if any relevant field changed
+		// Only compare fields stored in Entry (Channel, URL, BaseURL, Token).
+		// HandshakeTimeoutMs/ReconnectMinMs/ReconnectMaxMs are used at registration only.
+		expectedEntry := config.GatewayEntry{
+			ID:      id,
+			Channel: strings.TrimSpace(entry.Channel),
+			URL:     strings.TrimSpace(entry.URL),
+			BaseURL: strings.TrimSpace(entry.BaseURL),
+		}
+		actualEntry := config.GatewayEntry{
+			ID:      current.ID,
+			Channel: current.Channel,
+			URL:     current.URL,
+			BaseURL: current.BaseURL,
+		}
+		if !reflect.DeepEqual(expectedEntry, actualEntry) ||
+			strings.TrimSpace(entry.JwtToken) != current.Token {
+			// Changed, unregister old and register new
+			if err := r.Unregister(id); err != nil {
+				log.Printf("[gateway] reconcile: unregister %s (update) failed: %v", id, err)
+				continue
+			}
+			log.Printf("[gateway] reconcile: %s changed, re-registering", id)
+			if err := r.Register(entry); err != nil {
+				log.Printf("[gateway] reconcile: re-register %s failed: %v", id, err)
+			} else {
+				log.Printf("[gateway] reconcile: re-registered %s", id)
+			}
+		}
+	}
+
+	return nil
 }
 
 var (

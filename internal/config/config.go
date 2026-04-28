@@ -664,6 +664,82 @@ func (c *Config) applyChannelsFile(path string) error {
 	return nil
 }
 
+// LoadChannelsOnly reads channels.yml from path and returns the list of GatewayEntry
+// that should be produced, using cfg.GatewayWS for default values when ChannelConfig fields are missing.
+// Returns nil, nil if the file does not exist or is empty.
+func LoadChannelsOnly(cfg Config, path string) ([]GatewayEntry, error) {
+	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return nil, err
+	}
+	values, _ := tree.(map[string]any)
+	if len(values) == 0 {
+		return nil, nil
+	}
+	rawChannels, ok := values["channels"]
+	if !ok {
+		return nil, nil
+	}
+	channelMap, ok := rawChannels.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("channels config: channels must be a map")
+	}
+
+	entries := make([]GatewayEntry, 0, len(channelMap))
+	for rawID, rawValue := range channelMap {
+		channelID := strings.TrimSpace(rawID)
+		if channelID == "" {
+			return nil, fmt.Errorf("channels config: channel id must not be empty")
+		}
+		entry, ok := rawValue.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("channels config: channel %q must be an object", channelID)
+		}
+		channelCfg, err := parseChannelConfig(channelID, entry)
+		if err != nil {
+			return nil, err
+		}
+		gatewayEntry := channelConfigToGatewayEntry(cfg, channelCfg)
+		entries = append(entries, gatewayEntry)
+	}
+	return entries, nil
+}
+
+// channelConfigToGatewayEntry converts a ChannelConfig to a GatewayEntry,
+// filling in defaults from cfg.GatewayWS when channel fields are missing.
+func channelConfigToGatewayEntry(cfg Config, channelCfg ChannelConfig) GatewayEntry {
+	entry := GatewayEntry{
+		ID:                 channelCfg.ID,
+		Channel:            channelCfg.ID,
+		URL:                strings.TrimSpace(channelCfg.Gateway.URL),
+		JwtToken:           strings.TrimSpace(channelCfg.Gateway.JwtToken),
+		BaseURL:            strings.TrimSpace(channelCfg.Gateway.BaseURL),
+		HandshakeTimeoutMs: channelCfg.Gateway.HandshakeTimeoutMs,
+		ReconnectMinMs:     channelCfg.Gateway.ReconnectMinMs,
+		ReconnectMaxMs:     channelCfg.Gateway.ReconnectMaxMs,
+	}
+	// Fill defaults from GatewayWS if not set in channel
+	if entry.HandshakeTimeoutMs == 0 {
+		entry.HandshakeTimeoutMs = cfg.GatewayWS.HandshakeTimeoutMs
+	}
+	if entry.ReconnectMinMs == 0 {
+		entry.ReconnectMinMs = cfg.GatewayWS.ReconnectMinMs
+	}
+	if entry.ReconnectMaxMs == 0 {
+		entry.ReconnectMaxMs = cfg.GatewayWS.ReconnectMaxMs
+	}
+	if entry.BaseURL == "" && entry.URL != "" {
+		if parsed, err := neturl.Parse(entry.URL); err == nil && parsed.Host != "" {
+			scheme := "http"
+			if parsed.Scheme == "wss" {
+				scheme = "https"
+			}
+			entry.BaseURL = scheme + "://" + parsed.Host
+		}
+	}
+	return entry
+}
+
 func parseChannelConfig(channelID string, values map[string]any) (ChannelConfig, error) {
 	cfg := ChannelConfig{
 		ID:   channelID,
