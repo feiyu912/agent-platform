@@ -195,6 +195,38 @@ type MemoryRecordsResponse struct {
 	Results    []StoredMemoryResponse `json:"results"`
 }
 
+type MemoryHistoryEvent struct {
+	ID         string         `json:"id"`
+	Timestamp  int64          `json:"ts"`
+	AgentKey   string         `json:"agentKey,omitempty"`
+	ChatID     string         `json:"chatId,omitempty"`
+	RunID      string         `json:"runId,omitempty"`
+	RequestID  string         `json:"requestId,omitempty"`
+	UserKey    string         `json:"userKey,omitempty"`
+	MemoryID   string         `json:"memoryId,omitempty"`
+	MemoryKind string         `json:"memoryKind,omitempty"`
+	ScopeType  string         `json:"scopeType,omitempty"`
+	ScopeKey   string         `json:"scopeKey,omitempty"`
+	Operation  string         `json:"operation"`
+	Source     string         `json:"source,omitempty"`
+	Status     string         `json:"status"`
+	Before     map[string]any `json:"before,omitempty"`
+	After      map[string]any `json:"after,omitempty"`
+	Delta      map[string]any `json:"delta,omitempty"`
+	Meta       map[string]any `json:"meta,omitempty"`
+}
+
+type MemoryHistoryResponse struct {
+	Count      int                  `json:"count"`
+	NextCursor string               `json:"nextCursor,omitempty"`
+	Events     []MemoryHistoryEvent `json:"events"`
+}
+
+type MemoryRecordTimelineResponse struct {
+	ID     string               `json:"id"`
+	Events []MemoryHistoryEvent `json:"events"`
+}
+
 type MemoryRecordEmbedding struct {
 	HasEmbedding bool   `json:"hasEmbedding"`
 	Model        string `json:"model,omitempty"`

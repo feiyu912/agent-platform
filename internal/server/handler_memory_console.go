@@ -299,14 +299,9 @@ func (s *Server) handleMemoryRecords(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, api.Failure(http.StatusServiceUnavailable, "memory system is disabled"))
 		return
 	}
-	limit := 20
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "limit must be an integer"))
-			return
-		}
-		limit = parsed
+	limit, ok := parseMemoryLimit(w, r, 20)
+	if !ok {
+		return
 	}
 	result, err := memory.ListConsoleRecords(s.deps.Memory, memory.RecordFilter{
 		AgentKey:  strings.TrimSpace(r.URL.Query().Get("agentKey")),
@@ -327,6 +322,37 @@ func (s *Server) handleMemoryRecords(w http.ResponseWriter, r *http.Request) {
 		Count:      result.Count,
 		NextCursor: result.NextCursor,
 		Results:    result.Results,
+	}))
+}
+
+func (s *Server) handleMemoryHistory(w http.ResponseWriter, r *http.Request) {
+	provider, ok := s.deps.Memory.(memory.HistoryProvider)
+	if !s.memorySystemEnabled() || s.deps.Memory == nil || !ok {
+		writeJSON(w, http.StatusServiceUnavailable, api.Failure(http.StatusServiceUnavailable, "memory history is not configured"))
+		return
+	}
+	limit, ok := parseMemoryLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	result, err := provider.History(memory.HistoryFilter{
+		AgentKey:  strings.TrimSpace(r.URL.Query().Get("agentKey")),
+		ChatID:    strings.TrimSpace(r.URL.Query().Get("chatId")),
+		RunID:     strings.TrimSpace(r.URL.Query().Get("runId")),
+		MemoryID:  firstQueryValue(r, "memoryId", "id"),
+		Operation: strings.TrimSpace(r.URL.Query().Get("operation")),
+		Limit:     limit,
+		Cursor:    strings.TrimSpace(r.URL.Query().Get("cursor")),
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
+		return
+	}
+	events := toMemoryHistoryEvents(result.Events)
+	writeJSON(w, http.StatusOK, api.Success(api.MemoryHistoryResponse{
+		Count:      len(events),
+		NextCursor: result.NextCursor,
+		Events:     events,
 	}))
 }
 
@@ -359,6 +385,37 @@ func (s *Server) handleMemoryRecord(w http.ResponseWriter, r *http.Request) {
 		Record:      detail.Record,
 		RawFields:   detail.RawFields,
 		Embedding:   embedding,
+	}))
+}
+
+func (s *Server) handleMemoryRecordTimeline(w http.ResponseWriter, r *http.Request) {
+	provider, ok := s.deps.Memory.(memory.HistoryProvider)
+	if !s.memorySystemEnabled() || s.deps.Memory == nil || !ok {
+		writeJSON(w, http.StatusServiceUnavailable, api.Failure(http.StatusServiceUnavailable, "memory history is not configured"))
+		return
+	}
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "id is required"))
+		return
+	}
+	limit, ok := parseMemoryLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	result, err := provider.History(memory.HistoryFilter{
+		AgentKey: strings.TrimSpace(r.URL.Query().Get("agentKey")),
+		MemoryID: id,
+		Limit:    limit,
+		Cursor:   strings.TrimSpace(r.URL.Query().Get("cursor")),
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
+		return
+	}
+	writeJSON(w, http.StatusOK, api.Success(api.MemoryRecordTimelineResponse{
+		ID:     id,
+		Events: toMemoryHistoryEvents(result.Events),
 	}))
 }
 
@@ -446,6 +503,49 @@ func memoryContextPreviewDecisions(bundle memory.ContextBundle) []api.MemoryCont
 		})
 	}
 	return out
+}
+
+func toMemoryHistoryEvents(events []memory.HistoryEvent) []api.MemoryHistoryEvent {
+	if len(events) == 0 {
+		return []api.MemoryHistoryEvent{}
+	}
+	out := make([]api.MemoryHistoryEvent, 0, len(events))
+	for _, event := range events {
+		out = append(out, api.MemoryHistoryEvent{
+			ID:         event.ID,
+			Timestamp:  event.Timestamp,
+			AgentKey:   event.AgentKey,
+			ChatID:     event.ChatID,
+			RunID:      event.RunID,
+			RequestID:  event.RequestID,
+			UserKey:    event.UserKey,
+			MemoryID:   event.MemoryID,
+			MemoryKind: event.MemoryKind,
+			ScopeType:  event.ScopeType,
+			ScopeKey:   event.ScopeKey,
+			Operation:  event.Operation,
+			Source:     event.Source,
+			Status:     event.Status,
+			Before:     event.Before,
+			After:      event.After,
+			Delta:      event.Delta,
+			Meta:       event.Meta,
+		})
+	}
+	return out
+}
+
+func parseMemoryLimit(w http.ResponseWriter, r *http.Request, fallback int) (int, bool) {
+	limit := fallback
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "limit must be an integer"))
+			return 0, false
+		}
+		limit = parsed
+	}
+	return limit, true
 }
 
 func scopeUserKey(r *http.Request) string {

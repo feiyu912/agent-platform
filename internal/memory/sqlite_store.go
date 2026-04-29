@@ -108,6 +108,7 @@ func (s *SQLiteStore) ApplyFeedback(signals []FeedbackSignal) error {
 
 	now := time.Now().UnixMilli()
 	for _, sig := range signals {
+		before, _ := s.readProjectionByIDLocked(strings.TrimSpace(sig.ItemID))
 		_, err := s.db.Exec(
 			`UPDATE MEMORIES SET
 				CONFIDENCE_ = MAX(0.1, MIN(1.0, CONFIDENCE_ + ?)),
@@ -128,9 +129,84 @@ func (s *SQLiteStore) ApplyFeedback(signals []FeedbackSignal) error {
 			`UPDATE MEMORY_OBSERVATIONS SET CONFIDENCE_ = MAX(0.1, MIN(1.0, CONFIDENCE_ + ?)), UPDATED_AT_ = ? WHERE ID_ = ?`,
 			sig.ConfidenceDelta, now, sig.ItemID,
 		)
+		after, _ := s.readProjectionByIDLocked(strings.TrimSpace(sig.ItemID))
+		if after != nil {
+			operation := "feedback.decay"
+			if sig.Referenced {
+				operation = "feedback.boost"
+			}
+			event := historyEventFromMemory(*after, operation, "feedback")
+			if before != nil {
+				event.Before = historyAfterFromStored(*before)
+			}
+			event.After = historyAfterFromStored(*after)
+			event.Delta = map[string]any{
+				"confidenceDelta": sig.ConfidenceDelta,
+				"referenced":      sig.Referenced,
+			}
+			_ = s.recordHistoryLocked(event)
+		}
 	}
 	logMemoryOperation("apply_feedback", map[string]any{"signalCount": len(signals)})
 	return nil
+}
+
+func (s *SQLiteStore) History(filter HistoryFilter) (HistoryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	limit := normalizeHistoryLimit(filter.Limit)
+	clauses := []string{"1=1"}
+	args := []any{}
+	if value := strings.TrimSpace(filter.AgentKey); value != "" {
+		clauses = append(clauses, "AGENT_KEY_ = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(filter.ChatID); value != "" {
+		clauses = append(clauses, "CHAT_ID_ = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(filter.RunID); value != "" {
+		clauses = append(clauses, "RUN_ID_ = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(filter.MemoryID); value != "" {
+		clauses = append(clauses, "MEMORY_ID_ = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(filter.Operation); value != "" {
+		clauses = append(clauses, "OPERATION_ = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(filter.Cursor); value != "" {
+		clauses = append(clauses, "TS_ < ?")
+		args = append(args, value)
+	}
+	args = append(args, limit+1)
+	rows, err := s.db.Query(
+		`SELECT ID_, TS_, AGENT_KEY_, CHAT_ID_, RUN_ID_, REQUEST_ID_, USER_KEY_,
+			MEMORY_ID_, MEMORY_KIND_, SCOPE_TYPE_, SCOPE_KEY_, OPERATION_, SOURCE_, STATUS_,
+			BEFORE_JSON_, AFTER_JSON_, DELTA_JSON_, META_JSON_
+		FROM MEMORY_HISTORY
+		WHERE `+strings.Join(clauses, " AND ")+`
+		ORDER BY TS_ DESC, ID_ DESC
+		LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return HistoryResult{}, err
+	}
+	defer rows.Close()
+	events, err := scanHistoryRows(rows)
+	if err != nil {
+		return HistoryResult{}, err
+	}
+	result := HistoryResult{Events: events}
+	if len(result.Events) > limit {
+		result.NextCursor = fmt.Sprintf("%d", result.Events[limit-1].Timestamp)
+		result.Events = result.Events[:limit]
+	}
+	return result, nil
 }
 
 func (s *SQLiteStore) initDB() error {
@@ -217,6 +293,31 @@ func (s *SQLiteStore) initDB() error {
 			UPDATED_AT_ INTEGER NOT NULL,
 			UNIQUE(CHAT_ID_, AGENT_KEY_)
 		)`,
+		`CREATE TABLE IF NOT EXISTS MEMORY_HISTORY (
+			ID_ TEXT PRIMARY KEY,
+			TS_ INTEGER NOT NULL,
+			AGENT_KEY_ TEXT NOT NULL DEFAULT '',
+			CHAT_ID_ TEXT NOT NULL DEFAULT '',
+			RUN_ID_ TEXT NOT NULL DEFAULT '',
+			REQUEST_ID_ TEXT NOT NULL DEFAULT '',
+			USER_KEY_ TEXT NOT NULL DEFAULT '',
+			MEMORY_ID_ TEXT NOT NULL DEFAULT '',
+			MEMORY_KIND_ TEXT NOT NULL DEFAULT '',
+			SCOPE_TYPE_ TEXT NOT NULL DEFAULT '',
+			SCOPE_KEY_ TEXT NOT NULL DEFAULT '',
+			OPERATION_ TEXT NOT NULL,
+			SOURCE_ TEXT NOT NULL DEFAULT '',
+			STATUS_ TEXT NOT NULL DEFAULT 'ok',
+			BEFORE_JSON_ TEXT NOT NULL DEFAULT '{}',
+			AFTER_JSON_ TEXT NOT NULL DEFAULT '{}',
+			DELTA_JSON_ TEXT NOT NULL DEFAULT '{}',
+			META_JSON_ TEXT NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE INDEX IF NOT EXISTS IDX_MEMORY_HISTORY_MEMORY_ID_TS ON MEMORY_HISTORY(MEMORY_ID_, TS_)`,
+		`CREATE INDEX IF NOT EXISTS IDX_MEMORY_HISTORY_AGENT_TS ON MEMORY_HISTORY(AGENT_KEY_, TS_)`,
+		`CREATE INDEX IF NOT EXISTS IDX_MEMORY_HISTORY_CHAT_TS ON MEMORY_HISTORY(CHAT_ID_, TS_)`,
+		`CREATE INDEX IF NOT EXISTS IDX_MEMORY_HISTORY_OPERATION_TS ON MEMORY_HISTORY(OPERATION_, TS_)`,
+		`CREATE INDEX IF NOT EXISTS IDX_MEMORY_HISTORY_RUN_TS ON MEMORY_HISTORY(RUN_ID_, TS_)`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS MEMORIES_FTS USING fts5(
 			SUMMARY_, SUBJECT_KEY_, CATEGORY_, TAGS_,
 			content=MEMORIES, content_rowid=rowid
@@ -982,6 +1083,7 @@ func (s *SQLiteStore) BuildContextBundle(request ContextRequest) (ContextBundle,
 		"hybrid":           len(hp.queryEmbedding) > 0,
 		"maxChars":         request.MaxChars,
 	})
+	_ = s.recordRecallHistoryLocked(request, bundle, len(items), len(hp.queryEmbedding) > 0)
 	return bundle, nil
 }
 
@@ -1077,6 +1179,90 @@ func markStableSnapshotPinned(bundle *ContextBundle, stableIDs []string) {
 			}
 		}
 	}
+}
+
+func (s *SQLiteStore) recordRecallHistoryLocked(request ContextRequest, bundle ContextBundle, totalCandidates int, hybrid bool) error {
+	source := "query"
+	if request.PreviewOnly {
+		source = "preview"
+	}
+	contextEvent := HistoryEvent{
+		AgentKey:  strings.TrimSpace(request.AgentKey),
+		ChatID:    strings.TrimSpace(request.ChatID),
+		UserKey:   strings.TrimSpace(request.UserKey),
+		Operation: "recall.context_built",
+		Source:    source,
+		Status:    HistoryStatusOK,
+		Meta: map[string]any{
+			"query":            strings.TrimSpace(request.Query),
+			"teamId":           strings.TrimSpace(request.TeamID),
+			"totalCandidates":  totalCandidates,
+			"candidateCounts":  cloneHistoryIntMap(bundle.CandidateCounts),
+			"selectedCounts":   cloneHistoryIntMap(bundle.SelectedCounts),
+			"disclosedLayers":  append([]string(nil), bundle.DisclosedLayers...),
+			"stopReason":       strings.TrimSpace(bundle.StopReason),
+			"snapshotId":       strings.TrimSpace(bundle.SnapshotID),
+			"stableChars":      len(strings.TrimSpace(bundle.StablePrompt)),
+			"sessionChars":     len(strings.TrimSpace(bundle.SessionPrompt)),
+			"observationChars": len(strings.TrimSpace(bundle.ObservationPrompt)),
+			"hybrid":           hybrid,
+			"maxChars":         request.MaxChars,
+			"topFacts":         request.TopFacts,
+			"topObs":           request.TopObs,
+		},
+	}
+	if err := s.recordHistoryLocked(contextEvent); err != nil {
+		return err
+	}
+	reasons := recallReasonsByItem(bundle.Decisions)
+	recordLayer := func(layer string, items []api.StoredMemoryResponse) error {
+		for idx, item := range items {
+			event := historyEventFromMemory(item, "recall.selected", source)
+			event.ChatID = strings.TrimSpace(request.ChatID)
+			event.UserKey = strings.TrimSpace(request.UserKey)
+			event.Meta = map[string]any{
+				"layer":  layer,
+				"rank":   idx + 1,
+				"reason": strings.TrimSpace(reasons[item.ID]),
+				"query":  strings.TrimSpace(request.Query),
+			}
+			if err := s.recordHistoryLocked(event); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := recordLayer(string(LayerStable), bundle.StableFacts); err != nil {
+		return err
+	}
+	if err := recordLayer(string(LayerSession), bundle.SessionSummaries); err != nil {
+		return err
+	}
+	return recordLayer(string(LayerObservation), bundle.RelevantObservations)
+}
+
+func recallReasonsByItem(decisions []DisclosureDecision) map[string]string {
+	out := map[string]string{}
+	for _, decision := range decisions {
+		for _, id := range decision.ItemIDs {
+			if strings.TrimSpace(id) == "" {
+				continue
+			}
+			out[strings.TrimSpace(id)] = strings.TrimSpace(decision.Reason)
+		}
+	}
+	return out
+}
+
+func cloneHistoryIntMap(input map[string]int) map[string]int {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
 }
 
 func decodeStringList(raw string) []string {
@@ -1276,6 +1462,7 @@ func (s *SQLiteStore) updateLocked(agentKey string, input MutationInput, embedde
 	if strings.TrimSpace(agentKey) != "" && strings.TrimSpace(current.AgentKey) != strings.TrimSpace(agentKey) {
 		return nil, nil
 	}
+	before := *current
 	if input.Title != nil {
 		current.Title = strings.TrimSpace(*input.Title)
 	}
@@ -1308,6 +1495,10 @@ func (s *SQLiteStore) updateLocked(agentKey string, input MutationInput, embedde
 		return nil, err
 	}
 	record := toolRecordFromStored(*current)
+	event := historyEventFromMemory(*current, "update", "mutation")
+	event.Before = historyAfterFromStored(before)
+	event.After = historyAfterFromStored(*current)
+	_ = s.recordHistoryLocked(event)
 	logMemoryOperation("update", map[string]any{"agentKey": agentKey, "id": input.ID, "status": record.Status})
 	return &record, nil
 }
@@ -1441,12 +1632,22 @@ func (s *SQLiteStore) promoteLocked(agentKey string, input PromoteInput, embedde
 	if err := s.insertMemoryLinkLocked(item.ID, source.ID, "derived_from", 1.0); err != nil {
 		return nil, err
 	}
+	createEvent := historyEventFromMemory(item, "promote.create_fact", "promote")
+	createEvent.After = historyAfterFromStored(item)
+	createEvent.Meta = map[string]any{"sourceId": source.ID}
+	_ = s.recordHistoryLocked(createEvent)
 	if input.ArchiveSource {
+		beforeSource := *source
 		source.Status = StatusArchived
 		source.UpdatedAt = time.Now().UnixMilli()
 		if err := s.writeLocked(*source, embedder); err != nil {
 			return nil, err
 		}
+		archiveEvent := historyEventFromMemory(*source, "promote.archive_source", "promote")
+		archiveEvent.Before = historyAfterFromStored(beforeSource)
+		archiveEvent.After = historyAfterFromStored(*source)
+		archiveEvent.Meta = map[string]any{"promotedId": item.ID}
+		_ = s.recordHistoryLocked(archiveEvent)
 	}
 	record := toolRecordFromStored(item)
 	logMemoryOperation("promote", map[string]any{"agentKey": agentKey, "sourceId": input.SourceID, "id": item.ID, "archiveSource": input.ArchiveSource})
@@ -1475,6 +1676,10 @@ func (s *SQLiteStore) writeLocked(item api.StoredMemoryResponse, embedder *Embed
 	}
 	if strings.TrimSpace(item.ScopeKey) == "" {
 		item.ScopeKey = normalizeScopeKey(item.ScopeType, "", item.AgentKey, "", item.ChatID, "")
+	}
+	before, err := s.readProjectionByIDLocked(strings.TrimSpace(item.ID))
+	if err != nil {
+		return err
 	}
 	if existing, err := s.findExactDuplicateLocked(item); err != nil {
 		return err
@@ -1520,6 +1725,16 @@ func (s *SQLiteStore) writeLocked(item api.StoredMemoryResponse, embedder *Embed
 		}
 	}
 	_ = s.refreshSnapshotsLocked(item.AgentKey)
+	operation := "write.create"
+	if before != nil {
+		operation = "write.update"
+	}
+	event := historyEventFromMemory(item, operation, item.SourceType)
+	if before != nil {
+		event.Before = historyAfterFromStored(*before)
+	}
+	event.After = historyAfterFromStored(item)
+	_ = s.recordHistoryLocked(event)
 	return nil
 }
 
@@ -1568,6 +1783,7 @@ func (s *SQLiteStore) findExactDuplicateLocked(item api.StoredMemoryResponse) (*
 }
 
 func (s *SQLiteStore) bumpDuplicateMemoryLocked(existing api.StoredMemoryResponse, incoming api.StoredMemoryResponse, now int64) error {
+	before := existing
 	existing.Importance = max(existing.Importance, incoming.Importance)
 	existing.Confidence = maxFloat(existing.Confidence, incoming.Confidence)
 	existing.Tags = normalizeTags(append(existing.Tags, incoming.Tags...))
@@ -1587,6 +1803,11 @@ func (s *SQLiteStore) bumpDuplicateMemoryLocked(existing api.StoredMemoryRespons
 		}
 	}
 	_ = s.refreshSnapshotsLocked(existing.AgentKey)
+	event := historyEventFromMemory(existing, "write.duplicate_bump", incoming.SourceType)
+	event.Before = historyAfterFromStored(before)
+	event.After = historyAfterFromStored(existing)
+	event.Delta = map[string]any{"incomingId": incoming.ID}
+	_ = s.recordHistoryLocked(event)
 	logMemoryOperation("write_duplicate", map[string]any{
 		"id":          existing.ID,
 		"incomingId":  incoming.ID,
@@ -1646,6 +1867,7 @@ func (s *SQLiteStore) findNearDuplicateFactLocked(item api.StoredMemoryResponse)
 }
 
 func (s *SQLiteStore) mergeNearDuplicateFactLocked(existing api.StoredMemoryResponse, incoming api.StoredMemoryResponse, now int64) error {
+	before := existing
 	merged := mergeNearDuplicateFactMemory(existing, incoming, now)
 	if err := s.upsertProjectionLocked(merged); err != nil {
 		return err
@@ -1654,6 +1876,11 @@ func (s *SQLiteStore) mergeNearDuplicateFactLocked(existing api.StoredMemoryResp
 		return err
 	}
 	_ = s.refreshSnapshotsLocked(existing.AgentKey)
+	event := historyEventFromMemory(merged, "write.near_duplicate_merge", incoming.SourceType)
+	event.Before = historyAfterFromStored(before)
+	event.After = historyAfterFromStored(merged)
+	event.Delta = map[string]any{"incomingId": incoming.ID}
+	_ = s.recordHistoryLocked(event)
 	logMemoryOperation("write_near_duplicate_fact", map[string]any{
 		"id":         existing.ID,
 		"incomingId": incoming.ID,
@@ -1768,6 +1995,7 @@ func (s *SQLiteStore) supersedeMatchingFactsLocked(item api.StoredMemoryResponse
 	}
 	for _, priorID := range priorIDs {
 		now := time.Now().UnixMilli()
+		before, _ := s.readProjectionByIDLocked(priorID)
 		if _, err := s.db.Exec(
 			`UPDATE MEMORY_FACTS SET STATUS_ = ?, UPDATED_AT_ = ? WHERE ID_ = ?`,
 			StatusSuperseded, now, priorID,
@@ -1782,6 +2010,16 @@ func (s *SQLiteStore) supersedeMatchingFactsLocked(item api.StoredMemoryResponse
 		}
 		if err := s.insertMemoryLinkLocked(item.ID, priorID, "supersedes", 1.0); err != nil {
 			return err
+		}
+		after, _ := s.readProjectionByIDLocked(priorID)
+		if after != nil {
+			event := historyEventFromMemory(*after, "consolidate.supersede", "write")
+			if before != nil {
+				event.Before = historyAfterFromStored(*before)
+			}
+			event.After = historyAfterFromStored(*after)
+			event.Meta = map[string]any{"supersededBy": item.ID}
+			_ = s.recordHistoryLocked(event)
 		}
 	}
 	return nil
@@ -1933,6 +2171,98 @@ func (s *SQLiteStore) insertMemoryLinkLocked(fromID string, toID string, relatio
 		time.Now().UnixMilli(),
 	)
 	return err
+}
+
+func (s *SQLiteStore) recordHistoryLocked(event HistoryEvent) error {
+	if strings.TrimSpace(event.Operation) == "" {
+		return nil
+	}
+	if strings.TrimSpace(event.ID) == "" {
+		event.ID = generateHistoryID()
+	}
+	if event.Timestamp == 0 {
+		event.Timestamp = time.Now().UnixMilli()
+	}
+	if strings.TrimSpace(event.Status) == "" {
+		event.Status = HistoryStatusOK
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO MEMORY_HISTORY (ID_, TS_, AGENT_KEY_, CHAT_ID_, RUN_ID_, REQUEST_ID_, USER_KEY_,
+			MEMORY_ID_, MEMORY_KIND_, SCOPE_TYPE_, SCOPE_KEY_, OPERATION_, SOURCE_, STATUS_,
+			BEFORE_JSON_, AFTER_JSON_, DELTA_JSON_, META_JSON_)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.ID,
+		event.Timestamp,
+		strings.TrimSpace(event.AgentKey),
+		strings.TrimSpace(event.ChatID),
+		strings.TrimSpace(event.RunID),
+		strings.TrimSpace(event.RequestID),
+		strings.TrimSpace(event.UserKey),
+		strings.TrimSpace(event.MemoryID),
+		strings.TrimSpace(event.MemoryKind),
+		strings.TrimSpace(event.ScopeType),
+		strings.TrimSpace(event.ScopeKey),
+		strings.TrimSpace(event.Operation),
+		strings.TrimSpace(event.Source),
+		strings.TrimSpace(event.Status),
+		historyJSON(event.Before),
+		historyJSON(event.After),
+		historyJSON(event.Delta),
+		historyJSON(event.Meta),
+	)
+	return err
+}
+
+func scanHistoryRows(rows *sql.Rows) ([]HistoryEvent, error) {
+	events := []HistoryEvent{}
+	for rows.Next() {
+		var event HistoryEvent
+		var beforeJSON, afterJSON, deltaJSON, metaJSON string
+		if err := rows.Scan(
+			&event.ID,
+			&event.Timestamp,
+			&event.AgentKey,
+			&event.ChatID,
+			&event.RunID,
+			&event.RequestID,
+			&event.UserKey,
+			&event.MemoryID,
+			&event.MemoryKind,
+			&event.ScopeType,
+			&event.ScopeKey,
+			&event.Operation,
+			&event.Source,
+			&event.Status,
+			&beforeJSON,
+			&afterJSON,
+			&deltaJSON,
+			&metaJSON,
+		); err != nil {
+			return nil, err
+		}
+		event.Before = decodeHistoryJSON(beforeJSON)
+		event.After = decodeHistoryJSON(afterJSON)
+		event.Delta = decodeHistoryJSON(deltaJSON)
+		event.Meta = decodeHistoryJSON(metaJSON)
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func historyEventFromMemory(item api.StoredMemoryResponse, operation string, source string) HistoryEvent {
+	return HistoryEvent{
+		AgentKey:   strings.TrimSpace(item.AgentKey),
+		ChatID:     strings.TrimSpace(item.ChatID),
+		RunID:      strings.TrimSpace(item.RefID),
+		RequestID:  strings.TrimSpace(item.RequestID),
+		MemoryID:   strings.TrimSpace(item.ID),
+		MemoryKind: strings.TrimSpace(item.Kind),
+		ScopeType:  strings.TrimSpace(item.ScopeType),
+		ScopeKey:   strings.TrimSpace(item.ScopeKey),
+		Operation:  strings.TrimSpace(operation),
+		Source:     strings.TrimSpace(source),
+		Status:     HistoryStatusOK,
+	}
 }
 
 func (s *SQLiteStore) ensureProjectionColumns() error {
@@ -2133,4 +2463,10 @@ func generateMemoryID() string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return "mem_" + hex.EncodeToString(b)
+}
+
+func generateHistoryID() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return "hist_" + hex.EncodeToString(b)
 }

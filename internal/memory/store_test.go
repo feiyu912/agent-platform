@@ -220,6 +220,108 @@ func TestRememberUsesConsistentImportanceAcrossStores(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreRecordsMemoryHistoryForWriteUpdateAndFeedback(t *testing.T) {
+	store, err := NewSQLiteStore(t.TempDir(), "memory.db")
+	if err != nil {
+		t.Fatalf("new sqlite store: %v", err)
+	}
+	item := api.StoredMemoryResponse{
+		ID:         "mem-history-1",
+		AgentKey:   "agent-a",
+		Kind:       KindFact,
+		ScopeType:  ScopeAgent,
+		ScopeKey:   "agent:agent-a",
+		Title:      "Release rule",
+		Summary:    "Run make release-program before desktop sync.",
+		SourceType: "tool-write",
+		Category:   CategoryWorkflow,
+		Importance: 8,
+		Confidence: 0.9,
+		Status:     StatusActive,
+		CreatedAt:  100,
+		UpdatedAt:  100,
+	}
+	if err := store.Write(item); err != nil {
+		t.Fatalf("write memory: %v", err)
+	}
+	importance := 9
+	if _, err := store.Update("agent-a", MutationInput{ID: item.ID, Importance: &importance}); err != nil {
+		t.Fatalf("update memory: %v", err)
+	}
+	if err := store.ApplyFeedback([]FeedbackSignal{{ItemID: item.ID, Referenced: true, ConfidenceDelta: feedbackBoost}}); err != nil {
+		t.Fatalf("apply feedback: %v", err)
+	}
+
+	result, err := store.History(HistoryFilter{AgentKey: "agent-a", MemoryID: item.ID, Limit: 20})
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if !historyHasOperation(result.Events, "write.create") ||
+		!historyHasOperation(result.Events, "update") ||
+		!historyHasOperation(result.Events, "feedback.boost") {
+		t.Fatalf("expected write/update/feedback history, got %#v", result.Events)
+	}
+}
+
+func TestSQLiteStoreRecordsRecallHistory(t *testing.T) {
+	store, err := NewSQLiteStore(t.TempDir(), "memory.db")
+	if err != nil {
+		t.Fatalf("new sqlite store: %v", err)
+	}
+	if err := store.Write(api.StoredMemoryResponse{
+		ID:         "mem-recall-1",
+		AgentKey:   "agent-a",
+		Kind:       KindFact,
+		ScopeType:  ScopeAgent,
+		ScopeKey:   "agent:agent-a",
+		Title:      "Desktop release",
+		Summary:    "desktop builtin release uses make release-program.",
+		SourceType: "tool-write",
+		Category:   CategoryWorkflow,
+		Importance: 9,
+		Confidence: 0.95,
+		Status:     StatusActive,
+		CreatedAt:  100,
+		UpdatedAt:  100,
+	}); err != nil {
+		t.Fatalf("write memory: %v", err)
+	}
+	if _, err := store.BuildContextBundle(ContextRequest{
+		AgentKey: "agent-a",
+		ChatID:   "chat-1",
+		Query:    "desktop builtin release",
+		TopFacts: 5,
+		TopObs:   5,
+		MaxChars: 4000,
+	}); err != nil {
+		t.Fatalf("build context bundle: %v", err)
+	}
+
+	result, err := store.History(HistoryFilter{AgentKey: "agent-a", MemoryID: "mem-recall-1", Limit: 20})
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if !historyHasOperation(result.Events, "recall.selected") {
+		t.Fatalf("expected recall.selected history, got %#v", result.Events)
+	}
+	history, err := store.History(HistoryFilter{AgentKey: "agent-a", Operation: "recall.context_built", Limit: 10})
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history.Events) == 0 || history.Events[0].Meta["selectedCounts"] == nil {
+		t.Fatalf("expected recall context summary history, got %#v", history.Events)
+	}
+}
+
+func historyHasOperation(events []HistoryEvent, operation string) bool {
+	for _, event := range events {
+		if event.Operation == operation {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRememberUsesSummarizerAcrossStores(t *testing.T) {
 	tests := []struct {
 		name  string
