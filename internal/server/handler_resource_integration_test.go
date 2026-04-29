@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -255,6 +256,139 @@ func TestWebSocketUploadDownloadsGatewayURLAndReturnsUploadTicket(t *testing.T) 
 	}
 	if got := resourceRec.Body.String(); got != string(fileBody) {
 		t.Fatalf("unexpected uploaded resource body %q", got)
+	}
+}
+
+func TestWebSocketResourcePushesLocalFileToGateway(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `[DONE]`)
+	}, testFixtureOptions{
+		notifications: ws.NewHub(),
+		configure: func(cfg *config.Config) {
+			cfg.WebSocket.Enabled = true
+			cfg.WebSocket.WriteQueueSize = 4
+			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.GatewayWS.JwtToken = "gateway-resource-token"
+		},
+	})
+
+	status, body, err := fixture.server.ExecuteInternalUpload(context.Background(), "chat_ws_resource", "resource-req", "resource.txt", "text/plain", []byte("resource body"))
+	if err != nil {
+		t.Fatalf("create resource fixture: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("create resource fixture status=%d body=%s", status, string(body))
+	}
+
+	var gotAuth, gotContentType, gotBody atomic.Value
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth.Store(r.Header.Get("Authorization"))
+		gotContentType.Store(r.Header.Get("Content-Type"))
+		data, _ := io.ReadAll(r.Body)
+		gotBody.Store(string(data))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gateway.Close()
+	fixture.server.deps.Config.GatewayWS.BaseURL = gateway.URL
+
+	server := newLoopbackServer(t, fixture.server)
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := gws.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+	waitForPushFrameType(t, conn, "connected")
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/resource",
+		ID:    "req_resource_ws",
+		Payload: ws.MarshalPayload(map[string]any{
+			"file":    "chat_ws_resource/resource.txt",
+			"pushURL": gateway.URL + "/api/push/ticket-1",
+		}),
+	}); err != nil {
+		t.Fatalf("write websocket resource: %v", err)
+	}
+	raw := waitForWebSocketFrame(t, conn, func(data []byte) bool {
+		var meta struct {
+			Frame string `json:"frame"`
+			ID    string `json:"id"`
+		}
+		if err := json.Unmarshal(data, &meta); err != nil {
+			t.Fatalf("decode websocket resource frame: %v", err)
+		}
+		return meta.Frame == ws.FrameResponse && meta.ID == "req_resource_ws"
+	})
+	var frame ws.ResponseFrame
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatalf("decode websocket resource response: %v", err)
+	}
+	if frame.Type != "/api/resource" || frame.Code != 0 {
+		t.Fatalf("unexpected websocket resource response: %s", string(raw))
+	}
+	if got, _ := gotAuth.Load().(string); got != "Bearer gateway-resource-token" {
+		t.Fatalf("expected gateway auth header, got %q", got)
+	}
+	if got, _ := gotContentType.Load().(string); !strings.HasPrefix(got, "text/plain") {
+		t.Fatalf("expected text/plain content type, got %q", got)
+	}
+	if got, _ := gotBody.Load().(string); got != "resource body" {
+		t.Fatalf("unexpected pushed resource body %q", got)
+	}
+}
+
+func TestWebSocketResourceRejectsMissingLocalFile(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `[DONE]`)
+	}, testFixtureOptions{
+		notifications: ws.NewHub(),
+		configure: func(cfg *config.Config) {
+			cfg.WebSocket.Enabled = true
+			cfg.WebSocket.WriteQueueSize = 4
+			cfg.WebSocket.PingIntervalMs = 30000
+		},
+	})
+
+	server := newLoopbackServer(t, fixture.server)
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := gws.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+	waitForPushFrameType(t, conn, "connected")
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/resource",
+		ID:    "req_missing_resource",
+		Payload: ws.MarshalPayload(map[string]any{
+			"file":    "chat_missing/nope.txt",
+			"pushURL": "/api/push/ticket-1",
+		}),
+	}); err != nil {
+		t.Fatalf("write websocket resource: %v", err)
+	}
+	raw := waitForWebSocketFrame(t, conn, func(data []byte) bool {
+		var meta struct {
+			Frame string `json:"frame"`
+			ID    string `json:"id"`
+		}
+		if err := json.Unmarshal(data, &meta); err != nil {
+			t.Fatalf("decode websocket resource error frame: %v", err)
+		}
+		return meta.Frame == ws.FrameError && meta.ID == "req_missing_resource"
+	})
+	var frame ws.ErrorFrame
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatalf("decode websocket resource error: %v", err)
+	}
+	if frame.Type != "resource_not_found" || frame.Code != http.StatusNotFound {
+		t.Fatalf("unexpected websocket resource error: %s", string(raw))
 	}
 }
 

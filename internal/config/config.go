@@ -263,7 +263,7 @@ type GatewayWSConfig struct {
 	// platform 不再二次拼接 query。
 	URL string
 	// JwtToken 是统一的鉴权凭据：既用于反向 WS 握手的 Authorization header，
-	// 也用于 /api/push（artifact 外发）和 /api/download（用户上传文件拉取）
+	// 也用于 /api/push（artifact 外发）和 /api/pull（用户上传文件拉取）
 	// 等 HTTP 旁路请求的 Bearer token。由用户在首次企微会话后从网关复制进 .env。
 	JwtToken           string
 	HandshakeTimeoutMs int64
@@ -327,7 +327,7 @@ type ChannelGatewayConfig struct {
 // 网关 HTTP 旁路的路径约定，由网关侧固定，不再做成可配置。
 const (
 	GatewayUploadPath   = "/api/push"
-	GatewayDownloadPath = "/api/download"
+	GatewayDownloadPath = "/api/pull"
 )
 
 func Load() (Config, error) {

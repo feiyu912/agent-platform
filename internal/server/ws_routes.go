@@ -10,8 +10,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	neturl "net/url"
+	"os"
+	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -79,21 +83,22 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/remember", s.wsRemember)
 	handler.RegisterRoute("/api/learn", s.wsLearn)
 	handler.RegisterRoute("/api/viewport", s.wsViewport)
-	// agent 视角下这是一次 "去网关下载" 动作，所以主路由名是 /api/download；
+	handler.RegisterRoute("/api/resource", s.wsResource)
+	// agent 视角下这是一次 "去网关拉取" 动作，所以主路由名是 /api/pull；
 	// 为过渡期兼容网关旧 type 字段，额外注册 /api/upload 作为 alias，等网关切完再删。
-	handler.RegisterRoute("/api/download", s.wsDownload)
+	handler.RegisterRoute("/api/pull", s.wsDownload)
 	handler.RegisterRoute("/api/upload", s.wsDownload)
 }
 
 // wsDownload 处理网关通过 WS 通知 platform "有一份用户传到企微仓库的文件、
-// 请来 /api/download/{sha256} 取" 的场景。接受两种 payload 形状：
+// 请来 /api/pull/{sha256} 取" 的场景。接受两种 payload 形状：
 //
 //   - nested（网关当前使用的形状）：
 //     {requestId, chatId, upload:{id,type,name,mimeType,sizeBytes,sha256,url?}}
 //   - flat：{chatId, requestId, fileName, sha256?, url?, mimeType?, sizeBytes?}
 //
 // 下载 key 优先级：`url`（历史字段）非空时直接用；否则用 `sha256` 拼
-// channel gateway.base-url + /api/download/{sha256}。下载完的字节复用 /api/upload
+// channel gateway.base-url + /api/pull/{sha256}。下载完的字节复用 /api/upload
 // 内部管线落盘到 {ChatsDir}/{chatId}/，sandbox 会把该目录挂进容器 /workspace。
 func (s *Server) wsDownload(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
 	payload, err := ws.DecodePayload[struct {
@@ -138,7 +143,7 @@ func (s *Server) wsDownload(ctx context.Context, conn *ws.Conn, req ws.RequestFr
 	if sha256Value == "" {
 		sha256Value = strings.TrimSpace(payload.Upload.SHA256)
 	}
-	// 契约：网关在 upload.url 里下发完整 https://.../api/download/...?ticket=... URL。
+	// 契约：网关在 upload.url 里下发完整 https://.../api/pull/...?ticket=... URL。
 	// platform 直接用它发 HTTP GET，不做路径拼接、不做猜测。
 	rawURL := strings.TrimSpace(payload.URL)
 	if rawURL == "" {
@@ -191,8 +196,128 @@ func (s *Server) wsDownload(ctx context.Context, conn *ws.Conn, req ws.RequestFr
 	conn.CompleteRequest(req.ID)
 }
 
+func (s *Server) wsResource(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	payload, err := ws.DecodePayload[struct {
+		File    string `json:"file"`
+		PushURL string `json:"pushURL"`
+	}](req)
+	if err != nil {
+		conn.SendError(req.ID, "invalid_request", 400, "invalid resource payload", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	fileParam := strings.TrimSpace(payload.File)
+	pushURL := strings.TrimSpace(payload.PushURL)
+	if err := validateWSResourceFileParam(fileParam); err != nil || pushURL == "" {
+		conn.SendError(req.ID, "invalid_request", 400, "file and pushURL are required", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	chatID := resourceChatID(fileParam)
+	if chatID == "" {
+		conn.SendError(req.ID, "invalid_request", 400, "file must include chatId", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	resourcePath, err := s.deps.Chats.ResolveResource(fileParam)
+	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			conn.SendError(req.ID, "resource_forbidden", 403, "resource access denied", nil)
+		} else {
+			conn.SendError(req.ID, "resource_not_found", 404, "resource not found", nil)
+		}
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	file, err := os.Open(resourcePath)
+	if err != nil {
+		conn.SendError(req.ID, "resource_not_found", 404, "resource not found", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	defer file.Close()
+	mimeType := detectResourceMIME(resourcePath, file)
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		conn.SendError(req.ID, "resource_read_failed", 500, err.Error(), nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	baseURL, token := s.resolveGatewayForChat(chatID)
+	uploadURL := s.buildGatewayURL(baseURL, pushURL)
+	if uploadURL == "" {
+		conn.SendError(req.ID, "invalid_request", 400, "empty pushURL", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, file)
+	if err != nil {
+		conn.SendError(req.ID, "resource_push_failed", 500, err.Error(), nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	httpReq.Header.Set("Content-Type", mimeType)
+	if token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		conn.SendError(req.ID, "resource_push_failed", 502, err.Error(), nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		conn.SendError(req.ID, "resource_push_failed", resp.StatusCode, strings.TrimSpace(string(body)), nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	conn.SendResponse(req.Type, req.ID, 0, "success", map[string]any{
+		"file":     fileParam,
+		"mimeType": mimeType,
+		"status":   resp.StatusCode,
+	})
+	conn.CompleteRequest(req.ID)
+}
+
+func validateWSResourceFileParam(fileParam string) error {
+	if fileParam == "" || strings.Contains(fileParam, "\x00") || strings.Contains(fileParam, "\\") || strings.HasPrefix(fileParam, "/") {
+		return fmt.Errorf("invalid file path")
+	}
+	clean := path.Clean(fileParam)
+	if clean == "." || clean != fileParam || clean == ".." || strings.HasPrefix(clean, "../") || strings.Contains(clean, "/../") {
+		return fmt.Errorf("unsafe file path")
+	}
+	return nil
+}
+
+func resourceChatID(fileParam string) string {
+	fileParam = strings.Trim(fileParam, "/")
+	if fileParam == "" {
+		return ""
+	}
+	parts := strings.SplitN(fileParam, "/", 2)
+	return strings.TrimSpace(parts[0])
+}
+
+func detectResourceMIME(resourcePath string, file *os.File) string {
+	if resourcePath != "" {
+		if mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(resourcePath))); mimeType != "" {
+			return mimeType
+		}
+	}
+	if file != nil {
+		var head [512]byte
+		n, _ := file.Read(head[:])
+		if n > 0 {
+			return http.DetectContentType(head[:n])
+		}
+	}
+	return "application/octet-stream"
+}
+
 // fetchGatewayDownload 把下载 key（绝对 URL 或仅 sha256）解析成完整的
-// gateway BaseURL/api/download/... 路径，带对应 gateway 的 JWT Bearer 做 GET。
+// gateway BaseURL/api/pull/... 路径，带对应 gateway 的 JWT Bearer 做 GET。
 // chatID 用于按前缀路由到正确的 gateway（多 channel 部署下必需）。
 func (s *Server) fetchGatewayDownload(ctx context.Context, chatID string, rawURL string) ([]byte, error) {
 	baseURL, token := s.resolveGatewayForChat(chatID)
@@ -248,7 +373,7 @@ func (s *Server) buildGatewayURL(base string, raw string) string {
 		return raw
 	}
 
-	// 解析出 path + query（raw 可能是完整 URL、也可能只是 "/api/download/..." 的相对路径）
+	// 解析出 path + query（raw 可能是完整 URL、也可能只是 "/api/pull/..." 的相对路径）
 	var pathAndQuery string
 	if parsed, err := neturl.Parse(raw); err == nil && parsed.Path != "" {
 		pathAndQuery = parsed.EscapedPath()

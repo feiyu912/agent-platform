@@ -265,6 +265,16 @@ func TestBroadcastDefinitionsStayAlignedAcrossHTTPAndWS(t *testing.T) {
 	assertContains(t, wsRoutes, `s.broadcastChatReadState("chat.unread"`)
 }
 
+func TestGatewayPullPathAndURLBuilderUsePullEndpoint(t *testing.T) {
+	if config.GatewayDownloadPath != "/api/pull" {
+		t.Fatalf("expected GatewayDownloadPath /api/pull, got %q", config.GatewayDownloadPath)
+	}
+	server, _, _ := newServerForHelperTests(t)
+	if got := server.buildGatewayURL("https://gateway.example", "ticket-1"); got != "https://gateway.example/api/pull/ticket-1" {
+		t.Fatalf("unexpected gateway pull url: %q", got)
+	}
+}
+
 func TestListAgentSummariesIncludesChatStats(t *testing.T) {
 	server, chats, _ := newServerForHelperTests(t)
 	server.deps.Registry = wsRegressionCatalogRegistry{

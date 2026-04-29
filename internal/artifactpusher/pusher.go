@@ -148,7 +148,7 @@ func (p *Pusher) notifyArtifactOutgoing(chatID, artifactID, name, mimeType, sha 
 	if p.notifications == nil {
 		return
 	}
-	p.notifications.Broadcast("/api/push", map[string]any{
+	p.notifications.Broadcast("resource.push", map[string]any{
 		"chatId":     chatID,
 		"artifactId": artifactID,
 		"name":       name,
