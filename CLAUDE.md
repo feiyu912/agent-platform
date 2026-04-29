@@ -290,6 +290,12 @@ runtimeConfig:
 - `request.submit` 透传前端原始数组，便于审计；`awaiting.answer` 才是后端归一化后的结构化结果。
 - 历史 `events.jsonl` 中旧的 `cancelled/reason` 形状不再兼容；新前端会按未知旧态回退展示。
 
+### StepLine 快照
+
+- `debug.preCall`：存放后端调试 payload，例如 provider、model、requestBody、contextWindow；回放时优先读取 `debug.preCall`，并兼容旧数据 `system.debugPreCall`。
+- `system`：存放 LLM 请求快照，结构与 Java 版对齐：`{"model":"...","messages":[{"role":"system","content":"..."}],"tools":[...],"stream":true}`。
+- `system.messages` 只保留 system 角色消息；`system` 首次出现必写，后续仅当 model/messages/tools/stream 发生变化时写入。
+
 ### Agent 调度 task
 
 - `agent_invoke` 是显式配置的批量调度原语，不走 `ToolExecutor.Invoke`；只有 agent 在 `toolConfig.tools` 声明 `agent_invoke` 时才会暴露给模型，`mode: REACT/ONESHOT` 不再自动附加该能力。旧名 `_agent_invoke_` 不再作为兼容别名支持。

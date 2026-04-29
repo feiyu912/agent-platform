@@ -58,6 +58,8 @@ type StepWriter struct {
 	pendingContextWindowMax int
 	pendingEstimated        int
 	pendingPreCallData      map[string]any
+	pendingSystemSnapshot   map[string]any
+	lastWrittenSystem       map[string]any
 }
 
 type taskStepBuffer struct {
@@ -280,6 +282,9 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		if inner, ok := event.Value("data").(map[string]any); ok {
 			if event.Type == "debug.preCall" {
 				w.pendingPreCallData = cloneStepSystemPayload(inner)
+				if requestBody, ok := inner["requestBody"].(map[string]any); ok {
+					w.pendingSystemSnapshot = extractSystemSnapshot(requestBody)
+				}
 			}
 			if cw, ok := inner["contextWindow"].(map[string]any); ok {
 				w.pendingContextWindowMax = toInt(cw["max_size"])
@@ -402,6 +407,7 @@ func (w *StepWriter) flushCurrentStep() {
 		w.pendingContextWindowMax = 0
 		w.pendingEstimated = 0
 		w.pendingPreCallData = nil
+		w.pendingSystemSnapshot = nil
 		return
 	}
 
@@ -413,6 +419,7 @@ func (w *StepWriter) flushCurrentStep() {
 		w.pendingContextWindowMax = 0
 		w.pendingEstimated = 0
 		w.pendingPreCallData = nil
+		w.pendingSystemSnapshot = nil
 		return
 	}
 
@@ -438,6 +445,10 @@ func (w *StepWriter) flushCurrentStep() {
 			"preCall": cloneStepSystemPayload(w.pendingPreCallData),
 		}
 	}
+	if len(w.pendingSystemSnapshot) > 0 && (len(w.lastWrittenSystem) == 0 || !mapsEqual(w.lastWrittenSystem, w.pendingSystemSnapshot)) {
+		line.System = cloneStepSystemPayload(w.pendingSystemSnapshot)
+		w.lastWrittenSystem = cloneStepSystemPayload(w.pendingSystemSnapshot)
+	}
 	if w.pendingUsage != nil || w.pendingContextWindowMax > 0 || w.pendingEstimated > 0 {
 		actual := 0
 		if w.pendingUsage != nil {
@@ -460,6 +471,7 @@ func (w *StepWriter) flushCurrentStep() {
 		w.pendingContextWindowMax = 0
 		w.pendingEstimated = 0
 		w.pendingPreCallData = nil
+		w.pendingSystemSnapshot = nil
 	}
 	if w.latestPlan != nil {
 		line.Plan = w.latestPlan
@@ -490,6 +502,7 @@ func (w *StepWriter) flushCurrentStep() {
 	w.pendingContextWindowMax = 0
 	w.pendingEstimated = 0
 	w.pendingPreCallData = nil
+	w.pendingSystemSnapshot = nil
 }
 
 func (w *StepWriter) flushTaskStep(taskID string) {
@@ -716,6 +729,71 @@ func cloneStepSystemPayload(value map[string]any) map[string]any {
 		return cloneStringAnyMap(value)
 	}
 	return cloned
+}
+
+func extractSystemSnapshot(requestBody map[string]any) map[string]any {
+	if len(requestBody) == 0 {
+		return nil
+	}
+	snapshot := map[string]any{}
+	if model, ok := requestBody["model"].(string); ok && strings.TrimSpace(model) != "" {
+		snapshot["model"] = model
+	}
+	if messages, ok := requestBody["messages"].([]any); ok && len(messages) > 0 {
+		systemMessages := make([]map[string]any, 0)
+		for _, raw := range messages {
+			msg, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if role, _ := msg["role"].(string); role == "system" {
+				systemMessages = append(systemMessages, map[string]any{
+					"role":    "system",
+					"content": msg["content"],
+				})
+			}
+		}
+		if len(systemMessages) > 0 {
+			snapshot["messages"] = systemMessages
+		}
+	}
+	if tools, ok := requestBody["tools"].([]any); ok && len(tools) > 0 {
+		snapshot["tools"] = cloneStepSlice(tools)
+	}
+	if streamValue, ok := requestBody["stream"].(bool); ok {
+		snapshot["stream"] = streamValue
+	}
+	if len(snapshot) == 0 {
+		return nil
+	}
+	return snapshot
+}
+
+func cloneStepSlice(value []any) []any {
+	if len(value) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return append([]any(nil), value...)
+	}
+	var cloned []any
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		return append([]any(nil), value...)
+	}
+	return cloned
+}
+
+func mapsEqual(left map[string]any, right map[string]any) bool {
+	if len(left) == 0 && len(right) == 0 {
+		return true
+	}
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	if leftErr != nil || rightErr != nil {
+		return false
+	}
+	return string(leftJSON) == string(rightJSON)
 }
 
 // parseStage normalises a stage marker string to a stage name, matching Java's

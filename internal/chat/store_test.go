@@ -1402,6 +1402,126 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 	}
 }
 
+func TestStepWriterPersistsSystemSnapshotWithDriftDetection(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	writer := NewStepWriter(store, "chat-system-snapshot", "run-system-snapshot", "react", false)
+	requestBody := map[string]any{
+		"model": "gpt-5.2",
+		"messages": []any{
+			map[string]any{"role": "system", "content": "你是一个有用的助手"},
+			map[string]any{"role": "user", "content": "hello"},
+		},
+		"tools": []any{
+			map[string]any{
+				"type":        "function",
+				"name":        "bash",
+				"description": "run shell command",
+				"parameters":  map[string]any{"type": "object"},
+			},
+		},
+		"stream": true,
+	}
+	changedRequestBody := map[string]any{
+		"model": "gpt-5.3",
+		"messages": []any{
+			map[string]any{"role": "system", "content": "你是另一个助手"},
+		},
+		"tools": []any{
+			map[string]any{
+				"type":        "function",
+				"name":        "bash",
+				"description": "run shell command safely",
+				"parameters":  map[string]any{"type": "object"},
+			},
+		},
+		"stream": false,
+	}
+
+	emitDebugPreCall := func(request map[string]any) {
+		writer.OnEvent(stream.EventData{
+			Type: "debug.preCall",
+			Payload: map[string]any{
+				"data": map[string]any{
+					"provider":    map[string]any{"key": "mock"},
+					"requestBody": request,
+				},
+			},
+		})
+	}
+	emitContent := func(contentID string, text string) {
+		writer.OnEvent(stream.EventData{
+			Type: "content.snapshot",
+			Payload: map[string]any{
+				"contentId": contentID,
+				"text":      text,
+			},
+		})
+	}
+
+	emitDebugPreCall(requestBody)
+	emitContent("content-1", "first")
+	writer.OnEvent(stream.EventData{Type: "stage.marker", Payload: map[string]any{"stage": "react-step-2"}})
+	emitDebugPreCall(requestBody)
+	emitContent("content-2", "second")
+	writer.OnEvent(stream.EventData{Type: "stage.marker", Payload: map[string]any{"stage": "react-step-3"}})
+	emitDebugPreCall(changedRequestBody)
+	emitContent("content-3", "third")
+	writer.OnEvent(stream.EventData{Type: "run.complete"})
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-system-snapshot"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	if len(lines) != 3 {
+		t.Fatalf("expected three step lines, got %#v", lines)
+	}
+
+	debug, _ := lines[0]["debug"].(map[string]any)
+	preCall, _ := debug["preCall"].(map[string]any)
+	preCallRequestBody, _ := preCall["requestBody"].(map[string]any)
+	if preCallRequestBody["model"] != "gpt-5.2" {
+		t.Fatalf("expected debug.preCall request body, got %#v", lines[0])
+	}
+	firstSystem, _ := lines[0]["system"].(map[string]any)
+	if firstSystem["model"] != "gpt-5.2" || firstSystem["stream"] != true {
+		t.Fatalf("expected first system snapshot, got %#v", lines[0])
+	}
+	firstMessages, _ := firstSystem["messages"].([]any)
+	if len(firstMessages) != 1 {
+		t.Fatalf("expected only system role messages in snapshot, got %#v", firstSystem)
+	}
+	firstSystemMessage, _ := firstMessages[0].(map[string]any)
+	if firstSystemMessage["role"] != "system" || firstSystemMessage["content"] != "你是一个有用的助手" {
+		t.Fatalf("unexpected system message snapshot %#v", firstSystem)
+	}
+	firstTools, _ := firstSystem["tools"].([]any)
+	if len(firstTools) != 1 {
+		t.Fatalf("expected tools snapshot, got %#v", firstSystem)
+	}
+
+	if _, ok := lines[1]["system"]; ok {
+		t.Fatalf("did not expect unchanged system snapshot on second step, got %#v", lines[1])
+	}
+	secondDebug, _ := lines[1]["debug"].(map[string]any)
+	if _, ok := secondDebug["preCall"]; !ok {
+		t.Fatalf("expected debug.preCall to persist even when system snapshot is unchanged, got %#v", lines[1])
+	}
+
+	thirdSystem, _ := lines[2]["system"].(map[string]any)
+	if thirdSystem["model"] != "gpt-5.3" || thirdSystem["stream"] != false {
+		t.Fatalf("expected changed system snapshot on third step, got %#v", lines[2])
+	}
+	thirdMessages, _ := thirdSystem["messages"].([]any)
+	thirdSystemMessage, _ := thirdMessages[0].(map[string]any)
+	if thirdSystemMessage["content"] != "你是另一个助手" {
+		t.Fatalf("unexpected changed system messages %#v", thirdSystem)
+	}
+}
+
 func TestStepWriterDropsAwaitingWithoutMessages(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
