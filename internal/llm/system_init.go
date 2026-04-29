@@ -1,0 +1,295 @@
+package llm
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"log"
+	"sort"
+	"strings"
+
+	"agent-platform-runner-go/internal/api"
+	. "agent-platform-runner-go/internal/contracts"
+)
+
+type SystemInitProfile struct {
+	CacheKey      string
+	Mode          string
+	Stage         string
+	Fingerprint   string
+	SystemMessage map[string]any
+	Tools         []any
+}
+
+func BuildSystemInitProfiles(session QuerySession, req api.QueryRequest, toolDefs []api.ToolDetailResponse) []SystemInitProfile {
+	mode := normalizedSystemInitMode(session.Mode)
+	switch mode {
+	case "plan-execute":
+		return []SystemInitProfile{
+			buildPlanSystemInitProfile(session, req, toolDefs),
+			buildExecuteSystemInitProfile(session, toolDefs),
+			buildSummarySystemInitProfile(session),
+		}
+	case "oneshot":
+		return []SystemInitProfile{buildDefaultSystemInitProfile(session, req, toolDefs, "oneshot")}
+	default:
+		stage := "react"
+		if strings.TrimSpace(session.Mode) == "" {
+			stage = "oneshot"
+		}
+		return []SystemInitProfile{buildDefaultSystemInitProfile(session, req, toolDefs, stage)}
+	}
+}
+
+func SystemInitCacheKey(mode string, stage string) string {
+	normalizedMode := normalizedSystemInitMode(mode)
+	if normalizedMode == "plan-execute" {
+		return normalizedMode + ":" + normalizedPlanExecuteStage(stage)
+	}
+	return normalizedMode + ":main"
+}
+
+func ComputeAgentFingerprint(session QuerySession, toolDefs []api.ToolDetailResponse) string {
+	return ComputeSystemInitFingerprint(session, "main", toolDefs)
+}
+
+func ComputeSystemInitFingerprint(session QuerySession, stage string, toolDefs []api.ToolDetailResponse) string {
+	payload := map[string]any{
+		"agentKey":               session.AgentKey,
+		"agentName":              session.AgentName,
+		"agentRole":              session.AgentRole,
+		"agentDescription":       session.AgentDescription,
+		"mode":                   normalizedSystemInitMode(session.Mode),
+		"stage":                  strings.TrimSpace(stage),
+		"modelKey":               session.ModelKey,
+		"toolNames":              sortedStrings(session.ToolNames),
+		"skillKeys":              sortedStrings(session.SkillKeys),
+		"contextTags":            sortedStrings(session.ContextTags),
+		"budget":                 session.Budget,
+		"stageSettings":          session.StageSettings,
+		"resolvedStageSettings":  session.ResolvedStageSettings,
+		"promptAppend":           session.PromptAppend,
+		"staticMemoryPrompt":     session.StaticMemoryPrompt,
+		"memoryPrompt":           session.MemoryPrompt,
+		"skillCatalogPrompt":     session.SkillCatalogPrompt,
+		"soulPrompt":             session.SoulPrompt,
+		"agentsPrompt":           session.AgentsPrompt,
+		"planPrompt":             session.PlanPrompt,
+		"executePrompt":          session.ExecutePrompt,
+		"summaryPrompt":          session.SummaryPrompt,
+		"runtimeEnvironmentID":   session.RuntimeEnvironmentID,
+		"runtimeLevel":           session.RuntimeLevel,
+		"runtimeExtraMounts":     session.RuntimeExtraMounts,
+		"agentHasRuntimeSandbox": session.AgentHasRuntimeSandbox,
+		"agentHasMemoryConfig":   session.AgentHasMemoryConfig,
+		"skillHookDirs":          sortedStrings(session.SkillHookDirs),
+		"runtimeEnvOverrides":    session.RuntimeEnvOverrides,
+		"toolDefinitions":        stableToolDefinitions(toolDefs),
+	}
+	raw, _ := json.Marshal(payload)
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func buildDefaultSystemInitProfile(session QuerySession, req api.QueryRequest, toolDefs []api.ToolDetailResponse, stage string) SystemInitProfile {
+	effectiveDefs := applyToolOverrides(filterToolDefinitions(toolDefs, session.ToolNames), session.ToolOverrides)
+	systemPrompt := buildSystemPrompt(session, req, session.ModelKey, PromptBuildOptions{
+		Stage:                 stage,
+		ToolDefinitions:       effectiveDefs,
+		IncludeAfterCallHints: true,
+	})
+	specs := toOpenAIToolSpecs(effectiveDefs)
+	return SystemInitProfile{
+		CacheKey:      SystemInitCacheKey(session.Mode, stage),
+		Mode:          normalizedSystemInitMode(session.Mode),
+		Stage:         "main",
+		Fingerprint:   ComputeSystemInitFingerprint(session, "main", effectiveDefs),
+		SystemMessage: map[string]any{"role": "system", "content": systemPrompt},
+		Tools:         openAIToolSpecsToAny(specs),
+	}
+}
+
+func buildPlanSystemInitProfile(session QuerySession, req api.QueryRequest, toolDefs []api.ToolDetailResponse) SystemInitProfile {
+	tools := planSystemInitTools(session.ResolvedStageSettings.Plan)
+	effectiveDefs := applyToolOverrides(filterToolDefinitions(toolDefs, tools), session.ToolOverrides)
+	systemPrompt := buildSystemPrompt(session, req, session.ModelKey, PromptBuildOptions{
+		Stage:                 "plan",
+		ToolDefinitions:       effectiveDefs,
+		IncludeAfterCallHints: true,
+	})
+	specs := toOpenAIToolSpecs(effectiveDefs)
+	return SystemInitProfile{
+		CacheKey:      SystemInitCacheKey(session.Mode, "plan"),
+		Mode:          "plan-execute",
+		Stage:         "plan",
+		Fingerprint:   ComputeSystemInitFingerprint(session, "plan", effectiveDefs),
+		SystemMessage: map[string]any{"role": "system", "content": systemPrompt},
+		Tools:         openAIToolSpecsToAny(specs),
+	}
+}
+
+func buildExecuteSystemInitProfile(session QuerySession, toolDefs []api.ToolDetailResponse) SystemInitProfile {
+	tools := appendUniqueTools(stageToolsOrDefault(session.ResolvedStageSettings.Execute, session.ToolNames), "plan_update_task")
+	effectiveDefs := applyToolOverrides(filterToolDefinitions(toolDefs, tools), session.ToolOverrides)
+	systemPrompt := strings.TrimSpace(session.ResolvedStageSettings.Execute.PrimaryPrompt())
+	if systemPrompt == "" {
+		systemPrompt = "Execute the current task."
+	}
+	specs := toOpenAIToolSpecs(effectiveDefs)
+	return SystemInitProfile{
+		CacheKey:      SystemInitCacheKey(session.Mode, "execute"),
+		Mode:          "plan-execute",
+		Stage:         "execute",
+		Fingerprint:   ComputeSystemInitFingerprint(session, "execute", effectiveDefs),
+		SystemMessage: map[string]any{"role": "system", "content": systemPrompt},
+		Tools:         openAIToolSpecsToAny(specs),
+	}
+}
+
+func buildSummarySystemInitProfile(session QuerySession) SystemInitProfile {
+	systemPrompt := strings.TrimSpace(session.ResolvedStageSettings.Summary.PrimaryPrompt())
+	if systemPrompt == "" {
+		systemPrompt = "Summarize the completed plan execution for the user."
+	}
+	return SystemInitProfile{
+		CacheKey:      SystemInitCacheKey(session.Mode, "summary"),
+		Mode:          "plan-execute",
+		Stage:         "summary",
+		Fingerprint:   ComputeSystemInitFingerprint(session, "summary", nil),
+		SystemMessage: map[string]any{"role": "system", "content": systemPrompt},
+		Tools:         []any{},
+	}
+}
+
+func planSystemInitTools(stage StageSettings) []string {
+	if len(stage.Tools) > 0 {
+		return appendUniqueTools(stage.Tools, "plan_add_tasks")
+	}
+	return []string{"plan_add_tasks"}
+}
+
+func normalizedSystemInitMode(mode string) string {
+	switch strings.ToUpper(strings.TrimSpace(mode)) {
+	case "ONESHOT":
+		return "oneshot"
+	case "PLAN_EXECUTE":
+		return "plan-execute"
+	default:
+		return "react"
+	}
+}
+
+func normalizedPlanExecuteStage(stage string) string {
+	value := strings.ToLower(strings.TrimSpace(stage))
+	switch {
+	case value == "plan":
+		return "plan"
+	case value == "summary":
+		return "summary"
+	case strings.HasPrefix(value, "execute"):
+		return "execute"
+	default:
+		return "execute"
+	}
+}
+
+func stableToolDefinitions(defs []api.ToolDetailResponse) []api.ToolDetailResponse {
+	out := append([]api.ToolDetailResponse(nil), defs...)
+	sort.Slice(out, func(i, j int) bool {
+		left := strings.TrimSpace(out[i].Name)
+		if left == "" {
+			left = strings.TrimSpace(out[i].Key)
+		}
+		right := strings.TrimSpace(out[j].Name)
+		if right == "" {
+			right = strings.TrimSpace(out[j].Key)
+		}
+		if left == right {
+			return strings.TrimSpace(out[i].Key) < strings.TrimSpace(out[j].Key)
+		}
+		return left < right
+	})
+	return out
+}
+
+func sortedStrings(values []string) []string {
+	out := append([]string(nil), values...)
+	sort.Strings(out)
+	return out
+}
+
+func openAIToolSpecsToAny(specs []openAIToolSpec) []any {
+	if len(specs) == 0 {
+		return []any{}
+	}
+	raw, err := json.Marshal(specs)
+	if err != nil {
+		return nil
+	}
+	var out []any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+func cachedToolSpecsToOpenAI(raw []any) ([]openAIToolSpec, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	var specs []openAIToolSpec
+	if err := json.Unmarshal(data, &specs); err != nil {
+		return nil, err
+	}
+	return specs, nil
+}
+
+func cachedSystemMessageToOpenAI(raw map[string]any) (openAIMessage, bool) {
+	if len(raw) == 0 {
+		return openAIMessage{}, false
+	}
+	role, _ := raw["role"].(string)
+	if strings.TrimSpace(role) != "system" {
+		return openAIMessage{}, false
+	}
+	return openAIMessage{
+		Role:    "system",
+		Content: raw["content"],
+	}, true
+}
+
+func resolveCachedSystemInit(session QuerySession, cacheKey string) (openAIMessage, []openAIToolSpec, bool) {
+	if session.SystemInitLegacy || len(session.SystemInitCache) == 0 {
+		return openAIMessage{}, nil, false
+	}
+	snapshot, ok := session.SystemInitCache[cacheKey]
+	if !ok {
+		return openAIMessage{}, nil, false
+	}
+	systemMessage, ok := cachedSystemMessageToOpenAI(snapshot.SystemMessage)
+	if !ok {
+		log.Printf("[llm][run:%s][system-init] invalid cached system message cacheKey=%s", session.RunID, cacheKey)
+		return openAIMessage{}, nil, false
+	}
+	toolSpecs, err := cachedToolSpecsToOpenAI(snapshot.Tools)
+	if err != nil {
+		log.Printf("[llm][run:%s][system-init] invalid cached tool specs cacheKey=%s err=%v", session.RunID, cacheKey, err)
+		return openAIMessage{}, nil, false
+	}
+	return systemMessage, toolSpecs, true
+}
+
+func replaceSystemMessage(messages []openAIMessage, system openAIMessage) []openAIMessage {
+	out := append([]openAIMessage(nil), messages...)
+	for index := range out {
+		if strings.TrimSpace(out[index].Role) == "system" {
+			out[index] = system
+			return out
+		}
+	}
+	return append([]openAIMessage{system}, out...)
+}

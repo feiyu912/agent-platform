@@ -95,6 +95,8 @@ type QuerySession struct {
 	StaticMemoryPrompt    string
 	MemoryPrompt          string // Deprecated: use StaticMemoryPrompt.
 	SkillCatalogPrompt    string
+	SystemInitCache       map[string]SystemInitSnapshot
+	SystemInitLegacy      bool
 
 	// Prompt files loaded from agent directory.
 	SoulPrompt    string
@@ -111,6 +113,12 @@ type QuerySession struct {
 	SkillHookDirs          []string
 	// RuntimeEnvOverrides carries agent/skill-level env defaults for both sandbox and host bash execution.
 	RuntimeEnvOverrides map[string]string
+}
+
+type SystemInitSnapshot struct {
+	Fingerprint   string
+	SystemMessage map[string]any
+	Tools         []any
 }
 
 type SandboxExtraMount struct {

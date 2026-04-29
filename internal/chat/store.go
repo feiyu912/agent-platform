@@ -34,6 +34,8 @@ type Store interface {
 	AppendStepLine(chatID string, line StepLine) error
 	AppendEventLine(chatID string, line EventLine) error
 	AppendSubmitLine(chatID string, line SubmitLine) error
+	LoadSystemInit(chatID string, cacheKey string) (*SystemInitLine, error)
+	AppendSystemInitLine(chatID string, line SystemInitLine) error
 	LoadRawMessages(chatID string, k int) ([]map[string]any, error)
 	OnRunCompleted(completion RunCompletion) error
 	ListChats(lastRunID string, agentKey string) ([]Summary, error)
@@ -489,6 +491,46 @@ func (s *FileStore) AppendEventLine(chatID string, line EventLine) error {
 
 func (s *FileStore) AppendSubmitLine(chatID string, line SubmitLine) error {
 	return s.appendJSONLine(s.chatJSONLPath(chatID), line)
+}
+
+func (s *FileStore) AppendSystemInitLine(chatID string, line SystemInitLine) error {
+	line.Type = "system-init"
+	if strings.TrimSpace(line.ChatID) == "" {
+		line.ChatID = chatID
+	}
+	return s.appendJSONLine(s.chatJSONLPath(chatID), line)
+}
+
+func (s *FileStore) LoadSystemInit(chatID string, cacheKey string) (*SystemInitLine, error) {
+	lines, err := readJSONLines(s.chatJSONLPath(chatID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	cacheKey = strings.TrimSpace(cacheKey)
+	var latest *SystemInitLine
+	for _, line := range lines {
+		lineType, _ := line["_type"].(string)
+		if lineType != "system-init" {
+			continue
+		}
+		lineCacheKey, _ := line["cacheKey"].(string)
+		if cacheKey != "" && strings.TrimSpace(lineCacheKey) != cacheKey {
+			continue
+		}
+		raw, err := json.Marshal(line)
+		if err != nil {
+			return nil, err
+		}
+		var parsed SystemInitLine
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, err
+		}
+		latest = &parsed
+	}
+	return latest, nil
 }
 
 // chatJSONLPath returns the path to {chatId}.jsonl (flat file, matching Java).

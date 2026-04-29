@@ -162,6 +162,9 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	if err != nil {
 		return preparedQuery{}, err
 	}
+	if err := s.prepareSystemInitCache(req, &session, created); err != nil {
+		return preparedQuery{}, err
+	}
 
 	return preparedQuery{
 		req:                req,

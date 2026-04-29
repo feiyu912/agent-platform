@@ -84,6 +84,11 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	}
 	effectiveDefs := applyToolOverrides(filterToolDefinitions(e.tools.Definitions(), allowedTools), session.ToolOverrides)
 	toolSpecs := toOpenAIToolSpecs(effectiveDefs)
+	cacheKey := SystemInitCacheKey(session.Mode, options.Stage)
+	cachedSystem, cachedTools, cacheOK := resolveCachedSystemInit(session, cacheKey)
+	if cacheOK {
+		toolSpecs = cachedTools
+	}
 	execCtx := options.ExecCtx
 	if execCtx == nil {
 		execCtx = &ExecutionContext{
@@ -115,19 +120,23 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	}
 	messages := options.Messages
 	if len(messages) == 0 {
-		systemPrompt := buildSystemPrompt(session, req, model.Key, PromptBuildOptions{
-			Stage:                   options.Stage,
-			StageInstructionsPrompt: "",
-			StageSystemPrompt:       "",
-			ToolDefinitions:         effectiveDefs,
-			IncludeAfterCallHints:   true,
-		})
-		e.logPromptMemory(session.RunID, options.Stage, req, session)
-		log.Printf("[llm][run:%s][%s] LLM delta stream system prompt:\n%s", session.RunID, options.Stage, systemPrompt)
-		messages = []openAIMessage{{
-			Role:    "system",
-			Content: systemPrompt,
-		}}
+		if cacheOK {
+			messages = []openAIMessage{cachedSystem}
+		} else {
+			systemPrompt := buildSystemPrompt(session, req, model.Key, PromptBuildOptions{
+				Stage:                   options.Stage,
+				StageInstructionsPrompt: "",
+				StageSystemPrompt:       "",
+				ToolDefinitions:         effectiveDefs,
+				IncludeAfterCallHints:   true,
+			})
+			e.logPromptMemory(session.RunID, options.Stage, req, session)
+			log.Printf("[llm][run:%s][%s] LLM delta stream system prompt:\n%s", session.RunID, options.Stage, systemPrompt)
+			messages = []openAIMessage{{
+				Role:    "system",
+				Content: systemPrompt,
+			}}
+		}
 		for _, raw := range mergeRawMessagesByMsgID(session.HistoryMessages) {
 			msg := rawMessageToOpenAI(raw)
 			if msg.Role != "" {
@@ -138,6 +147,8 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 			Role:    "user",
 			Content: buildUserMessageContent(e.cfg.Paths.ChatsDir, req.ChatID, req.Message, req.References, model.IsVision),
 		})
+	} else if cacheOK {
+		messages = replaceSystemMessage(messages, cachedSystem)
 	}
 	maxSteps := options.MaxSteps
 	if maxSteps <= 0 {

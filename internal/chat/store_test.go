@@ -1522,6 +1522,98 @@ func TestStepWriterPersistsSystemSnapshotWithDriftDetection(t *testing.T) {
 	}
 }
 
+func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-system-init", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	first := SystemInitLine{
+		Type:          "system-init",
+		ChatID:        "chat-system-init",
+		AgentKey:      "agent",
+		RunID:         "run-1",
+		CreatedAt:     1,
+		Fingerprint:   "sha256:first",
+		CacheKey:      "react:main",
+		Mode:          "react",
+		Stage:         "main",
+		SystemMessage: map[string]any{"role": "system", "content": "first"},
+		Tools:         []any{map[string]any{"type": "function"}},
+	}
+	second := first
+	second.RunID = "run-2"
+	second.CreatedAt = 2
+	second.Fingerprint = "sha256:second"
+	second.SystemMessage = map[string]any{"role": "system", "content": "second"}
+	other := first
+	other.CacheKey = "plan-execute:plan"
+	other.Fingerprint = "sha256:other"
+	other.SystemMessage = map[string]any{"role": "system", "content": "other"}
+
+	if err := store.AppendSystemInitLine("chat-system-init", first); err != nil {
+		t.Fatalf("append first: %v", err)
+	}
+	if err := store.AppendSystemInitLine("chat-system-init", other); err != nil {
+		t.Fatalf("append other: %v", err)
+	}
+	if err := store.AppendSystemInitLine("chat-system-init", second); err != nil {
+		t.Fatalf("append second: %v", err)
+	}
+
+	loaded, err := store.LoadSystemInit("chat-system-init", "react:main")
+	if err != nil {
+		t.Fatalf("load system init: %v", err)
+	}
+	if loaded == nil || loaded.Fingerprint != "sha256:second" {
+		t.Fatalf("expected latest matching system-init, got %#v", loaded)
+	}
+	if loaded.SystemMessage["content"] != "second" {
+		t.Fatalf("unexpected system message %#v", loaded.SystemMessage)
+	}
+}
+
+func TestRawMessagesSkipSystemInitLines(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-system-init-raw", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := store.AppendSystemInitLine("chat-system-init-raw", SystemInitLine{
+		Type:          "system-init",
+		ChatID:        "chat-system-init-raw",
+		AgentKey:      "agent",
+		RunID:         "run-1",
+		CreatedAt:     1,
+		Fingerprint:   "sha256:init",
+		CacheKey:      "react:main",
+		SystemMessage: map[string]any{"role": "system", "content": "frozen"},
+		Tools:         []any{},
+	}); err != nil {
+		t.Fatalf("append system init: %v", err)
+	}
+	if err := store.AppendQueryLine("chat-system-init-raw", QueryLine{
+		Type:      "query",
+		ChatID:    "chat-system-init-raw",
+		RunID:     "run-1",
+		UpdatedAt: 2,
+		Query:     map[string]any{"role": "user", "message": "hello"},
+	}); err != nil {
+		t.Fatalf("append query: %v", err)
+	}
+	messages, err := store.LoadRawMessages("chat-system-init-raw", 5)
+	if err != nil {
+		t.Fatalf("load raw messages: %v", err)
+	}
+	if len(messages) != 1 || messages[0]["role"] != "user" || messages[0]["content"] != "hello" {
+		t.Fatalf("expected only query message, got %#v", messages)
+	}
+}
+
 func TestStepWriterDropsAwaitingWithoutMessages(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

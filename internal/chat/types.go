@@ -35,6 +35,20 @@ type ArtifactItemState struct {
 // Chat Storage V3.1 — JSONL line types (matching Java format)
 // ---------------------------------------------------------------------------
 
+type SystemInitLine struct {
+	Type          string         `json:"_type"`
+	ChatID        string         `json:"chatId"`
+	AgentKey      string         `json:"agentKey"`
+	RunID         string         `json:"runId"`
+	CreatedAt     int64          `json:"createdAt"`
+	Fingerprint   string         `json:"fingerprint"`
+	CacheKey      string         `json:"cacheKey,omitempty"`
+	Mode          string         `json:"mode,omitempty"`
+	Stage         string         `json:"stage,omitempty"`
+	SystemMessage map[string]any `json:"systemMessage"`
+	Tools         []any          `json:"tools"`
+}
+
 // QueryLine represents a _type:"query" line in chatId.jsonl.
 // Field order matches Java: chatId, runId, updatedAt, hidden, query, _type.
 type QueryLine struct {
