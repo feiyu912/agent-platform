@@ -298,9 +298,13 @@ type GatewayWSConfig struct {
 type GatewayEntry struct {
 	// ID 是 gateway 在 Registry 里的唯一键，Admin API 按 ID 增删。
 	ID string
-	// Channel 是路由键，对应 chatId 前缀（"wecom" / "feishu" / ...）。
-	// 空串表示 "默认 / 捕获未匹配的"，单 gateway 部署下总会命中。
-	Channel            string
+	// Channel 是用户配置的 channel id，用于 UI / 权限 / 管理面。
+	// 兼容老部署时它也可以等于 chatId 前缀（如 "wecom"）。
+	Channel string
+	// SourceChannel 是 gateway URL 里 ?channel= 的完整来源标签（如 "wecom:xiaozhai"）。
+	// SourcePrefix 是 SourceChannel 冒号前的来源前缀（如 "wecom"），用于兼容旧 chatId。
+	SourceChannel      string
+	SourcePrefix       string
 	URL                string
 	JwtToken           string
 	BaseURL            string
@@ -728,9 +732,12 @@ func LoadChannelsOnly(cfg Config, path string) ([]GatewayEntry, error) {
 // channelConfigToGatewayEntry converts a ChannelConfig to a GatewayEntry,
 // filling in defaults from cfg.GatewayWS when channel fields are missing.
 func channelConfigToGatewayEntry(cfg Config, channelCfg ChannelConfig) GatewayEntry {
+	sourceChannel := deriveSourceChannelFromURL(channelCfg.Gateway.URL)
 	entry := GatewayEntry{
 		ID:                 channelCfg.ID,
 		Channel:            channelCfg.ID,
+		SourceChannel:      sourceChannel,
+		SourcePrefix:       sourcePrefix(sourceChannel),
 		URL:                strings.TrimSpace(channelCfg.Gateway.URL),
 		JwtToken:           strings.TrimSpace(channelCfg.Gateway.JwtToken),
 		BaseURL:            strings.TrimSpace(channelCfg.Gateway.BaseURL),
@@ -1060,6 +1067,8 @@ func (c *Config) normalizeChannels() error {
 		c.Gateways = append(c.Gateways, GatewayEntry{
 			ID:                 channelID,
 			Channel:            channelID,
+			SourceChannel:      deriveSourceChannelFromURL(channelCfg.Gateway.URL),
+			SourcePrefix:       deriveChannelFromURL(channelCfg.Gateway.URL),
 			URL:                strings.TrimSpace(channelCfg.Gateway.URL),
 			JwtToken:           strings.TrimSpace(channelCfg.Gateway.JwtToken),
 			BaseURL:            strings.TrimSpace(channelCfg.Gateway.BaseURL),
@@ -1078,6 +1087,8 @@ func (c *Config) normalizeGateways() error {
 		c.Gateways = append(c.Gateways, GatewayEntry{
 			ID:                 "default",
 			Channel:            deriveChannelFromURL(c.GatewayWS.URL),
+			SourceChannel:      deriveSourceChannelFromURL(c.GatewayWS.URL),
+			SourcePrefix:       deriveChannelFromURL(c.GatewayWS.URL),
 			URL:                strings.TrimSpace(c.GatewayWS.URL),
 			JwtToken:           strings.TrimSpace(c.GatewayWS.JwtToken),
 			BaseURL:            strings.TrimSpace(c.GatewayWS.BaseURL),
@@ -1112,9 +1123,16 @@ func (c *Config) normalizeGateways() error {
 		if strings.TrimSpace(g.Channel) == "" {
 			g.Channel = deriveChannelFromURL(g.URL)
 		}
+		if strings.TrimSpace(g.SourceChannel) == "" {
+			g.SourceChannel = deriveSourceChannelFromURL(g.URL)
+		}
+		if strings.TrimSpace(g.SourcePrefix) == "" {
+			g.SourcePrefix = sourcePrefix(g.SourceChannel)
+		}
 	}
 	seenIDs := map[string]struct{}{}
 	seenChannels := map[string]struct{}{}
+	seenSourceChannels := map[string]struct{}{}
 	for _, gateway := range c.Gateways {
 		id := strings.TrimSpace(gateway.ID)
 		if _, exists := seenIDs[id]; exists {
@@ -1122,13 +1140,20 @@ func (c *Config) normalizeGateways() error {
 		}
 		seenIDs[id] = struct{}{}
 		channel := strings.TrimSpace(gateway.Channel)
-		if channel == "" {
+		if channel != "" {
+			if _, exists := seenChannels[channel]; exists {
+				return fmt.Errorf("gateway config: duplicate channel %q", channel)
+			}
+			seenChannels[channel] = struct{}{}
+		}
+		sourceChannel := strings.TrimSpace(gateway.SourceChannel)
+		if sourceChannel == "" {
 			continue
 		}
-		if _, exists := seenChannels[channel]; exists {
-			return fmt.Errorf("gateway config: duplicate channel %q", channel)
+		if _, exists := seenSourceChannels[sourceChannel]; exists {
+			return fmt.Errorf("gateway config: duplicate source channel %q", sourceChannel)
 		}
-		seenChannels[channel] = struct{}{}
+		seenSourceChannels[sourceChannel] = struct{}{}
 	}
 	return nil
 }
@@ -1137,11 +1162,19 @@ func (c *Config) normalizeGateways() error {
 // channel 值形如 "wecom:xiaozhai" 时只取冒号前的 "wecom" 作为路由键。
 // 解析失败或缺失时返回空串（= 默认条目，命中所有未匹配前缀的 chatId）。
 func deriveChannelFromURL(raw string) string {
+	return sourcePrefix(deriveSourceChannelFromURL(raw))
+}
+
+func deriveSourceChannelFromURL(raw string) string {
 	parsed, err := neturl.Parse(strings.TrimSpace(raw))
 	if err != nil || parsed == nil {
 		return ""
 	}
-	ch := strings.TrimSpace(parsed.Query().Get("channel"))
+	return strings.TrimSpace(parsed.Query().Get("channel"))
+}
+
+func sourcePrefix(ch string) string {
+	ch = strings.TrimSpace(ch)
 	if ch == "" {
 		return ""
 	}

@@ -17,8 +17,12 @@ import (
 )
 
 type Config struct {
+	ID      string
+	Channel string
 	// URL 已由部署侧提供完整入口（含 key/channel 等 query 参数），client 原样使用。
 	URL string
+	// BaseURL 用于当前反向 gateway 连接发起 request 后的 HTTP 旁路回调。
+	BaseURL string
 	// Token 是握手使用的 Bearer JWT，来自 channel gateway.jwt-token。
 	Token            string
 	HandshakeTimeout time.Duration
@@ -154,6 +158,12 @@ func (c *Client) run() {
 			return
 		}
 		connCtx, connCancel := context.WithCancel(c.ctx)
+		connCtx = ws.WithGatewayContext(connCtx, ws.GatewayContext{
+			ID:      strings.TrimSpace(c.cfg.ID),
+			Channel: strings.TrimSpace(c.cfg.Channel),
+			BaseURL: strings.TrimSpace(c.cfg.BaseURL),
+			Token:   strings.TrimSpace(c.cfg.Token),
+		})
 		log.Printf("gateway websocket connected: url=%s", c.cfg.URL)
 		startedAt := time.Now()
 		ws.NewSilentConn(socket, c.hub, c.wsCfg, c.heartbeat, ws.AuthSession{Context: connCtx}).Run(c.dispatch)

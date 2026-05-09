@@ -619,8 +619,41 @@ func TestLoadChannelsConfigFromFile(t *testing.T) {
 			if gatewaysByID["wecom"].Channel != "wecom" {
 				t.Fatalf("unexpected synthesized wecom channel: %#v", gatewaysByID["wecom"])
 			}
+			if gatewaysByID["wecom"].SourceChannel != "wecom:corp1" || gatewaysByID["wecom"].SourcePrefix != "wecom" {
+				t.Fatalf("unexpected synthesized wecom source route: %#v", gatewaysByID["wecom"])
+			}
 			if gatewaysByID["feishu"].BaseURL != "http://gateway.example.com" {
 				t.Fatalf("expected feishu baseURL from fallback interpolation, got %q", gatewaysByID["feishu"].BaseURL)
+			}
+		})
+	})
+}
+
+func TestLoadChannelsConfigAllowsCustomChannelIDForWecomSource(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"channels:\n" +
+			"  company-gateway:\n" +
+			"    name: 公司网关\n" +
+			"    type: bridge\n" +
+			"    agents: \"*\"\n" +
+			"    gateway:\n" +
+			"      url: ws://zwy.zenmind.cc/ws/agent?agentKey=zenmi&channel=wecom:langyage\n" +
+			"      jwt-token: token\n"
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if len(cfg.Gateways) != 1 {
+				t.Fatalf("expected one gateway, got %d", len(cfg.Gateways))
+			}
+			gateway := cfg.Gateways[0]
+			if gateway.ID != "company-gateway" || gateway.Channel != "company-gateway" {
+				t.Fatalf("expected user channel id to be preserved, got %#v", gateway)
+			}
+			if gateway.SourceChannel != "wecom:langyage" || gateway.SourcePrefix != "wecom" {
+				t.Fatalf("expected wecom source route to be derived, got %#v", gateway)
 			}
 		})
 	})

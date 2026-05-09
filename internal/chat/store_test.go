@@ -71,6 +71,41 @@ func TestFileStoreUpdateAgentKeyPersistsIntoSummary(t *testing.T) {
 	}
 }
 
+func TestFileStoreSetSourceChannelPersistsIntoSummaryAndListChats(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("wecom#single#u1#1", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.SetSourceChannel("wecom#single#u1#1", "wecom:langyage"); err != nil {
+		t.Fatalf("set source channel: %v", err)
+	}
+	sourceChannel, err := store.SourceChannel("wecom#single#u1#1")
+	if err != nil {
+		t.Fatalf("source channel: %v", err)
+	}
+	if sourceChannel != "wecom:langyage" {
+		t.Fatalf("expected source channel wecom:langyage, got %q", sourceChannel)
+	}
+	summary, err := store.Summary("wecom#single#u1#1")
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if summary.SourceChannel != "wecom:langyage" {
+		t.Fatalf("expected source channel in summary, got %#v", summary)
+	}
+	items, err := store.ListChats("", "")
+	if err != nil {
+		t.Fatalf("list chats: %v", err)
+	}
+	if len(items) != 1 || items[0].SourceChannel != "wecom:langyage" {
+		t.Fatalf("expected source channel in list, got %#v", items)
+	}
+}
+
 func TestFileStoreClearPendingAwaitingClearsMatchingAwaitingID(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

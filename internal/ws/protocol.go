@@ -63,6 +63,33 @@ type AuthSession struct {
 	Subprotocol string
 }
 
+type GatewayContext struct {
+	ID      string
+	Channel string
+	BaseURL string
+	Token   string
+}
+
+type gatewayContextKey struct{}
+
+func WithGatewayContext(ctx context.Context, gateway GatewayContext) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, gatewayContextKey{}, gateway)
+}
+
+func GatewayFromContext(ctx context.Context) (GatewayContext, bool) {
+	if ctx == nil {
+		return GatewayContext{}, false
+	}
+	gateway, ok := ctx.Value(gatewayContextKey{}).(GatewayContext)
+	if !ok {
+		return GatewayContext{}, false
+	}
+	return gateway, true
+}
+
 type TokenAuthenticator interface {
 	VerifyToken(ctx context.Context, token string) (AuthSession, error)
 }

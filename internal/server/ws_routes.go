@@ -255,6 +255,10 @@ func (s *Server) wsResource(ctx context.Context, conn *ws.Conn, req ws.RequestFr
 		return
 	}
 	baseURL, token := s.resolveGatewayForChat(chatID)
+	if gateway, ok := ws.GatewayFromContext(ctx); ok {
+		baseURL = strings.TrimSpace(gateway.BaseURL)
+		token = strings.TrimSpace(gateway.Token)
+	}
 	uploadURL := s.buildGatewayURL(baseURL, pushURL)
 	if uploadURL == "" {
 		conn.SendError(req.ID, "invalid_request", 400, "empty pushURL", nil)

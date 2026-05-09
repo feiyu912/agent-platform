@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	neturl "net/url"
 	"reflect"
 	"strings"
 	"sync"
@@ -26,19 +27,23 @@ import (
 
 // Entry 是 Registry 里一条 gateway 的运行态快照，给 Admin API List 用。
 type Entry struct {
-	ID      string
-	Channel string
-	URL     string
-	BaseURL string
-	Token   string // 返回给调用方时一般不暴露，仅内部使用
-	client  *gatewayclient.Client
+	ID            string
+	Channel       string
+	SourceChannel string
+	SourcePrefix  string
+	URL           string
+	BaseURL       string
+	Token         string // 返回给调用方时一般不暴露，仅内部使用
+	client        *gatewayclient.Client
 }
 
 // Registry 线程安全。
 type Registry struct {
-	mu        sync.RWMutex
-	entries   map[string]*Entry // id → entry
-	byChannel map[string]string // channel → id (单 channel 单 gateway；后续多同 channel 再扩)
+	mu              sync.RWMutex
+	entries         map[string]*Entry // id → entry
+	byChannel       map[string]string // user channel id → id
+	bySourceChannel map[string]string // full source channel (wecom:xiaozhai) → id
+	bySourcePrefix  map[string]string // source/chatId prefix → id only when unambiguous
 
 	// 依赖：新建 connector 时需要这些
 	wsCfg     config.WebSocketConfig
@@ -52,13 +57,15 @@ type Registry struct {
 // New 创建 Registry。rootCtx 用于给每个 connector.Start 传递；Registry 自己不起 goroutine。
 func New(rootCtx context.Context, wsCfg config.WebSocketConfig, heartbeat time.Duration, hub *ws.Hub, dispatch ws.RouteHandler) *Registry {
 	return &Registry{
-		entries:   map[string]*Entry{},
-		byChannel: map[string]string{},
-		wsCfg:     wsCfg,
-		heartbeat: heartbeat,
-		hub:       hub,
-		dispatch:  dispatch,
-		rootCtx:   rootCtx,
+		entries:         map[string]*Entry{},
+		byChannel:       map[string]string{},
+		bySourceChannel: map[string]string{},
+		bySourcePrefix:  map[string]string{},
+		wsCfg:           wsCfg,
+		heartbeat:       heartbeat,
+		hub:             hub,
+		dispatch:        dispatch,
+		rootCtx:         rootCtx,
 	}
 }
 
@@ -80,15 +87,31 @@ func (r *Registry) Register(entry config.GatewayEntry) error {
 		return ErrDuplicateID
 	}
 	channelKey := strings.TrimSpace(entry.Channel)
+	sourceChannel := strings.TrimSpace(entry.SourceChannel)
+	if sourceChannel == "" {
+		sourceChannel = deriveSourceChannelFromURL(entry.URL)
+	}
+	sourcePrefix := strings.TrimSpace(entry.SourcePrefix)
+	if sourcePrefix == "" {
+		sourcePrefix = sourcePrefixFromChannel(sourceChannel)
+	}
 	if channelKey != "" {
 		if _, exists := r.byChannel[channelKey]; exists {
+			return ErrDuplicateChannel
+		}
+	}
+	if sourceChannel != "" {
+		if _, exists := r.bySourceChannel[sourceChannel]; exists {
 			return ErrDuplicateChannel
 		}
 	}
 
 	client := gatewayclient.New(
 		gatewayclient.Config{
+			ID:               id,
+			Channel:          channelKey,
 			URL:              strings.TrimSpace(entry.URL),
+			BaseURL:          strings.TrimSpace(entry.BaseURL),
 			Token:            strings.TrimSpace(entry.JwtToken),
 			HandshakeTimeout: time.Duration(entry.HandshakeTimeoutMs) * time.Millisecond,
 			ReconnectMin:     time.Duration(entry.ReconnectMinMs) * time.Millisecond,
@@ -102,17 +125,23 @@ func (r *Registry) Register(entry config.GatewayEntry) error {
 	client.Start(r.rootCtx)
 
 	e := &Entry{
-		ID:      id,
-		Channel: channelKey,
-		URL:     strings.TrimSpace(entry.URL),
-		BaseURL: strings.TrimSpace(entry.BaseURL),
-		Token:   strings.TrimSpace(entry.JwtToken),
-		client:  client,
+		ID:            id,
+		Channel:       channelKey,
+		SourceChannel: sourceChannel,
+		SourcePrefix:  sourcePrefix,
+		URL:           strings.TrimSpace(entry.URL),
+		BaseURL:       strings.TrimSpace(entry.BaseURL),
+		Token:         strings.TrimSpace(entry.JwtToken),
+		client:        client,
 	}
 	r.entries[id] = e
 	if e.Channel != "" {
 		r.byChannel[e.Channel] = id
 	}
+	if e.SourceChannel != "" {
+		r.bySourceChannel[e.SourceChannel] = id
+	}
+	r.rebuildSourcePrefixIndexLocked()
 	return nil
 }
 
@@ -128,6 +157,10 @@ func (r *Registry) Unregister(id string) error {
 	if entry.Channel != "" && r.byChannel[entry.Channel] == id {
 		delete(r.byChannel, entry.Channel)
 	}
+	if entry.SourceChannel != "" && r.bySourceChannel[entry.SourceChannel] == id {
+		delete(r.bySourceChannel, entry.SourceChannel)
+	}
+	r.rebuildSourcePrefixIndexLocked()
 	r.mu.Unlock()
 
 	return entry.client.Stop()
@@ -155,11 +188,27 @@ func (r *Registry) LookupByChatID(chatID string) (*Entry, bool) {
 		if id, ok := r.byChannel[channelID]; ok {
 			return r.entries[id], true
 		}
+		if id, ok := r.bySourcePrefix[channelID]; ok {
+			return r.entries[id], true
+		}
 	}
 	if len(r.entries) == 1 {
 		for _, e := range r.entries {
 			return e, true
 		}
+	}
+	return nil, false
+}
+
+func (r *Registry) LookupBySourceChannel(sourceChannel string) (*Entry, bool) {
+	sourceChannel = strings.TrimSpace(sourceChannel)
+	if sourceChannel == "" {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if id, ok := r.bySourceChannel[sourceChannel]; ok {
+		return r.entries[id], true
 	}
 	return nil, false
 }
@@ -177,6 +226,55 @@ func (r *Registry) Resolve(chatID string) (string, string, bool) {
 		return "", "", false
 	}
 	return entry.BaseURL, entry.Token, true
+}
+
+func (r *Registry) ResolveSourceChannel(sourceChannel string) (string, string, bool) {
+	entry, ok := r.LookupBySourceChannel(sourceChannel)
+	if !ok {
+		return "", "", false
+	}
+	return entry.BaseURL, entry.Token, true
+}
+
+func (r *Registry) rebuildSourcePrefixIndexLocked() {
+	counts := map[string]int{}
+	owner := map[string]string{}
+	for id, entry := range r.entries {
+		prefix := strings.TrimSpace(entry.SourcePrefix)
+		if prefix == "" {
+			prefix = sourcePrefixFromChannel(entry.SourceChannel)
+		}
+		if prefix == "" {
+			continue
+		}
+		counts[prefix]++
+		owner[prefix] = id
+	}
+	r.bySourcePrefix = map[string]string{}
+	for prefix, count := range counts {
+		if count == 1 {
+			r.bySourcePrefix[prefix] = owner[prefix]
+		}
+	}
+}
+
+func sourcePrefixFromChannel(sourceChannel string) string {
+	sourceChannel = strings.TrimSpace(sourceChannel)
+	if sourceChannel == "" {
+		return ""
+	}
+	if idx := strings.Index(sourceChannel, ":"); idx > 0 {
+		return sourceChannel[:idx]
+	}
+	return sourceChannel
+}
+
+func deriveSourceChannelFromURL(raw string) string {
+	parsed, err := neturl.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil {
+		return ""
+	}
+	return strings.TrimSpace(parsed.Query().Get("channel"))
 }
 
 // Connected 返回指定 channel 当前对应的 gateway 反向 WS 是否在线。
@@ -211,6 +309,8 @@ func (r *Registry) StopAll() {
 	entries := r.entries
 	r.entries = map[string]*Entry{}
 	r.byChannel = map[string]string{}
+	r.bySourceChannel = map[string]string{}
+	r.bySourcePrefix = map[string]string{}
 	r.mu.Unlock()
 	for _, e := range entries {
 		_ = e.client.Stop()
@@ -263,16 +363,20 @@ func (r *Registry) Reconcile(desired []config.GatewayEntry) error {
 		// Only compare fields stored in Entry (Channel, URL, BaseURL, Token).
 		// HandshakeTimeoutMs/ReconnectMinMs/ReconnectMaxMs are used at registration only.
 		expectedEntry := config.GatewayEntry{
-			ID:      id,
-			Channel: strings.TrimSpace(entry.Channel),
-			URL:     strings.TrimSpace(entry.URL),
-			BaseURL: strings.TrimSpace(entry.BaseURL),
+			ID:            id,
+			Channel:       strings.TrimSpace(entry.Channel),
+			SourceChannel: strings.TrimSpace(entry.SourceChannel),
+			SourcePrefix:  strings.TrimSpace(entry.SourcePrefix),
+			URL:           strings.TrimSpace(entry.URL),
+			BaseURL:       strings.TrimSpace(entry.BaseURL),
 		}
 		actualEntry := config.GatewayEntry{
-			ID:      current.ID,
-			Channel: current.Channel,
-			URL:     current.URL,
-			BaseURL: current.BaseURL,
+			ID:            current.ID,
+			Channel:       current.Channel,
+			SourceChannel: current.SourceChannel,
+			SourcePrefix:  current.SourcePrefix,
+			URL:           current.URL,
+			BaseURL:       current.BaseURL,
 		}
 		if !reflect.DeepEqual(expectedEntry, actualEntry) ||
 			strings.TrimSpace(entry.JwtToken) != current.Token {

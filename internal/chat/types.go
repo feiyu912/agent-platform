@@ -169,6 +169,7 @@ type Summary struct {
 	ChatName        string           `json:"chatName"`
 	AgentKey        string           `json:"agentKey,omitempty"`
 	TeamID          string           `json:"teamId,omitempty"`
+	SourceChannel   string           `json:"sourceChannel,omitempty"`
 	CreatedAt       int64            `json:"createdAt"`
 	UpdatedAt       int64            `json:"updatedAt"`
 	LastRunID       string           `json:"lastRunId,omitempty"`

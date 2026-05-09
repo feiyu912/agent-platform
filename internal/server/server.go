@@ -95,6 +95,8 @@ type GatewayAdmin interface {
 type GatewayAdminEntry struct {
 	ID                 string `json:"id"`
 	Channel            string `json:"channel"`
+	SourceChannel      string `json:"sourceChannel,omitempty"`
+	SourcePrefix       string `json:"sourcePrefix,omitempty"`
 	URL                string `json:"url"`
 	BaseURL            string `json:"baseUrl,omitempty"`
 	Token              string `json:"token,omitempty"`

@@ -153,6 +153,12 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 			"timestamp": summary.CreatedAt,
 		})
 	}
+	if sourceChannel := sourceChannelFromParams(req.Params); sourceChannel != "" {
+		if err := s.deps.Chats.SetSourceChannel(chatID, sourceChannel); err != nil {
+			return preparedQuery{}, err
+		}
+		summary.SourceChannel = sourceChannel
+	}
 	session, err := s.BuildQuerySession(r.Context(), req, summary, agentDef, querySessionBuildOptions{
 		Created:           created,
 		IncludeHistory:    !created,
@@ -347,6 +353,16 @@ func runtimeAgentEnv(value any) map[string]string {
 	default:
 		return nil
 	}
+}
+
+func sourceChannelFromParams(params map[string]any) string {
+	if len(params) == 0 {
+		return ""
+	}
+	if value, ok := params["channel"].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func resolveSkillRuntimeSettings(agentEnv map[string]string, agentDir string, marketDir string, skillKeys []string) ([]string, map[string]string) {

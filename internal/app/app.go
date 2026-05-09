@@ -187,7 +187,7 @@ func New(rootCtx context.Context) (*App, error) {
 	}
 	// gatewayResolver 在 Registry 构建完成后（server 依赖就绪之后）绑定。
 	// pusher 先拿到 resolver 指针，Registry 构建完调用 SetRegistry 就能工作。
-	gatewayResolver := &lazyGatewayResolver{}
+	gatewayResolver := &lazyGatewayResolver{chats: chatStore}
 	backendTools.WithArtifactPusher(artifactpusher.New(artifactpusher.Config{
 		Resolver:      gatewayResolver,
 		UploadPath:    config.GatewayUploadPath,
@@ -486,6 +486,8 @@ func (a *gatewayAdminAdapter) AdminRegister(entry server.GatewayAdminEntry) erro
 	return reg.Register(config.GatewayEntry{
 		ID:                 entry.ID,
 		Channel:            entry.Channel,
+		SourceChannel:      entry.SourceChannel,
+		SourcePrefix:       entry.SourcePrefix,
 		URL:                entry.URL,
 		JwtToken:           entry.Token,
 		BaseURL:            entry.BaseURL,
@@ -512,10 +514,12 @@ func (a *gatewayAdminAdapter) AdminList() []server.GatewayAdminEntry {
 	out := make([]server.GatewayAdminEntry, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, server.GatewayAdminEntry{
-			ID:      e.ID,
-			Channel: e.Channel,
-			URL:     e.URL,
-			BaseURL: e.BaseURL,
+			ID:            e.ID,
+			Channel:       e.Channel,
+			SourceChannel: e.SourceChannel,
+			SourcePrefix:  e.SourcePrefix,
+			URL:           e.URL,
+			BaseURL:       e.BaseURL,
 		})
 	}
 	return out
@@ -525,8 +529,11 @@ func (a *gatewayAdminAdapter) AdminList() []server.GatewayAdminEntry {
 // pusher 在 Registry 就绪前先创建；Registry 就绪后 SetRegistry 绑定实际实现。
 // Registry 未绑定时 Resolve 返回 ok=false（等同于 gateway 未配置），pusher 会跳过上传。
 type lazyGatewayResolver struct {
-	mu  sync.RWMutex
-	reg *gateway.Registry
+	mu    sync.RWMutex
+	reg   *gateway.Registry
+	chats interface {
+		SourceChannel(chatID string) (string, error)
+	}
 }
 
 func (l *lazyGatewayResolver) SetRegistry(r *gateway.Registry) {
@@ -544,9 +551,17 @@ func (l *lazyGatewayResolver) Registry() *gateway.Registry {
 func (l *lazyGatewayResolver) Resolve(chatID string) (string, string, bool) {
 	l.mu.RLock()
 	r := l.reg
+	chats := l.chats
 	l.mu.RUnlock()
 	if r == nil {
 		return "", "", false
+	}
+	if chats != nil {
+		if sourceChannel, err := chats.SourceChannel(chatID); err == nil && strings.TrimSpace(sourceChannel) != "" {
+			if baseURL, token, ok := r.ResolveSourceChannel(sourceChannel); ok {
+				return baseURL, token, true
+			}
+		}
 	}
 	return r.Resolve(chatID)
 }

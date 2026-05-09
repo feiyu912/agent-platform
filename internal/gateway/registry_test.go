@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"context"
+	"sync"
 	"testing"
 
 	"agent-platform-runner-go/internal/channel"
@@ -28,8 +30,10 @@ func TestChannelFromChatID(t *testing.T) {
 // 不走 Register（避免启真 ws）。
 func TestLookupByChatIDRouting(t *testing.T) {
 	r := &Registry{
-		entries:   map[string]*Entry{},
-		byChannel: map[string]string{},
+		entries:         map[string]*Entry{},
+		byChannel:       map[string]string{},
+		bySourceChannel: map[string]string{},
+		bySourcePrefix:  map[string]string{},
 	}
 	r.entries["wecom-xiaozhai"] = &Entry{ID: "wecom-xiaozhai", Channel: "wecom"}
 	r.byChannel["wecom"] = "wecom-xiaozhai"
@@ -50,11 +54,36 @@ func TestLookupByChatIDRouting(t *testing.T) {
 	}
 }
 
+func TestLookupBySourceChannelSupportsCustomChannelIDs(t *testing.T) {
+	r := &Registry{
+		entries:         map[string]*Entry{},
+		byChannel:       map[string]string{},
+		bySourceChannel: map[string]string{},
+		bySourcePrefix:  map[string]string{},
+	}
+	r.entries["my-bridge"] = &Entry{ID: "my-bridge", Channel: "my-bridge", SourceChannel: "wecom:xiaozhai", SourcePrefix: "wecom"}
+	r.entries["company-gateway"] = &Entry{ID: "company-gateway", Channel: "company-gateway", SourceChannel: "wecom:langyage", SourcePrefix: "wecom"}
+	r.byChannel["my-bridge"] = "my-bridge"
+	r.byChannel["company-gateway"] = "company-gateway"
+	r.bySourceChannel["wecom:xiaozhai"] = "my-bridge"
+	r.bySourceChannel["wecom:langyage"] = "company-gateway"
+	r.rebuildSourcePrefixIndexLocked()
+
+	if e, ok := r.LookupBySourceChannel("wecom:langyage"); !ok || e.ID != "company-gateway" {
+		t.Fatalf("source channel routing failed: ok=%v entry=%+v", ok, e)
+	}
+	if _, ok := r.LookupByChatID("wecom#single#u1#1"); ok {
+		t.Fatalf("ambiguous source prefix should not choose one of multiple wecom gateways")
+	}
+}
+
 func TestLookupByChatIDLegacySingleGatewayFallback(t *testing.T) {
 	// 单 gateway、channel 空：任何 chatId 都应路由到它（legacy 兼容）
 	r := &Registry{
-		entries:   map[string]*Entry{},
-		byChannel: map[string]string{},
+		entries:         map[string]*Entry{},
+		byChannel:       map[string]string{},
+		bySourceChannel: map[string]string{},
+		bySourcePrefix:  map[string]string{},
 	}
 	r.entries["default"] = &Entry{ID: "default", Channel: ""}
 
@@ -73,9 +102,9 @@ type fakeClient struct {
 	stopped bool
 }
 
-func (f *fakeClient) Start(ctx context.Context)    { f.started = true }
-func (f *fakeClient) Stop() error               { f.stopped = true; return nil }
-func (f *fakeClient) Connected() bool            { return f.started && !f.stopped }
+func (f *fakeClient) Start(ctx context.Context)     { f.started = true }
+func (f *fakeClient) Stop() error                   { f.stopped = true; return nil }
+func (f *fakeClient) Connected() bool               { return f.started && !f.stopped }
 func (f *fakeClient) SetRouteHandler(h interface{}) {}
 
 // fakeRegistry is a Registry variant for testing that uses fakeClient.
@@ -123,7 +152,6 @@ func (r *fakeRegistry) wasUnregistered(id string) bool {
 
 func TestReconcileEmptyToNonEmpty(t *testing.T) {
 	// Start with empty registry, reconcile with entries → all should be registered
-	r := newFakeRegistry()
 	desired := []config.GatewayEntry{
 		{ID: "wecom", URL: "ws://127.0.0.1:11970/ws/agent", JwtToken: "tok1"},
 		{ID: "feishu", URL: "ws://127.0.0.1:11971/ws/agent", JwtToken: "tok2"},
