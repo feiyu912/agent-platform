@@ -55,7 +55,6 @@
     "__ERROR_LOG_LINE__": "__ERROR_LOG_LINE__",
     "requiredPaths": [
       "__BACKEND_ENTRY__",
-      "local-cli-acp-relay/relay.mjs",
       "__START_SCRIPT__",
       "__STOP_SCRIPT__",
       "__DEPLOY_SCRIPT__",

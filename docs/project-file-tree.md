@@ -511,13 +511,6 @@
 - `internal/ws/gatewayclient/client.go` (226 行): Gateway WebSocket 客户端：client
 - `internal/ws/gatewayclient/client_test.go` (318 行): 测试与回归验证：client
 
-## `local-cli-acp-relay/`
-
-目录作用：本地 CLI ACP Relay。
-
-- `local-cli-acp-relay/README.md` (25 行): 项目总览、运行方式和接口说明
-- `local-cli-acp-relay/relay.mjs` (1042 行): Node.js ESM 程序：relay
-
 ## `scripts/`
 
 目录作用：发布、校验、评测和辅助脚本。
@@ -555,4 +548,3 @@
 - `scripts/release-assets/program/windows/program-common.ps1` (161 行): PowerShell 脚本：program common
 - `scripts/release-assets/program/windows/start.ps1` (18 行): PowerShell 脚本：start
 - `scripts/release-assets/program/windows/stop.ps1` (7 行): PowerShell 脚本：stop
-

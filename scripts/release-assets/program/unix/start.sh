@@ -18,14 +18,11 @@ main() {
 
   if [[ "$mode" == "--daemon" ]]; then
     program_prepare_log_file
-    program_start_relay_daemon
     program_start_backend_daemon
     return
   fi
 
   program_prepare_log_file
-  program_start_relay_daemon
-  trap 'program_stop_relay' EXIT
   program_exec_backend
 }
 

@@ -219,7 +219,6 @@ function Build-ProgramBundle {
         New-Item -ItemType Directory -Path $backendDir -Force | Out-Null
         New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $bundleRoot "configs") -Force | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $bundleRoot "local-cli-acp-relay") -Force | Out-Null
 
         Write-Host "[release] building program binary for $TargetOs..."
         $env:CGO_ENABLED = "0"
@@ -232,9 +231,6 @@ function Build-ProgramBundle {
 
         Copy-Item "$REPO_ROOT/.env.example" $bundleRoot
         Copy-Item "$PROGRAM_RELEASE_ASSETS_DIR/README.txt" $bundleRoot
-        Copy-Item "$REPO_ROOT/local-cli-acp-relay/relay.mjs" (Join-Path $bundleRoot "local-cli-acp-relay")
-        Copy-Item "$REPO_ROOT/local-cli-acp-relay/.env.example" (Join-Path $bundleRoot "local-cli-acp-relay")
-        Copy-Item "$REPO_ROOT/local-cli-acp-relay/README.md" (Join-Path $bundleRoot "local-cli-acp-relay")
 
         $manifestPath = Join-Path $bundleRoot "manifest.json"
         Write-ProgramManifest -Dest $manifestPath -TargetOs $TargetOs -TargetArch $TargetArch -BackendEntry $backendEntry -AssetFileName (Split-Path $bundleArchive -Leaf)
