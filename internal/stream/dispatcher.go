@@ -130,9 +130,9 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 				"injectedPrompt": clonePayload(value.InjectedPrompt),
 				"systemRef":      clonePayload(value.SystemRef),
 				"contextWindow": map[string]any{
-					"max_size":       value.ContextWindow,
-					"actual_size":    value.CurrentContextSize,
-					"estimated_size": value.EstimatedNextCallSize,
+					"maxSize":       value.ContextWindow,
+					"actualSize":    value.CurrentContextSize,
+					"estimatedSize": value.EstimatedNextCallSize,
 				},
 				"usage": map[string]any{
 					"runUsage": map[string]any{
@@ -159,9 +159,9 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 					"key": value.ModelKey,
 				},
 				"contextWindow": map[string]any{
-					"max_size":       value.ContextWindow,
-					"actual_size":    value.CurrentContextSize,
-					"estimated_size": value.EstimatedNextCallSize,
+					"maxSize":       value.ContextWindow,
+					"actualSize":    value.CurrentContextSize,
+					"estimatedSize": value.EstimatedNextCallSize,
 				},
 				"usage": map[string]any{
 					"llmReturnUsage": map[string]any{

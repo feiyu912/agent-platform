@@ -82,7 +82,7 @@ func TestPrepareSystemInitCacheUsesFreshSystemMessageOnFingerprintMatch(t *testi
 		t.Fatalf("prepare system init cache: %v", err)
 	}
 	if len(pending) != 0 {
-		t.Fatalf("did not expect unchanged fingerprint to append system-init, got %#v", pending)
+		t.Fatalf("did not expect unchanged fingerprint to append system cache line, got %#v", pending)
 	}
 	snapshot, ok := newSession.SystemInitCache["react:main"]
 	if !ok {
@@ -128,10 +128,10 @@ func TestPrepareSystemInitCacheReturnsPendingLineOnFingerprintChange(t *testing.
 		t.Fatalf("prepare system init cache: %v", err)
 	}
 	if len(pending) != 1 {
-		t.Fatalf("expected one pending system-init line, got %#v", pending)
+		t.Fatalf("expected one pending system cache line, got %#v", pending)
 	}
-	if pending[0].CacheKey != "react:main" || pending[0].Fingerprint == "" {
-		t.Fatalf("unexpected pending system-init line %#v", pending[0])
+	if pending[0].Type != "system" || pending[0].CacheKey != "react:main" || pending[0].Fingerprint == "" {
+		t.Fatalf("unexpected pending system cache line %#v", pending[0])
 	}
 	if _, ok := session.SystemInitCache["react:main"]; !ok {
 		t.Fatalf("expected session cache to be populated, got %#v", session.SystemInitCache)

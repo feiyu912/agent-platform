@@ -293,15 +293,15 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 				w.pendingSystemRef = systemRefFromPreCall(inner)
 			}
 			if cw, ok := inner["contextWindow"].(map[string]any); ok {
-				w.pendingContextWindowMax = toInt(cw["max_size"])
-				w.pendingEstimated = toInt(cw["estimated_size"])
+				w.pendingContextWindowMax = toIntFromKeys(cw, "maxSize", "max_size")
+				w.pendingEstimated = toIntFromKeys(cw, "estimatedSize", "estimated_size")
 			}
 			if usage, ok := inner["usage"].(map[string]any); ok {
 				if llm, ok := usage["llmReturnUsage"].(map[string]any); ok {
 					w.pendingUsage = map[string]any{
-						"prompt_tokens":     toInt(llm["promptTokens"]),
-						"completion_tokens": toInt(llm["completionTokens"]),
-						"total_tokens":      toInt(llm["totalTokens"]),
+						"promptTokens":     toInt(llm["promptTokens"]),
+						"completionTokens": toInt(llm["completionTokens"]),
+						"totalTokens":      toInt(llm["totalTokens"]),
 					}
 				}
 			}
@@ -467,17 +467,17 @@ func (w *StepWriter) flushCurrentStep() {
 	if w.pendingUsage != nil || w.pendingContextWindowMax > 0 || w.pendingEstimated > 0 {
 		actual := 0
 		if w.pendingUsage != nil {
-			actual = toInt(w.pendingUsage["prompt_tokens"])
+			actual = toIntFromKeys(w.pendingUsage, "promptTokens", "prompt_tokens")
 		}
 		cw := map[string]any{}
 		if w.pendingContextWindowMax > 0 {
-			cw["max_size"] = w.pendingContextWindowMax
+			cw["maxSize"] = w.pendingContextWindowMax
 		}
 		if actual > 0 {
-			cw["actual_size"] = actual
+			cw["actualSize"] = actual
 		}
 		if w.pendingEstimated > 0 {
-			cw["estimated_size"] = w.pendingEstimated
+			cw["estimatedSize"] = w.pendingEstimated
 		}
 		if len(cw) > 0 {
 			line.ContextWindow = cw

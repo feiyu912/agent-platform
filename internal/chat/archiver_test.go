@@ -41,9 +41,9 @@ func TestArchiverMovesChatToArchiveAndPreservesAttachments(t *testing.T) {
 		}},
 		Type: "react",
 		Usage: map[string]any{
-			"prompt_tokens":     1,
-			"completion_tokens": 2,
-			"total_tokens":      3,
+			"promptTokens":     1,
+			"completionTokens": 2,
+			"totalTokens":      3,
 		},
 	}); err != nil {
 		t.Fatalf("append step: %v", err)

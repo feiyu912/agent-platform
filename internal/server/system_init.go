@@ -50,7 +50,7 @@ func (s *Server) prepareSystemInitCache(req api.QueryRequest, session *contracts
 			continue
 		}
 		line := chat.SystemInitLine{
-			Type:          "system-init",
+			Type:          "system",
 			ChatID:        req.ChatID,
 			AgentKey:      session.AgentKey,
 			RunID:         session.RunID,

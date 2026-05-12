@@ -1392,8 +1392,8 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 		Payload: map[string]any{
 			"data": map[string]any{
 				"contextWindow": map[string]any{
-					"max_size":       128000,
-					"estimated_size": 200,
+					"maxSize":       128000,
+					"estimatedSize": 200,
 				},
 				"usage": map[string]any{
 					"llmReturnUsage": map[string]any{
@@ -1416,11 +1416,11 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 	}
 
 	usage, _ := lines[0]["usage"].(map[string]any)
-	if toIntValue(usage["prompt_tokens"]) != 100 || toIntValue(usage["total_tokens"]) != 150 {
+	if toIntValue(usage["promptTokens"]) != 100 || toIntValue(usage["totalTokens"]) != 150 {
 		t.Fatalf("expected step-level usage, got %#v", lines[0])
 	}
 	contextWindow, _ := lines[0]["contextWindow"].(map[string]any)
-	if toIntValue(contextWindow["max_size"]) != 128000 || toIntValue(contextWindow["actual_size"]) != 100 || toIntValue(contextWindow["estimated_size"]) != 200 {
+	if toIntValue(contextWindow["maxSize"]) != 128000 || toIntValue(contextWindow["actualSize"]) != 100 || toIntValue(contextWindow["estimatedSize"]) != 200 {
 		t.Fatalf("expected step-level context window, got %#v", lines[0])
 	}
 
@@ -1470,8 +1470,8 @@ func TestStepWriterPersistsSystemRefAndSanitizedPreCall(t *testing.T) {
 					"provider":  map[string]any{"key": "mock"},
 					"systemRef": systemRef,
 					"contextWindow": map[string]any{
-						"max_size":       128000,
-						"estimated_size": 200,
+						"maxSize":       128000,
+						"estimatedSize": 200,
 					},
 					"usage": map[string]any{
 						"runUsage": map[string]any{
@@ -1543,7 +1543,7 @@ func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	first := SystemInitLine{
-		Type:          "system-init",
+		Type:          "system",
 		ChatID:        "chat-system-init",
 		AgentKey:      "agent",
 		RunID:         "run-1",
@@ -1580,7 +1580,7 @@ func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
 		t.Fatalf("load system init: %v", err)
 	}
 	if loaded == nil || loaded.Fingerprint != "sha256:second" {
-		t.Fatalf("expected latest matching system-init, got %#v", loaded)
+		t.Fatalf("expected latest matching system cache line, got %#v", loaded)
 	}
 	if loaded.SystemMessage["content"] != "second" {
 		t.Fatalf("unexpected system message %#v", loaded.SystemMessage)
@@ -1600,6 +1600,39 @@ func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
 	}
 }
 
+func TestFileStoreLoadsLegacySystemInitByCacheKey(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-legacy-system", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := store.appendJSONLine(store.chatJSONLPath("chat-legacy-system"), SystemInitLine{
+		Type:          "system-init",
+		ChatID:        "chat-legacy-system",
+		AgentKey:      "agent",
+		RunID:         "run-legacy",
+		CreatedAt:     1,
+		Fingerprint:   "sha256:legacy",
+		CacheKey:      "react:main",
+		Mode:          "react",
+		Stage:         "main",
+		SystemMessage: map[string]any{"role": "system", "content": "legacy"},
+		Tools:         []any{},
+	}); err != nil {
+		t.Fatalf("append legacy system cache line: %v", err)
+	}
+
+	loaded, err := store.LoadSystemInit("chat-legacy-system", "react:main")
+	if err != nil {
+		t.Fatalf("load system cache line: %v", err)
+	}
+	if loaded == nil || loaded.Fingerprint != "sha256:legacy" || loaded.Type != "system-init" {
+		t.Fatalf("expected legacy system cache line, got %#v", loaded)
+	}
+}
+
 func TestRawMessagesSkipSystemInitLines(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
@@ -1609,7 +1642,7 @@ func TestRawMessagesSkipSystemInitLines(t *testing.T) {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	if err := store.AppendSystemInitLine("chat-system-init-raw", SystemInitLine{
-		Type:          "system-init",
+		Type:          "system",
 		ChatID:        "chat-system-init-raw",
 		AgentKey:      "agent",
 		RunID:         "run-1",
@@ -1619,7 +1652,7 @@ func TestRawMessagesSkipSystemInitLines(t *testing.T) {
 		SystemMessage: map[string]any{"role": "system", "content": "frozen"},
 		Tools:         []any{},
 	}); err != nil {
-		t.Fatalf("append system init: %v", err)
+		t.Fatalf("append system cache line: %v", err)
 	}
 	if err := store.AppendQueryLine("chat-system-init-raw", QueryLine{
 		Type:      "query",
@@ -1650,7 +1683,7 @@ func TestStepWriterWritesSystemInitAfterQuery(t *testing.T) {
 
 	writer := NewStepWriter(store, "chat-query-system-init", "run-1", "react", false)
 	writer.SetPendingSystemInits([]SystemInitLine{{
-		Type:          "system-init",
+		Type:          "system",
 		ChatID:        "chat-query-system-init",
 		AgentKey:      "agent",
 		RunID:         "run-1",
@@ -1677,10 +1710,10 @@ func TestStepWriterWritesSystemInitAfterQuery(t *testing.T) {
 		t.Fatalf("read chat jsonl: %v", err)
 	}
 	if len(lines) != 2 {
-		t.Fatalf("expected query and system-init lines, got %#v", lines)
+		t.Fatalf("expected query and system cache lines, got %#v", lines)
 	}
-	if lines[0]["_type"] != "query" || lines[1]["_type"] != "system-init" {
-		t.Fatalf("expected query before system-init, got %#v", lines)
+	if lines[0]["_type"] != "query" || lines[1]["_type"] != "system" {
+		t.Fatalf("expected query before system cache line, got %#v", lines)
 	}
 }
 
@@ -3073,9 +3106,9 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 			},
 		},
 		Usage: map[string]any{
-			"prompt_tokens":     100,
-			"completion_tokens": 50,
-			"total_tokens":      150,
+			"promptTokens":     100,
+			"completionTokens": 50,
+			"totalTokens":      150,
 		},
 		Debug: map[string]any{
 			"preCall": map[string]any{
@@ -3093,9 +3126,9 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 			},
 		},
 		ContextWindow: map[string]any{
-			"max_size":       128000,
-			"actual_size":    100,
-			"estimated_size": 200,
+			"maxSize":       128000,
+			"actualSize":    100,
+			"estimatedSize": 200,
 		},
 	}); err != nil {
 		t.Fatalf("append step line: %v", err)
@@ -3129,7 +3162,7 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 	preCallModel, _ := preCallData["model"].(map[string]any)
 	preCallCW, _ := preCallData["contextWindow"].(map[string]any)
 	preCallRequestBody, _ := preCallData["requestBody"].(map[string]any)
-	if toIntValue(preCallCW["max_size"]) != 128000 || toIntValue(preCallCW["actual_size"]) != 100 || toIntValue(preCallCW["estimated_size"]) != 200 {
+	if toIntValue(preCallCW["maxSize"]) != 128000 || toIntValue(preCallCW["actualSize"]) != 100 || toIntValue(preCallCW["estimatedSize"]) != 200 {
 		t.Fatalf("unexpected debug.preCall context window %#v", detail.Events[3])
 	}
 	if preCallProvider["key"] != "minimax" || preCallProvider["endpoint"] != "https://api.minimaxi.com/v1/chat/completions" {
@@ -3162,6 +3195,68 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 	terminalChatUsage, _ := terminalUsage["chat"].(map[string]any)
 	if toIntValue(terminalChatUsage["promptTokens"]) != 100 || toIntValue(terminalChatUsage["completionTokens"]) != 50 || toIntValue(terminalChatUsage["totalTokens"]) != 150 {
 		t.Fatalf("unexpected synthesized run.complete chat usage %#v", detail.Events[6])
+	}
+}
+
+func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-legacy-step-usage", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := store.AppendQueryLine("chat-legacy-step-usage", QueryLine{
+		ChatID:    "chat-legacy-step-usage",
+		RunID:     "run-legacy-step-usage",
+		UpdatedAt: 1000,
+		Query:     map[string]any{"chatId": "chat-legacy-step-usage", "message": "hello"},
+		Type:      "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+	if err := store.AppendStepLine("chat-legacy-step-usage", StepLine{
+		ChatID:    "chat-legacy-step-usage",
+		RunID:     "run-legacy-step-usage",
+		UpdatedAt: 1003,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{{
+			Role:      "assistant",
+			Content:   textContent("answer"),
+			ContentID: "content-1",
+		}},
+		Usage: map[string]any{
+			"prompt_tokens":     100,
+			"completion_tokens": 50,
+			"total_tokens":      150,
+		},
+		ContextWindow: map[string]any{
+			"max_size":       128000,
+			"actual_size":    100,
+			"estimated_size": 200,
+		},
+	}); err != nil {
+		t.Fatalf("append step line: %v", err)
+	}
+
+	detail, err := store.LoadChat("chat-legacy-step-usage")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	if len(detail.Events) != 7 {
+		t.Fatalf("expected legacy usage replay events, got %#v", detail.Events)
+	}
+	preCallData, _ := detail.Events[3].Value("data").(map[string]any)
+	preCallCW, _ := preCallData["contextWindow"].(map[string]any)
+	if toIntValue(preCallCW["maxSize"]) != 128000 || toIntValue(preCallCW["actualSize"]) != 100 || toIntValue(preCallCW["estimatedSize"]) != 200 {
+		t.Fatalf("unexpected legacy debug.preCall context window %#v", detail.Events[3])
+	}
+	postCallData, _ := detail.Events[5].Value("data").(map[string]any)
+	postCallUsage, _ := postCallData["usage"].(map[string]any)
+	llmUsage, _ := postCallUsage["llmReturnUsage"].(map[string]any)
+	if toIntValue(llmUsage["promptTokens"]) != 100 || toIntValue(llmUsage["completionTokens"]) != 50 || toIntValue(llmUsage["totalTokens"]) != 150 {
+		t.Fatalf("unexpected legacy debug.postCall usage %#v", detail.Events[5])
 	}
 }
 

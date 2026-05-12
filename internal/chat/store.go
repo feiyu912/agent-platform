@@ -503,7 +503,7 @@ func (s *FileStore) AppendSubmitLine(chatID string, line SubmitLine) error {
 }
 
 func (s *FileStore) AppendSystemInitLine(chatID string, line SystemInitLine) error {
-	line.Type = "system-init"
+	line.Type = "system"
 	if strings.TrimSpace(line.ChatID) == "" {
 		line.ChatID = chatID
 	}
@@ -539,7 +539,7 @@ func (s *FileStore) loadSystemInits(chatID string) (map[string]*SystemInitLine, 
 	var latest *SystemInitLine
 	for _, line := range lines {
 		lineType, _ := line["_type"].(string)
-		if lineType != "system-init" {
+		if lineType != "system" && lineType != "system-init" {
 			continue
 		}
 		raw, err := json.Marshal(line)
@@ -1276,12 +1276,12 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			}
 			rd.events = append(rd.events, awaitingReplay.leftoverEvents()...)
 			if stepUsage != nil {
-				rd.totalPromptTokens += toIntValue(stepUsage["prompt_tokens"])
-				rd.totalCompletionTokens += toIntValue(stepUsage["completion_tokens"])
-				rd.totalTotalTokens += toIntValue(stepUsage["total_tokens"])
-				chatTotalPromptTokens += toIntValue(stepUsage["prompt_tokens"])
-				chatTotalCompletionTokens += toIntValue(stepUsage["completion_tokens"])
-				chatTotalTotalTokens += toIntValue(stepUsage["total_tokens"])
+				rd.totalPromptTokens += toIntFromKeys(stepUsage, "promptTokens", "prompt_tokens")
+				rd.totalCompletionTokens += toIntFromKeys(stepUsage, "completionTokens", "completion_tokens")
+				rd.totalTotalTokens += toIntFromKeys(stepUsage, "totalTokens", "total_tokens")
+				chatTotalPromptTokens += toIntFromKeys(stepUsage, "promptTokens", "prompt_tokens")
+				chatTotalCompletionTokens += toIntFromKeys(stepUsage, "completionTokens", "completion_tokens")
+				chatTotalTotalTokens += toIntFromKeys(stepUsage, "totalTokens", "total_tokens")
 				rd.chatTotalPromptTokens = chatTotalPromptTokens
 				rd.chatTotalCompletionTokens = chatTotalCompletionTokens
 				rd.chatTotalTotalTokens = chatTotalTotalTokens
@@ -1461,14 +1461,14 @@ func synthesizedContextWindow(contextWindow map[string]any) map[string]any {
 	if len(contextWindow) == 0 {
 		return cw
 	}
-	if v := toIntValue(contextWindow["max_size"]); v > 0 {
-		cw["max_size"] = v
+	if v := toIntFromKeys(contextWindow, "maxSize", "max_size"); v > 0 {
+		cw["maxSize"] = v
 	}
-	if v := toIntValue(contextWindow["actual_size"]); v > 0 {
-		cw["actual_size"] = v
+	if v := toIntFromKeys(contextWindow, "actualSize", "actual_size"); v > 0 {
+		cw["actualSize"] = v
 	}
-	if v := toIntValue(contextWindow["estimated_size"]); v > 0 {
-		cw["estimated_size"] = v
+	if v := toIntFromKeys(contextWindow, "estimatedSize", "estimated_size"); v > 0 {
+		cw["estimatedSize"] = v
 	}
 	return cw
 }
@@ -1528,9 +1528,9 @@ func synthesizePostCallEvent(runID, chatID string, usage map[string]any, runCumu
 	llm := map[string]any{"promptTokens": 0, "completionTokens": 0, "totalTokens": 0}
 	if usage != nil {
 		llm = map[string]any{
-			"promptTokens":     toIntValue(usage["prompt_tokens"]),
-			"completionTokens": toIntValue(usage["completion_tokens"]),
-			"totalTokens":      toIntValue(usage["total_tokens"]),
+			"promptTokens":     toIntFromKeys(usage, "promptTokens", "prompt_tokens"),
+			"completionTokens": toIntFromKeys(usage, "completionTokens", "completion_tokens"),
+			"totalTokens":      toIntFromKeys(usage, "totalTokens", "total_tokens"),
 		}
 	}
 	data := map[string]any{}
@@ -1562,6 +1562,18 @@ func toIntValue(v any) int {
 		return int(n)
 	case float64:
 		return int(n)
+	}
+	return 0
+}
+
+func toIntFromKeys(values map[string]any, keys ...string) int {
+	if values == nil {
+		return 0
+	}
+	for _, key := range keys {
+		if v := toIntValue(values[key]); v > 0 {
+			return v
+		}
 	}
 	return 0
 }
