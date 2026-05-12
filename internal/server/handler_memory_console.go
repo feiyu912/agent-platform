@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"agent-platform-runner-go/internal/chat"
 	"agent-platform-runner-go/internal/contracts"
 	"agent-platform-runner-go/internal/memory"
+	"agent-platform-runner-go/internal/ws"
 )
 
 func (s *Server) handleMemoryScopes(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +148,7 @@ func (s *Server) handleMemoryContextPreview(w http.ResponseWriter, r *http.Reque
 		Observation: strings.TrimSpace(bundle.ObservationPrompt),
 	}
 	response.Layers = memoryContextPreviewLayers(bundle)
-	response.Contexts = s.memoryContextPreviewContexts(r, req, summary, agentDef, bundle)
+	response.Contexts = s.memoryContextPreviewContexts(r.Context(), req, summary, agentDef, bundle)
 	response.Decisions = memoryContextPreviewDecisions(bundle)
 	writeJSON(w, http.StatusOK, api.Success(response))
 }
@@ -424,6 +426,413 @@ func (s *Server) handleMemoryRecordTimeline(w http.ResponseWriter, r *http.Reque
 	}))
 }
 
+func (s *Server) wsMemoryScopes(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	if !s.memorySystemEnabled() || s.deps.Memory == nil {
+		sendMemoryWSError(conn, req, http.StatusServiceUnavailable, "unavailable", "memory system is disabled")
+		return
+	}
+	payload, err := ws.DecodePayload[struct {
+		AgentKey string `json:"agentKey"`
+		TeamID   string `json:"teamId"`
+		UserKey  string `json:"userKey"`
+	}](req)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
+		return
+	}
+	agentKey := strings.TrimSpace(payload.AgentKey)
+	if agentKey == "" {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "agentKey is required")
+		return
+	}
+	views, err := memory.BuildScopeSummaries(s.deps.Memory, agentKey, scopeUserKeyFromContext(ctx, payload.UserKey), strings.TrimSpace(payload.TeamID))
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	response := api.MemoryScopesResponse{AgentKey: agentKey, Scopes: make([]api.MemoryScopeSummary, 0, len(views))}
+	for _, view := range views {
+		response.Scopes = append(response.Scopes, api.MemoryScopeSummary{
+			ScopeType:   view.ScopeType,
+			ScopeKey:    view.ScopeKey,
+			Label:       view.Label,
+			FileName:    view.FileName,
+			RecordCount: len(view.Records),
+			UpdatedAt:   view.UpdatedAt,
+		})
+	}
+	sendMemoryWSResponse(conn, req, response)
+}
+
+func (s *Server) wsMemoryMeta(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	sendMemoryWSResponse(conn, req, api.MemoryMetaResponse{
+		Categories:  memory.StandardCategories(),
+		Types:       memory.StandardTypes(),
+		ScopeTypes:  memory.StandardScopeTypes(),
+		Statuses:    memory.StandardStatuses(),
+		SourceTypes: memory.StandardSourceTypes(),
+	})
+}
+
+func (s *Server) wsMemoryContextPreview(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	if !s.memorySystemEnabled() || s.deps.Memory == nil {
+		sendMemoryWSError(conn, req, http.StatusServiceUnavailable, "unavailable", "memory system is disabled")
+		return
+	}
+	payload, err := ws.DecodePayload[api.MemoryContextPreviewRequest](req)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
+		return
+	}
+	chatID := strings.TrimSpace(payload.ChatID)
+	message := strings.TrimSpace(payload.Message)
+	if chatID == "" || message == "" {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "chatId and message are required")
+		return
+	}
+	summary, err := s.deps.Chats.Summary(chatID)
+	if errors.Is(err, chat.ErrChatNotFound) || summary == nil {
+		sendMemoryWSError(conn, req, http.StatusNotFound, "not_found", "chat not found")
+		return
+	}
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	agentKey := strings.TrimSpace(summary.AgentKey)
+	teamID := strings.TrimSpace(summary.TeamID)
+	if agentKey == "" && teamID != "" && s.deps.Registry != nil {
+		if team, ok := s.deps.Registry.TeamDefinition(teamID); ok {
+			agentKey = strings.TrimSpace(team.DefaultAgentKey)
+		}
+	}
+	if agentKey == "" && s.deps.Registry != nil {
+		agentKey = strings.TrimSpace(s.deps.Registry.DefaultAgentKey())
+	}
+	if agentKey == "" || s.deps.Registry == nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "agent not found")
+		return
+	}
+	agentDef, ok := s.deps.Registry.AgentDefinition(agentKey)
+	if !ok {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "agent not found")
+		return
+	}
+
+	response := api.MemoryContextPreviewResponse{
+		Message:  message,
+		AgentKey: agentKey,
+		ChatID:   chatID,
+		TeamID:   teamID,
+		Enabled:  s.memoryEnabledForAgent(agentDef),
+		Layers:   []api.MemoryContextPreviewLayer{},
+	}
+	if !response.Enabled {
+		sendMemoryWSResponse(conn, req, response)
+		return
+	}
+
+	topN := s.deps.Config.Memory.ContextTopN
+	if topN <= 0 {
+		topN = 5
+	}
+	maxChars := s.deps.Config.Memory.ContextMaxChars
+	if maxChars <= 0 {
+		maxChars = 4000
+	}
+	bundle, err := s.deps.Memory.BuildContextBundle(memory.ContextRequest{
+		AgentKey:     agentKey,
+		TeamID:       teamID,
+		ChatID:       chatID,
+		UserKey:      scopeUserKeyFromContext(ctx, ""),
+		Query:        message,
+		TopFacts:     topN,
+		TopObs:       topN,
+		MaxChars:     maxChars,
+		FreezeStable: true,
+		PreviewOnly:  true,
+	})
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	response.Summary = memoryContextPreviewSummary(bundle)
+	response.Prompts = api.MemoryContextPreviewPrompts{
+		Stable:      strings.TrimSpace(bundle.StablePrompt),
+		Session:     strings.TrimSpace(bundle.SessionPrompt),
+		Observation: strings.TrimSpace(bundle.ObservationPrompt),
+	}
+	response.Layers = memoryContextPreviewLayers(bundle)
+	response.Contexts = s.memoryContextPreviewContexts(ctx, payload, summary, agentDef, bundle)
+	response.Decisions = memoryContextPreviewDecisions(bundle)
+	sendMemoryWSResponse(conn, req, response)
+}
+
+func (s *Server) wsMemoryScope(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	payload, err := ws.DecodePayload[struct {
+		AgentKey       string                       `json:"agentKey"`
+		ScopeType      string                       `json:"scopeType"`
+		ScopeKey       string                       `json:"scopeKey"`
+		TeamID         string                       `json:"teamId"`
+		UserKey        string                       `json:"userKey"`
+		Mode           string                       `json:"mode"`
+		Markdown       string                       `json:"markdown"`
+		Records        []api.MemoryScopeRecordInput `json:"records"`
+		ArchiveMissing bool                         `json:"archiveMissing"`
+	}](req)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
+		return
+	}
+	if strings.TrimSpace(payload.Mode) != "" || payload.Markdown != "" || payload.Records != nil || payload.ArchiveMissing {
+		s.wsMemoryScopeSave(ctx, conn, req, api.MemoryScopeSaveRequest{
+			AgentKey:       payload.AgentKey,
+			ScopeType:      payload.ScopeType,
+			ScopeKey:       payload.ScopeKey,
+			Mode:           payload.Mode,
+			Markdown:       payload.Markdown,
+			Records:        payload.Records,
+			ArchiveMissing: payload.ArchiveMissing,
+		}, payload.TeamID, payload.UserKey)
+		return
+	}
+	s.wsMemoryScopeGet(ctx, conn, req, payload.AgentKey, payload.ScopeType, payload.ScopeKey, payload.TeamID, payload.UserKey)
+}
+
+func (s *Server) wsMemoryScopeGet(ctx context.Context, conn *ws.Conn, req ws.RequestFrame, agentKey string, scopeType string, scopeKey string, teamID string, userKey string) {
+	if !s.memorySystemEnabled() || s.deps.Memory == nil {
+		sendMemoryWSError(conn, req, http.StatusServiceUnavailable, "unavailable", "memory system is disabled")
+		return
+	}
+	agentKey = strings.TrimSpace(agentKey)
+	scopeType = strings.TrimSpace(scopeType)
+	if agentKey == "" || scopeType == "" {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "agentKey and scopeType are required")
+		return
+	}
+	view, err := memory.BuildScopeView(
+		s.deps.Memory,
+		agentKey,
+		scopeType,
+		strings.TrimSpace(scopeKey),
+		scopeUserKeyFromContext(ctx, userKey),
+		strings.TrimSpace(teamID),
+	)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	response := api.MemoryScopeDetailResponse{
+		AgentKey:  view.AgentKey,
+		ScopeType: view.ScopeType,
+		ScopeKey:  view.ScopeKey,
+		Label:     view.Label,
+		FileName:  view.FileName,
+		Markdown:  view.Markdown,
+		Records:   make([]api.MemoryScopeRecord, 0, len(view.Records)),
+		Meta: api.MemoryScopeDetailMeta{
+			Editable:           true,
+			RecordCount:        len(view.Records),
+			GeneratedFromStore: true,
+		},
+	}
+	for _, item := range view.Records {
+		response.Records = append(response.Records, toMemoryScopeRecord(item))
+	}
+	sendMemoryWSResponse(conn, req, response)
+}
+
+func (s *Server) wsMemoryScopeSave(ctx context.Context, conn *ws.Conn, req ws.RequestFrame, payload api.MemoryScopeSaveRequest, teamID string, userKey string) {
+	if !s.memorySystemEnabled() || s.deps.Memory == nil {
+		sendMemoryWSError(conn, req, http.StatusServiceUnavailable, "unavailable", "memory system is disabled")
+		return
+	}
+	input := memory.ScopeSaveInput{
+		AgentKey:       strings.TrimSpace(payload.AgentKey),
+		ScopeType:      strings.TrimSpace(payload.ScopeType),
+		ScopeKey:       strings.TrimSpace(payload.ScopeKey),
+		UserKey:        scopeUserKeyFromContext(ctx, userKey),
+		TeamID:         strings.TrimSpace(teamID),
+		Mode:           strings.TrimSpace(payload.Mode),
+		Markdown:       payload.Markdown,
+		ArchiveMissing: payload.ArchiveMissing,
+		Records:        make([]memory.ScopeRecordInput, 0, len(payload.Records)),
+	}
+	for _, record := range payload.Records {
+		input.Records = append(input.Records, memory.ScopeRecordInput{
+			ID:         record.ID,
+			Title:      record.Title,
+			Summary:    record.Summary,
+			Category:   record.Category,
+			Importance: record.Importance,
+			Confidence: record.Confidence,
+			Tags:       record.Tags,
+		})
+	}
+	result, err := memory.SaveScope(s.deps.Memory, input)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	view, err := memory.BuildScopeView(s.deps.Memory, input.AgentKey, input.ScopeType, input.ScopeKey, input.UserKey, input.TeamID)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	response := api.MemoryScopeSaveResponse{
+		Saved:     true,
+		AgentKey:  input.AgentKey,
+		ScopeType: view.ScopeType,
+		ScopeKey:  view.ScopeKey,
+		Summary: api.MemoryScopeSaveSummary{
+			Created:   result.Summary.Created,
+			Updated:   result.Summary.Updated,
+			Archived:  result.Summary.Archived,
+			Unchanged: result.Summary.Unchanged,
+		},
+		Records:  make([]api.MemoryScopeSaveRecord, 0, len(result.Records)),
+		Markdown: result.Markdown,
+	}
+	for _, item := range result.Records {
+		response.Records = append(response.Records, api.MemoryScopeSaveRecord{
+			ID:        item.ID,
+			Title:     item.Title,
+			Status:    item.Status,
+			ScopeType: item.ScopeType,
+			ScopeKey:  item.ScopeKey,
+			UpdatedAt: item.UpdatedAt,
+		})
+	}
+	sendMemoryWSResponse(conn, req, response)
+}
+
+func (s *Server) wsMemoryScopeValidate(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	if !s.memorySystemEnabled() || s.deps.Memory == nil {
+		sendMemoryWSError(conn, req, http.StatusServiceUnavailable, "unavailable", "memory system is disabled")
+		return
+	}
+	payload, err := ws.DecodePayload[api.MemoryScopeValidateRequest](req)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
+		return
+	}
+	result := memory.ValidateScopeMarkdown(payload.ScopeType, payload.Markdown)
+	response := api.MemoryScopeValidateResponse{
+		Valid:    result.Valid,
+		Errors:   make([]api.MemoryScopeValidationIssue, 0, len(result.Errors)),
+		Warnings: make([]api.MemoryScopeValidationIssue, 0, len(result.Warnings)),
+	}
+	for _, issue := range result.Errors {
+		response.Errors = append(response.Errors, api.MemoryScopeValidationIssue(issue))
+	}
+	for _, issue := range result.Warnings {
+		response.Warnings = append(response.Warnings, api.MemoryScopeValidationIssue(issue))
+	}
+	sendMemoryWSResponse(conn, req, response)
+}
+
+func (s *Server) wsMemoryRecords(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	if !s.memorySystemEnabled() || s.deps.Memory == nil {
+		sendMemoryWSError(conn, req, http.StatusServiceUnavailable, "unavailable", "memory system is disabled")
+		return
+	}
+	payload, err := ws.DecodePayload[struct {
+		AgentKey  string `json:"agentKey"`
+		Kind      string `json:"kind"`
+		ScopeType string `json:"scopeType"`
+		Status    string `json:"status"`
+		Category  string `json:"category"`
+		ChatID    string `json:"chatId"`
+		Keyword   string `json:"keyword"`
+		Query     string `json:"query"`
+		Limit     int    `json:"limit"`
+		Cursor    string `json:"cursor"`
+	}](req)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
+		return
+	}
+	limit := payload.Limit
+	if limit == 0 {
+		limit = 20
+	}
+	keyword := strings.TrimSpace(payload.Keyword)
+	if keyword == "" {
+		keyword = strings.TrimSpace(payload.Query)
+	}
+	result, err := memory.ListConsoleRecords(s.deps.Memory, memory.RecordFilter{
+		AgentKey:  strings.TrimSpace(payload.AgentKey),
+		Kind:      strings.TrimSpace(payload.Kind),
+		ScopeType: strings.TrimSpace(payload.ScopeType),
+		Status:    strings.TrimSpace(payload.Status),
+		Category:  strings.TrimSpace(payload.Category),
+		ChatID:    strings.TrimSpace(payload.ChatID),
+		Keyword:   keyword,
+		Limit:     limit,
+		Cursor:    strings.TrimSpace(payload.Cursor),
+	})
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	sendMemoryWSResponse(conn, req, api.MemoryRecordsResponse{
+		Count:      result.Count,
+		NextCursor: result.NextCursor,
+		Results:    result.Results,
+	})
+}
+
+func (s *Server) wsMemoryRecord(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	if !s.memorySystemEnabled() || s.deps.Memory == nil {
+		sendMemoryWSError(conn, req, http.StatusServiceUnavailable, "unavailable", "memory system is disabled")
+		return
+	}
+	payload, err := ws.DecodePayload[struct {
+		AgentKey string `json:"agentKey"`
+		ID       string `json:"id"`
+	}](req)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
+		return
+	}
+	id := strings.TrimSpace(payload.ID)
+	if id == "" {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "id is required")
+		return
+	}
+	detail, err := memory.ReadConsoleRecord(s.deps.Memory, strings.TrimSpace(payload.AgentKey), id)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if strings.TrimSpace(detail.Record.ID) == "" {
+		sendMemoryWSError(conn, req, http.StatusNotFound, "not_found", "memory not found")
+		return
+	}
+	embedding := api.MemoryRecordEmbedding{HasEmbedding: detail.HasEmbedding}
+	if detail.EmbeddingModel != nil {
+		embedding.Model = *detail.EmbeddingModel
+	}
+	sendMemoryWSResponse(conn, req, api.MemoryRecordDetailResponse{
+		ID:          detail.Record.ID,
+		SourceTable: detail.SourceTable,
+		Record:      detail.Record,
+		RawFields:   detail.RawFields,
+		Embedding:   embedding,
+	})
+}
+
+func sendMemoryWSResponse(conn *ws.Conn, req ws.RequestFrame, response any) {
+	conn.SendResponse(req.Type, req.ID, 0, "success", response)
+	conn.CompleteRequest(req.ID)
+}
+
+func sendMemoryWSError(conn *ws.Conn, req ws.RequestFrame, status int, code string, message string) {
+	conn.SendError(req.ID, code, status, message, nil)
+	conn.CompleteRequest(req.ID)
+}
+
 func memoryContextPreviewSummary(bundle memory.ContextBundle) api.MemoryContextPreviewSummary {
 	return api.MemoryContextPreviewSummary{
 		StableCount:      len(bundle.StableFacts),
@@ -456,7 +865,7 @@ func memoryContextPreviewLayers(bundle memory.ContextBundle) []api.MemoryContext
 	return out
 }
 
-func (s *Server) memoryContextPreviewContexts(r *http.Request, req api.MemoryContextPreviewRequest, summary *chat.Summary, agentDef catalog.AgentDefinition, bundle memory.ContextBundle) []api.MemoryContextPreviewContextSection {
+func (s *Server) memoryContextPreviewContexts(ctx context.Context, req api.MemoryContextPreviewRequest, summary *chat.Summary, agentDef catalog.AgentDefinition, bundle memory.ContextBundle) []api.MemoryContextPreviewContextSection {
 	if summary == nil {
 		return nil
 	}
@@ -466,7 +875,7 @@ func (s *Server) memoryContextPreviewContexts(r *http.Request, req api.MemoryCon
 		agentKey = strings.TrimSpace(summary.AgentKey)
 	}
 	teamID := strings.TrimSpace(summary.TeamID)
-	principal := PrincipalFromContext(r.Context())
+	principal := PrincipalFromContext(ctx)
 	runtimeContext, _ := s.buildRuntimeRequestContext(runtimeRequestContextInput{
 		agentKey:   agentKey,
 		teamID:     teamID,
@@ -889,10 +1298,14 @@ func scopeUserKey(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
-	if value := strings.TrimSpace(r.URL.Query().Get("userKey")); value != "" {
+	return scopeUserKeyFromContext(r.Context(), r.URL.Query().Get("userKey"))
+}
+
+func scopeUserKeyFromContext(ctx context.Context, explicit string) string {
+	if value := strings.TrimSpace(explicit); value != "" {
 		return value
 	}
-	principal := PrincipalFromContext(r.Context())
+	principal := PrincipalFromContext(ctx)
 	if principal != nil {
 		return strings.TrimSpace(principal.Subject)
 	}

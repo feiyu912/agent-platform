@@ -10,6 +10,9 @@ import (
 
 	"agent-platform-runner-go/internal/api"
 	"agent-platform-runner-go/internal/memory"
+	"agent-platform-runner-go/internal/ws"
+
+	gws "github.com/gorilla/websocket"
 )
 
 func TestHandleMemoryScopesReturnsEditableScopes(t *testing.T) {
@@ -367,6 +370,140 @@ func TestHandleMemoryRecordsFiltersResults(t *testing.T) {
 	}
 }
 
+func TestMemoryWSRecordsMirrorsHTTP(t *testing.T) {
+	fixture := newMemoryEnabledTestFixture(t)
+	enableMemoryFixtureWebSocket(t, fixture.server)
+
+	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
+		ID:         "mem_fact_1",
+		AgentKey:   "mock-runner",
+		Kind:       memory.KindFact,
+		ScopeType:  memory.ScopeAgent,
+		ScopeKey:   "agent:mock-runner",
+		Title:      "偏好中文输出",
+		Summary:    "用户偏好中文输出。",
+		SourceType: "manual",
+		Category:   "preference",
+		Importance: 8,
+		Confidence: 0.95,
+		Status:     memory.StatusActive,
+		CreatedAt:  100,
+		UpdatedAt:  200,
+	})
+	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
+		ID:         "mem_obs_1",
+		AgentKey:   "mock-runner",
+		ChatID:     "chat-1",
+		Kind:       memory.KindObservation,
+		ScopeType:  memory.ScopeChat,
+		ScopeKey:   "chat:chat-1",
+		Title:      "修复权限问题",
+		Summary:    "修复了权限问题。",
+		SourceType: "learn",
+		Category:   "bugfix",
+		Importance: 8,
+		Confidence: 0.75,
+		Status:     memory.StatusOpen,
+		CreatedAt:  110,
+		UpdatedAt:  210,
+	})
+
+	conn := dialMemoryWebSocket(t, fixture.server)
+	defer conn.Close()
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/memory/records",
+		ID:    "records",
+		Payload: ws.MarshalPayload(map[string]any{
+			"agentKey": "mock-runner",
+			"kind":     "fact",
+		}),
+	}); err != nil {
+		t.Fatalf("write records request: %v", err)
+	}
+	var frame ws.ResponseFrame
+	if err := conn.ReadJSON(&frame); err != nil {
+		t.Fatalf("read records response: %v", err)
+	}
+	records, err := marshalScheduleResponseData[api.MemoryRecordsResponse](frame.Data)
+	if err != nil {
+		t.Fatalf("decode records data: %v", err)
+	}
+	if frame.Frame != ws.FrameResponse || frame.ID != "records" || records.Count != 1 || len(records.Results) != 1 || records.Results[0].ID != "mem_fact_1" {
+		t.Fatalf("unexpected records frame %#v data=%#v", frame, records)
+	}
+}
+
+func TestMemoryWSRecordAndMeta(t *testing.T) {
+	fixture := newMemoryEnabledTestFixture(t)
+	enableMemoryFixtureWebSocket(t, fixture.server)
+
+	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
+		ID:         "mem_obs_1",
+		AgentKey:   "mock-runner",
+		ChatID:     "chat-1",
+		Kind:       memory.KindObservation,
+		ScopeType:  memory.ScopeChat,
+		ScopeKey:   "chat:chat-1",
+		Title:      "修复权限问题",
+		Summary:    "修复了权限问题。",
+		SourceType: "learn",
+		Category:   "bugfix",
+		Importance: 8,
+		Confidence: 0.75,
+		Status:     memory.StatusOpen,
+		CreatedAt:  110,
+		UpdatedAt:  210,
+	})
+
+	conn := dialMemoryWebSocket(t, fixture.server)
+	defer conn.Close()
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/memory/record",
+		ID:    "record",
+		Payload: ws.MarshalPayload(map[string]any{
+			"agentKey": "mock-runner",
+			"id":       "mem_obs_1",
+		}),
+	}); err != nil {
+		t.Fatalf("write record request: %v", err)
+	}
+	var recordFrame ws.ResponseFrame
+	if err := conn.ReadJSON(&recordFrame); err != nil {
+		t.Fatalf("read record response: %v", err)
+	}
+	record, err := marshalScheduleResponseData[api.MemoryRecordDetailResponse](recordFrame.Data)
+	if err != nil {
+		t.Fatalf("decode record data: %v", err)
+	}
+	if recordFrame.Frame != ws.FrameResponse || recordFrame.ID != "record" || record.ID != "mem_obs_1" || record.SourceTable != "MEMORY_OBSERVATIONS" {
+		t.Fatalf("unexpected record frame %#v data=%#v", recordFrame, record)
+	}
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame:   ws.FrameRequest,
+		Type:    "/api/memory/meta",
+		ID:      "meta",
+		Payload: ws.MarshalPayload(map[string]any{}),
+	}); err != nil {
+		t.Fatalf("write meta request: %v", err)
+	}
+	var metaFrame ws.ResponseFrame
+	if err := conn.ReadJSON(&metaFrame); err != nil {
+		t.Fatalf("read meta response: %v", err)
+	}
+	meta, err := marshalScheduleResponseData[api.MemoryMetaResponse](metaFrame.Data)
+	if err != nil {
+		t.Fatalf("decode meta data: %v", err)
+	}
+	if metaFrame.Frame != ws.FrameResponse || metaFrame.ID != "meta" || len(meta.Types) == 0 || len(meta.ScopeTypes) == 0 {
+		t.Fatalf("unexpected meta frame %#v data=%#v", metaFrame, meta)
+	}
+}
+
 func TestHandleMemoryRecordReturnsRawFields(t *testing.T) {
 	fixture := newMemoryEnabledTestFixture(t)
 	server := fixture.server
@@ -413,4 +550,28 @@ func writeTestMemory(t *testing.T, store memory.Store, item api.StoredMemoryResp
 	if err := store.Write(item); err != nil {
 		t.Fatalf("write memory %s: %v", item.ID, err)
 	}
+}
+
+func enableMemoryFixtureWebSocket(t *testing.T, server *Server) {
+	t.Helper()
+	hub := ws.NewHub()
+	t.Cleanup(func() { hub.CloseAll(gws.CloseNormalClosure, "test done") })
+	server.deps.Config.WebSocket.Enabled = true
+	server.deps.Config.WebSocket.WriteQueueSize = 4
+	server.deps.Config.WebSocket.PingIntervalMs = 30000
+	server.wsHandler = server.newWSHandler(hub)
+	server.router.Handle("/ws", server.wsHandler)
+}
+
+func dialMemoryWebSocket(t *testing.T, handler http.Handler) *gws.Conn {
+	t.Helper()
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws"
+	conn, _, err := gws.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	readScheduleConnectedPush(t, conn)
+	return conn
 }

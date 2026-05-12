@@ -94,6 +94,13 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/interrupt", s.wsInterrupt)
 	handler.RegisterRoute("/api/remember", s.wsRemember)
 	handler.RegisterRoute("/api/learn", s.wsLearn)
+	handler.RegisterRoute("/api/memory/meta", s.wsMemoryMeta)
+	handler.RegisterRoute("/api/memory/context/preview", s.wsMemoryContextPreview)
+	handler.RegisterRoute("/api/memory/scopes", s.wsMemoryScopes)
+	handler.RegisterRoute("/api/memory/scope", s.wsMemoryScope)
+	handler.RegisterRoute("/api/memory/scope/validate", s.wsMemoryScopeValidate)
+	handler.RegisterRoute("/api/memory/records", s.wsMemoryRecords)
+	handler.RegisterRoute("/api/memory/record", s.wsMemoryRecord)
 	handler.RegisterRoute("/api/viewport", s.wsViewport)
 	handler.RegisterRoute("/api/resource", s.wsResource)
 	// agent 视角下这是一次 "去网关拉取" 动作，所以主路由名是 /api/pull；
