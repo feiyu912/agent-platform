@@ -496,21 +496,22 @@ func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepar
 	stepWriter.SetPendingSystemInits(prepared.systemInitLines)
 
 	StartRunExecutor(RunExecutorParams{
-		RunCtx:            runCtx,
-		Request:           prepared.req,
-		Session:           prepared.session,
-		Summary:           prepared.summary,
-		Agent:             s.deps.Agent,
-		Registry:          s.deps.Registry,
-		Assembler:         assembler,
-		Mapper:            mapper,
-		Stream:            s.deps.Config.Stream,
-		StepWriter:        stepWriter,
-		EventBus:          eventBus,
-		Chats:             s.deps.Chats,
-		RunControl:        control,
-		BuildQuerySession: s.BuildQuerySession,
-		Notifications:     s.deps.Notifications,
+		RunCtx:             runCtx,
+		Request:            prepared.req,
+		Session:            prepared.session,
+		Summary:            prepared.summary,
+		Agent:              s.deps.Agent,
+		Registry:           s.deps.Registry,
+		Assembler:          assembler,
+		Mapper:             mapper,
+		Stream:             s.deps.Config.Stream,
+		StepWriter:         stepWriter,
+		EventBus:           eventBus,
+		Chats:              s.deps.Chats,
+		RunControl:         control,
+		BuildQuerySession:  s.BuildQuerySession,
+		PrepareSystemInits: s.prepareSystemInitCache,
+		Notifications:      s.deps.Notifications,
 		OnUnreadChanged: func(summary chat.Summary) {
 			agentUnreadCount, err := s.agentUnreadCount(summary.AgentKey)
 			if err != nil {
@@ -685,11 +686,12 @@ func (s *Server) handleQuerySync(w http.ResponseWriter, ctx context.Context, pre
 // 调用共用的 RunExecutorParams，避免重复拼装三份 callback。
 func syncRunExecutorParams(s *Server, prepared preparedQuery, control *contracts.RunControl, principal *Principal) RunExecutorParams {
 	return RunExecutorParams{
-		Request:       prepared.req,
-		Session:       prepared.session,
-		Chats:         s.deps.Chats,
-		RunControl:    control,
-		Notifications: s.deps.Notifications,
+		Request:            prepared.req,
+		Session:            prepared.session,
+		Chats:              s.deps.Chats,
+		RunControl:         control,
+		PrepareSystemInits: s.prepareSystemInitCache,
+		Notifications:      s.deps.Notifications,
 		OnUnreadChanged: func(summary chat.Summary) {
 			agentUnreadCount, err := s.agentUnreadCount(summary.AgentKey)
 			if err != nil {

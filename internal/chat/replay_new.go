@@ -78,7 +78,9 @@ func (s *FileStore) LoadRunTrace(chatID string, runID string) (RunTrace, error) 
 			data, _ := json.Marshal(line)
 			var query QueryLine
 			if err := json.Unmarshal(data, &query); err == nil {
-				trace.Query = &query
+				if strings.TrimSpace(query.TaskID) == "" {
+					trace.Query = &query
+				}
 			}
 		case "react", "plan-execute", "step":
 			data, _ := json.Marshal(line)
@@ -121,6 +123,26 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 	nextSeq := func() int64 { seq++; return seq }
 
 	var chatTotalPromptTokens, chatTotalCompletionTokens, chatTotalTotalTokens int
+	taskQueries := map[string]replayedSubTaskQuery{}
+	for _, line := range lines {
+		if lineType, _ := line["_type"].(string); lineType != "query" {
+			continue
+		}
+		runID, _ := line["runId"].(string)
+		taskID, _ := line["taskId"].(string)
+		if strings.TrimSpace(taskID) == "" {
+			continue
+		}
+		query, _ := line["query"].(map[string]any)
+		taskQueries[replayedTaskQueryKey(runID, taskID)] = replayedSubTaskQuery{
+			TaskID:      taskID,
+			GroupID:     stringFromAny(line["taskGroupId"]),
+			TaskName:    stringFromAny(line["taskName"]),
+			TaskDesc:    stringFromAny(query["message"]),
+			SubAgentKey: stringFromAny(line["subAgentKey"]),
+			MainToolID:  stringFromAny(line["taskMainToolId"]),
+		}
+	}
 
 	for _, line := range lines {
 		lineType, _ := line["_type"].(string)
@@ -136,6 +158,9 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			payload := map[string]any{}
 			for k, v := range query {
 				payload[k] = v
+			}
+			if taskID, _ := line["taskId"].(string); strings.TrimSpace(taskID) != "" {
+				payload["taskId"] = taskID
 			}
 			if _, ok := payload["chatId"]; !ok {
 				payload["chatId"] = chatID
@@ -171,6 +196,23 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			taskStatus, _ := line["taskStatus"].(string)
 			taskSubAgentKey, _ := line["taskSubAgentKey"].(string)
 			taskMainToolID, _ := line["taskMainToolId"].(string)
+			if meta, ok := taskQueries[replayedTaskQueryKey(runID, taskID)]; ok {
+				if strings.TrimSpace(taskGroupID) == "" {
+					taskGroupID = meta.GroupID
+				}
+				if strings.TrimSpace(taskName) == "" {
+					taskName = meta.TaskName
+				}
+				if strings.TrimSpace(taskDescription) == "" {
+					taskDescription = meta.TaskDesc
+				}
+				if strings.TrimSpace(taskSubAgentKey) == "" {
+					taskSubAgentKey = meta.SubAgentKey
+				}
+				if strings.TrimSpace(taskMainToolID) == "" {
+					taskMainToolID = meta.MainToolID
+				}
+			}
 			if events := reconcileReplayedSubTask(rd, runID, taskID, taskGroupID, taskName, taskDescription, taskStatus, taskSubAgentKey, taskMainToolID, int64FromAny(line["updatedAt"]), nextSeq); len(events) > 0 {
 				rd.events = append(rd.events, events...)
 			}
@@ -194,7 +236,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"completionTokens": chatTotalCompletionTokens,
 					"totalTokens":      chatTotalTotalTokens,
 				}
-				if ev := synthesizePreCallEvent(runID, chatID, runCumulativePre, chatCumulativePre, stepContextWindow, stepPreCallData, ts, nextSeq); ev != nil {
+				if ev := synthesizePreCallEvent(runID, chatID, taskID, runCumulativePre, chatCumulativePre, stepContextWindow, stepPreCallData, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)
 				}
 			}
@@ -233,7 +275,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"completionTokens": chatTotalCompletionTokens,
 					"totalTokens":      chatTotalTotalTokens,
 				}
-				if ev := synthesizePostCallEvent(runID, chatID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
+				if ev := synthesizePostCallEvent(runID, chatID, taskID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)
 				}
 			}

@@ -110,6 +110,33 @@ func TestDispatcherFallsBackToActiveTaskIDForSubAgentBlocks(t *testing.T) {
 	}
 }
 
+func TestDispatcherIncludesTaskIDOnDebugEvents(t *testing.T) {
+	dispatcher := NewDispatcher(StreamRequest{
+		RunID:  "run_1",
+		ChatID: "chat_1",
+	})
+
+	preEvents := dispatcher.Dispatch(InputDebugPreCall{
+		TaskID:   "task_sub_1",
+		ChatID:   "chat_1",
+		ModelKey: "mock",
+	})
+	assertEventTypes(t, preEvents, "debug.preCall")
+	if got := preEvents[0].Data().String("taskId"); got != "task_sub_1" {
+		t.Fatalf("expected debug.preCall taskId, got %#v", preEvents[0].ToData())
+	}
+
+	postEvents := dispatcher.Dispatch(InputDebugPostCall{
+		TaskID:   "task_sub_1",
+		ChatID:   "chat_1",
+		ModelKey: "mock",
+	})
+	assertEventTypes(t, postEvents, "debug.postCall")
+	if got := postEvents[0].Data().String("taskId"); got != "task_sub_1" {
+		t.Fatalf("expected debug.postCall taskId, got %#v", postEvents[0].ToData())
+	}
+}
+
 func TestDispatcherEmitsApprovalAlongsideToolResult(t *testing.T) {
 	dispatcher := NewDispatcher(StreamRequest{
 		RunID:  "run_1",

@@ -31,6 +31,24 @@ type replayedSubTask struct {
 	LastTimestamp int64
 }
 
+type replayedSubTaskQuery struct {
+	TaskID      string
+	GroupID     string
+	TaskName    string
+	TaskDesc    string
+	SubAgentKey string
+	MainToolID  string
+}
+
+func replayedTaskQueryKey(runID string, taskID string) string {
+	return strings.TrimSpace(runID) + "\x00" + strings.TrimSpace(taskID)
+}
+
+func stringFromAny(value any) string {
+	text, _ := value.(string)
+	return text
+}
+
 func ensureRun(runs map[string]*chatRunData, order *[]string, runID string) *chatRunData {
 	if rd, ok := runs[runID]; ok {
 		return rd
@@ -130,7 +148,7 @@ func synthesizeReplayedSubTaskTerminal(runID string, task *replayedSubTask, next
 		status = "completed"
 	}
 	switch status {
-	case "cancelled":
+	case "cancelled", "canceled":
 		return []stream.EventData{{
 			Seq:       nextSeq(),
 			Type:      "task.cancel",
@@ -141,7 +159,7 @@ func synthesizeReplayedSubTaskTerminal(runID string, task *replayedSubTask, next
 				"status":  "cancelled",
 			},
 		}}
-	case "error":
+	case "error", "failed", "fail":
 		return []stream.EventData{{
 			Seq:       nextSeq(),
 			Type:      "task.fail",

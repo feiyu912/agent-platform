@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"agent-platform-runner-go/internal/api"
 	"agent-platform-runner-go/internal/catalog"
@@ -18,17 +19,20 @@ import (
 )
 
 type frameOrchestrator struct {
-	runCtx            context.Context
-	request           api.QueryRequest
-	session           contracts.QuerySession
-	summary           chat.Summary
-	agent             contracts.AgentEngine
-	registry          catalog.Registry
-	buildQuerySession func(context.Context, api.QueryRequest, chat.Summary, catalog.AgentDefinition, querySessionBuildOptions) (contracts.QuerySession, error)
-	mapper            *llm.DeltaMapper
-	emitDelta         func(contracts.AgentDelta)
-	emitInputs        func(...stream.StreamInput)
-	taskCounter       int
+	runCtx             context.Context
+	request            api.QueryRequest
+	session            contracts.QuerySession
+	summary            chat.Summary
+	agent              contracts.AgentEngine
+	registry           catalog.Registry
+	buildQuerySession  func(context.Context, api.QueryRequest, chat.Summary, catalog.AgentDefinition, querySessionBuildOptions) (contracts.QuerySession, error)
+	chats              chat.Store
+	prepareSystemInits func(api.QueryRequest, *contracts.QuerySession, bool) ([]chat.SystemInitLine, error)
+	systemInitMu       sync.Mutex
+	mapper             *llm.DeltaMapper
+	emitDelta          func(contracts.AgentDelta)
+	emitInputs         func(...stream.StreamInput)
+	taskCounter        int
 }
 
 func (o *frameOrchestrator) Run(mainStream contracts.AgentStream) (bool, bool, error) {
@@ -71,10 +75,12 @@ type childRouteEvent struct {
 }
 
 type preparedSubTask struct {
-	spec      contracts.SubAgentTaskSpec
-	agentDef  catalog.AgentDefinition
-	taskID    string
-	requestID string
+	spec       contracts.SubAgentTaskSpec
+	agentDef   catalog.AgentDefinition
+	taskID     string
+	requestID  string
+	groupID    string
+	mainToolID string
 }
 
 func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream, invoke contracts.DeltaInvokeSubAgents) error {
@@ -136,6 +142,10 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 	groupID := strings.TrimSpace(invoke.GroupID)
 	if groupID == "" {
 		groupID = "group_" + strings.TrimSpace(invoke.MainToolID)
+	}
+	for index := range prepared {
+		prepared[index].groupID = groupID
+		prepared[index].mainToolID = invoke.MainToolID
 	}
 
 	for _, task := range prepared {
@@ -244,6 +254,7 @@ func (o *frameOrchestrator) runChildTask(index int, task preparedSubTask, princi
 		result.Error = err.Error()
 		return result
 	}
+	o.writeChildTaskQueryAndSystem(subReq, &subSession, task)
 
 	subStream, err := o.agent.Stream(o.runCtx, subReq, subSession)
 	if err != nil {
@@ -317,6 +328,43 @@ func (o *frameOrchestrator) runChildTask(index int, task preparedSubTask, princi
 	return result
 }
 
+func (o *frameOrchestrator) writeChildTaskQueryAndSystem(subReq api.QueryRequest, subSession *contracts.QuerySession, task preparedSubTask) {
+	if o.chats == nil {
+		return
+	}
+	_ = o.chats.AppendQueryLine(o.summary.ChatID, chat.QueryLine{
+		Type:           "query",
+		ChatID:         o.summary.ChatID,
+		RunID:          o.session.RunID,
+		UpdatedAt:      time.Now().UnixMilli(),
+		TaskID:         task.taskID,
+		TaskName:       task.spec.TaskName,
+		TaskGroupID:    task.groupID,
+		TaskMainToolID: task.mainToolID,
+		SubAgentKey:    task.spec.SubAgentKey,
+		Query: map[string]any{
+			"message":   task.spec.TaskText,
+			"agentKey":  task.spec.SubAgentKey,
+			"chatId":    o.summary.ChatID,
+			"runId":     o.session.RunID,
+			"requestId": task.requestID,
+			"role":      "user",
+		},
+	})
+	if o.prepareSystemInits == nil || subSession == nil {
+		return
+	}
+	o.systemInitMu.Lock()
+	defer o.systemInitMu.Unlock()
+	lines, err := o.prepareSystemInits(subReq, subSession, false)
+	if err != nil {
+		return
+	}
+	for _, line := range lines {
+		_ = o.chats.AppendSystemInitLine(o.summary.ChatID, line)
+	}
+}
+
 func (o *frameOrchestrator) injectMainToolError(main llm.OrchestratableAgentStream, toolID string, message string) {
 	_ = main.InjectToolResult(toolID, message, true)
 }
@@ -376,6 +424,12 @@ func routeChildStreamInput(taskID string, input stream.StreamInput) stream.Strea
 		return value
 	case stream.AwaitingAnswer:
 		value.AwaitingID = namespaceChildID(taskID, value.AwaitingID)
+		return value
+	case stream.InputDebugPreCall:
+		value.TaskID = taskID
+		return value
+	case stream.InputDebugPostCall:
+		value.TaskID = taskID
 		return value
 	default:
 		return input

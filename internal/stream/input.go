@@ -213,6 +213,7 @@ type RequestSteer struct {
 func (RequestSteer) streamInputTag() {}
 
 type InputDebugPreCall struct {
+	TaskID                string
 	ChatID                string
 	ProviderKey           string
 	ProviderEndpoint      string
@@ -232,6 +233,7 @@ type InputDebugPreCall struct {
 func (InputDebugPreCall) streamInputTag() {}
 
 type InputDebugPostCall struct {
+	TaskID                    string
 	ChatID                    string
 	ModelKey                  string
 	ContextWindow             int

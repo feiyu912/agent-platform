@@ -55,7 +55,7 @@ func cumulativeUsagePayload(cumulative map[string]int) map[string]any {
 	}
 }
 
-func synthesizePreCallEvent(runID, chatID string, runCumulative, chatCumulative map[string]int, contextWindow map[string]any, preCallData map[string]any, ts int64, nextSeq func() int64) *stream.EventData {
+func synthesizePreCallEvent(runID, chatID string, taskID string, runCumulative, chatCumulative map[string]int, contextWindow map[string]any, preCallData map[string]any, ts int64, nextSeq func() int64) *stream.EventData {
 	data := cloneStringAnyMap(preCallData)
 	if data == nil {
 		data = map[string]any{}
@@ -67,15 +67,19 @@ func synthesizePreCallEvent(runID, chatID string, runCumulative, chatCumulative 
 		"runUsage":  cumulativeUsagePayload(runCumulative),
 		"chatUsage": cumulativeUsagePayload(chatCumulative),
 	}
+	payload := map[string]any{
+		"runId":  runID,
+		"chatId": chatID,
+		"data":   data,
+	}
+	if strings.TrimSpace(taskID) != "" {
+		payload["taskId"] = taskID
+	}
 	return &stream.EventData{
 		Seq:       nextSeq(),
 		Type:      "debug.preCall",
 		Timestamp: ts,
-		Payload: map[string]any{
-			"runId":  runID,
-			"chatId": chatID,
-			"data":   data,
-		},
+		Payload:   payload,
 	}
 }
 
@@ -96,7 +100,7 @@ func debugPreCallData(debug map[string]any, system map[string]any) map[string]an
 	return nil
 }
 
-func synthesizePostCallEvent(runID, chatID string, usage map[string]any, runCumulative, chatCumulative map[string]int, contextWindow map[string]any, ts int64, nextSeq func() int64) *stream.EventData {
+func synthesizePostCallEvent(runID, chatID string, taskID string, usage map[string]any, runCumulative, chatCumulative map[string]int, contextWindow map[string]any, ts int64, nextSeq func() int64) *stream.EventData {
 	llm := map[string]any{"promptTokens": 0, "completionTokens": 0, "totalTokens": 0}
 	if usage != nil {
 		llm = map[string]any{
@@ -114,15 +118,19 @@ func synthesizePostCallEvent(runID, chatID string, usage map[string]any, runCumu
 		"runUsage":       cumulativeUsagePayload(runCumulative),
 		"chatUsage":      cumulativeUsagePayload(chatCumulative),
 	}
+	payload := map[string]any{
+		"runId":  runID,
+		"chatId": chatID,
+		"data":   data,
+	}
+	if strings.TrimSpace(taskID) != "" {
+		payload["taskId"] = taskID
+	}
 	return &stream.EventData{
 		Seq:       nextSeq(),
 		Type:      "debug.postCall",
 		Timestamp: ts,
-		Payload: map[string]any{
-			"runId":  runID,
-			"chatId": chatID,
-			"data":   data,
-		},
+		Payload:   payload,
 	}
 }
 

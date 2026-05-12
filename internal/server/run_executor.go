@@ -15,25 +15,26 @@ import (
 )
 
 type RunExecutorParams struct {
-	RunCtx            context.Context
-	Request           api.QueryRequest
-	Session           contracts.QuerySession
-	StartedAtMillis   int64
-	Summary           chat.Summary
-	Agent             contracts.AgentEngine
-	Registry          catalog.Registry
-	Assembler         *stream.StreamEventAssembler
-	Mapper            *llm.DeltaMapper
-	Stream            config.StreamConfig
-	StepWriter        *chat.StepWriter
-	EventBus          *stream.RunEventBus
-	Chats             chat.Store
-	RunControl        *contracts.RunControl
-	BuildQuerySession func(context.Context, api.QueryRequest, chat.Summary, catalog.AgentDefinition, querySessionBuildOptions) (contracts.QuerySession, error)
-	Notifications     contracts.NotificationSink
-	OnUnreadChanged   func(chat.Summary)
-	OnPersisted       func(chat.RunCompletion)
-	OnComplete        func(string)
+	RunCtx             context.Context
+	Request            api.QueryRequest
+	Session            contracts.QuerySession
+	StartedAtMillis    int64
+	Summary            chat.Summary
+	Agent              contracts.AgentEngine
+	Registry           catalog.Registry
+	Assembler          *stream.StreamEventAssembler
+	Mapper             *llm.DeltaMapper
+	Stream             config.StreamConfig
+	StepWriter         *chat.StepWriter
+	EventBus           *stream.RunEventBus
+	Chats              chat.Store
+	RunControl         *contracts.RunControl
+	BuildQuerySession  func(context.Context, api.QueryRequest, chat.Summary, catalog.AgentDefinition, querySessionBuildOptions) (contracts.QuerySession, error)
+	PrepareSystemInits func(api.QueryRequest, *contracts.QuerySession, bool) ([]chat.SystemInitLine, error)
+	Notifications      contracts.NotificationSink
+	OnUnreadChanged    func(chat.Summary)
+	OnPersisted        func(chat.RunCompletion)
+	OnComplete         func(string)
 }
 
 type runEventProcessor struct {
@@ -238,16 +239,18 @@ func runExecutor(params RunExecutorParams) {
 	}
 
 	orchestrator := &frameOrchestrator{
-		runCtx:            runCtx,
-		request:           params.Request,
-		session:           params.Session,
-		summary:           params.Summary,
-		agent:             params.Agent,
-		registry:          params.Registry,
-		buildQuerySession: params.BuildQuerySession,
-		mapper:            params.Mapper,
-		emitDelta:         emitDelta,
-		emitInputs:        emitInputs,
+		runCtx:             runCtx,
+		request:            params.Request,
+		session:            params.Session,
+		summary:            params.Summary,
+		agent:              params.Agent,
+		registry:           params.Registry,
+		buildQuerySession:  params.BuildQuerySession,
+		chats:              params.Chats,
+		prepareSystemInits: params.PrepareSystemInits,
+		mapper:             params.Mapper,
+		emitDelta:          emitDelta,
+		emitInputs:         emitInputs,
 	}
 
 	streamFailed, streamInterrupted, orchestrateErr := orchestrator.Run(agentStream)

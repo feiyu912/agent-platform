@@ -71,21 +71,22 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 		principal = nil
 	}
 	StartRunExecutor(RunExecutorParams{
-		RunCtx:            runCtx,
-		Request:           prepared.req,
-		Session:           prepared.session,
-		Summary:           prepared.summary,
-		Agent:             s.deps.Agent,
-		Registry:          s.deps.Registry,
-		Assembler:         assembler,
-		Mapper:            mapper,
-		Stream:            s.deps.Config.Stream,
-		StepWriter:        stepWriter,
-		EventBus:          eventBus,
-		Chats:             s.deps.Chats,
-		RunControl:        control,
-		BuildQuerySession: s.BuildQuerySession,
-		Notifications:     s.deps.Notifications,
+		RunCtx:             runCtx,
+		Request:            prepared.req,
+		Session:            prepared.session,
+		Summary:            prepared.summary,
+		Agent:              s.deps.Agent,
+		Registry:           s.deps.Registry,
+		Assembler:          assembler,
+		Mapper:             mapper,
+		Stream:             s.deps.Config.Stream,
+		StepWriter:         stepWriter,
+		EventBus:           eventBus,
+		Chats:              s.deps.Chats,
+		RunControl:         control,
+		BuildQuerySession:  s.BuildQuerySession,
+		PrepareSystemInits: s.prepareSystemInitCache,
+		Notifications:      s.deps.Notifications,
 		OnUnreadChanged: func(summary chat.Summary) {
 			agentUnreadCount, err := s.agentUnreadCount(summary.AgentKey)
 			if err != nil {

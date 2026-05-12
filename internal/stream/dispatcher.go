@@ -105,7 +105,7 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 		d.state.terminated = true
 		return events
 	case InputDebugPreCall:
-		return []StreamEvent{NewEvent("debug.preCall", map[string]any{
+		payload := map[string]any{
 			"runId":  d.request.RunID,
 			"chatId": value.ChatID,
 			"data": map[string]any{
@@ -133,7 +133,11 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 					},
 				},
 			},
-		})}
+		}
+		if value.TaskID != "" {
+			payload["taskId"] = value.TaskID
+		}
+		return []StreamEvent{NewEvent("debug.preCall", payload)}
 	case InputDebugPostCall:
 		if value.RunTotalTokens > 0 {
 			d.state.runUsage = &runUsageState{
@@ -142,7 +146,7 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 				TotalTokens:      value.RunTotalTokens,
 			}
 		}
-		return []StreamEvent{NewEvent("debug.postCall", map[string]any{
+		payload := map[string]any{
 			"runId":  d.request.RunID,
 			"chatId": value.ChatID,
 			"data": map[string]any{
@@ -167,7 +171,11 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 					},
 				},
 			},
-		})}
+		}
+		if value.TaskID != "" {
+			payload["taskId"] = value.TaskID
+		}
+		return []StreamEvent{NewEvent("debug.postCall", payload)}
 	case InputRunComplete:
 		d.state.runFinishReason = value.FinishReason
 		return nil

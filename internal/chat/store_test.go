@@ -1612,6 +1612,278 @@ func TestStepWriterOmitsPreCallDebugWhenDebugEventsDisabled(t *testing.T) {
 	}
 }
 
+func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	writer := NewStepWriter(store, "chat-task-debug", "run-task-debug", "react", false, WithDebugEventsEnabled(true))
+	writer.OnEvent(stream.EventData{
+		Type: "task.start",
+		Payload: map[string]any{
+			"taskId":      "task_1",
+			"taskName":    "分析",
+			"groupId":     "group_tool_main_1",
+			"description": "run analysis",
+			"subAgentKey": "analyzer",
+			"mainToolId":  "tool_main_1",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "debug.preCall",
+		Payload: map[string]any{
+			"taskId": "task_1",
+			"data": map[string]any{
+				"provider":  map[string]any{"key": "mock"},
+				"systemRef": map[string]any{"cacheKey": "react:analyzer", "fingerprint": "sha256:child"},
+				"requestBody": map[string]any{
+					"model":    "gpt-5.2",
+					"messages": []any{map[string]any{"role": "user", "content": "secret"}},
+					"tools":    []any{map[string]any{"name": "bash"}},
+					"stream":   true,
+				},
+				"contextWindow": map[string]any{
+					"maxSize":       128000,
+					"estimatedSize": 200,
+				},
+			},
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "content.snapshot",
+		Payload: map[string]any{
+			"taskId":    "task_1",
+			"contentId": "child_1",
+			"text":      "child result",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "debug.postCall",
+		Payload: map[string]any{
+			"taskId": "task_1",
+			"data": map[string]any{
+				"contextWindow": map[string]any{
+					"maxSize":       128000,
+					"estimatedSize": 200,
+				},
+				"usage": map[string]any{
+					"llmReturnUsage": map[string]any{
+						"promptTokens":     100,
+						"completionTokens": 50,
+						"totalTokens":      150,
+					},
+				},
+			},
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "task.complete",
+		Payload: map[string]any{
+			"taskId": "task_1",
+			"status": "completed",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "content.snapshot",
+		Payload: map[string]any{
+			"contentId": "root_1",
+			"text":      "root result",
+		},
+	})
+	writer.OnEvent(stream.EventData{Type: "run.complete"})
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-task-debug"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("expected task and root step lines, got %#v", lines)
+	}
+	taskLine := lines[0]
+	if taskLine["taskId"] != "task_1" || taskLine["taskStatus"] != "completed" || taskLine["taskSubAgentKey"] != "analyzer" {
+		t.Fatalf("expected slim task metadata, got %#v", taskLine)
+	}
+	for _, field := range []string{"taskName", "taskGroupId", "taskDescription", "taskMainToolId"} {
+		if _, ok := taskLine[field]; ok {
+			t.Fatalf("did not expect %s on task react line: %#v", field, taskLine)
+		}
+	}
+	debug, _ := taskLine["debug"].(map[string]any)
+	preCall, _ := debug["preCall"].(map[string]any)
+	requestBody, _ := preCall["requestBody"].(map[string]any)
+	if requestBody["model"] != "gpt-5.2" {
+		t.Fatalf("expected sanitized requestBody model, got %#v", taskLine)
+	}
+	if _, ok := requestBody["messages"]; ok {
+		t.Fatalf("did not expect full messages in task debug requestBody, got %#v", requestBody)
+	}
+	if _, ok := requestBody["tools"]; ok {
+		t.Fatalf("did not expect full tools in task debug requestBody, got %#v", requestBody)
+	}
+	systemRef, _ := taskLine["systemRef"].(map[string]any)
+	if systemRef["cacheKey"] != "react:analyzer" || systemRef["fingerprint"] != "sha256:child" {
+		t.Fatalf("expected task systemRef, got %#v", taskLine)
+	}
+	usage, _ := taskLine["usage"].(map[string]any)
+	if toIntValue(usage["promptTokens"]) != 100 || toIntValue(usage["totalTokens"]) != 150 {
+		t.Fatalf("expected task usage, got %#v", taskLine)
+	}
+	contextWindow, _ := taskLine["contextWindow"].(map[string]any)
+	if toIntValue(contextWindow["maxSize"]) != 128000 || toIntValue(contextWindow["actualSize"]) != 100 || toIntValue(contextWindow["estimatedSize"]) != 200 {
+		t.Fatalf("expected task contextWindow, got %#v", taskLine)
+	}
+	if _, ok := lines[1]["debug"]; ok {
+		t.Fatalf("did not expect child debug to pollute root step, got %#v", lines[1])
+	}
+}
+
+func TestStepWriterSubTaskReactFlushOrder(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	writer := NewStepWriter(store, "chat-task-order", "run-task-order", "react", false)
+	writer.OnEvent(stream.EventData{
+		Type: "tool.snapshot",
+		Payload: map[string]any{
+			"toolId":    "tool_main_1",
+			"toolName":  "agent_invoke",
+			"arguments": `{"tasks":[]}`,
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "task.start",
+		Payload: map[string]any{
+			"taskId":      "task_1",
+			"subAgentKey": "analyzer",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "content.snapshot",
+		Payload: map[string]any{
+			"taskId":    "task_1",
+			"contentId": "child_1",
+			"text":      "child done",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "task.complete",
+		Payload: map[string]any{
+			"taskId": "task_1",
+			"status": "completed",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type: "tool.result",
+		Payload: map[string]any{
+			"toolId": "tool_main_1",
+			"result": "aggregate",
+		},
+	})
+	writer.OnEvent(stream.EventData{Type: "run.complete"})
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-task-order"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	if len(lines) != 3 {
+		t.Fatalf("expected root tool, task, root result lines, got %#v", lines)
+	}
+	if _, ok := lines[0]["taskId"]; ok {
+		t.Fatalf("expected first line to be main tool snapshot, got %#v", lines[0])
+	}
+	if lines[1]["taskId"] != "task_1" {
+		t.Fatalf("expected second line to be child task react, got %#v", lines)
+	}
+	if _, ok := lines[2]["taskId"]; ok {
+		t.Fatalf("expected third line to be main aggregate tool.result, got %#v", lines[2])
+	}
+}
+
+func TestQueryLineWithTaskIDSerializesSubAgentMetadata(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-task-query", QueryLine{
+		ChatID:         "chat-task-query",
+		RunID:          "run-task-query",
+		UpdatedAt:      1001,
+		TaskID:         "task_1",
+		TaskName:       "分析",
+		TaskGroupID:    "group_tool_main_1",
+		TaskMainToolID: "tool_main_1",
+		SubAgentKey:    "analyzer",
+		Query: map[string]any{
+			"message":   "run analysis",
+			"agentKey":  "analyzer",
+			"requestId": "sub_1",
+			"role":      "user",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-task-query"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected one query line, got %#v", lines)
+	}
+	line := lines[0]
+	if line["taskId"] != "task_1" || line["taskName"] != "分析" || line["taskGroupId"] != "group_tool_main_1" || line["taskMainToolId"] != "tool_main_1" || line["subAgentKey"] != "analyzer" {
+		t.Fatalf("expected sub-agent query metadata, got %#v", line)
+	}
+}
+
+func TestLoadRunTraceKeepsMainQueryWhenSubTaskQueriesExist(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-run-trace-query", "agent", "", "main prompt"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := store.AppendQueryLine("chat-run-trace-query", QueryLine{
+		ChatID:    "chat-run-trace-query",
+		RunID:     "run_1",
+		UpdatedAt: 1001,
+		Query: map[string]any{
+			"message": "main prompt",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append main query line: %v", err)
+	}
+	if err := store.AppendQueryLine("chat-run-trace-query", QueryLine{
+		ChatID:      "chat-run-trace-query",
+		RunID:       "run_1",
+		UpdatedAt:   1002,
+		TaskID:      "task_1",
+		SubAgentKey: "analyzer",
+		Query: map[string]any{
+			"message":  "child prompt",
+			"agentKey": "analyzer",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append child query line: %v", err)
+	}
+
+	trace, err := store.LoadRunTrace("chat-run-trace-query", "run_1")
+	if err != nil {
+		t.Fatalf("load run trace: %v", err)
+	}
+	if trace.Query == nil || trace.Query.TaskID != "" || trace.Query.Query["message"] != "main prompt" {
+		t.Fatalf("expected run trace to keep main query, got %#v", trace.Query)
+	}
+}
+
 func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
@@ -2291,8 +2563,11 @@ func TestStepWriterSubAgentStepsAreExcludedFromRawMessages(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("expected three step lines, got %#v", lines)
 	}
-	if lines[2]["taskSubAgentKey"] != "analyzer" || lines[2]["taskMainToolId"] != "tool_main_1" || lines[2]["taskStatus"] != "completed" {
-		t.Fatalf("expected sub-agent task metadata on final task step, got %#v", lines[2])
+	if lines[1]["taskSubAgentKey"] != "analyzer" || lines[1]["taskStatus"] != "completed" {
+		t.Fatalf("expected slim sub-agent task metadata on task step, got %#v", lines[1])
+	}
+	if _, ok := lines[1]["taskMainToolId"]; ok {
+		t.Fatalf("did not expect taskMainToolId on slim task step, got %#v", lines[1])
 	}
 }
 
@@ -2359,8 +2634,8 @@ func TestStepWriterTaskSnapshotsUpsertAfterComplete(t *testing.T) {
 		t.Fatalf("expected one upserted message, got %#v", lines[0])
 	}
 	msg, _ := messages[0].(map[string]any)
-	if msg["_contentId"] != "content_1" || !strings.Contains(extractTextFromContent(msg["content"]), "完整正文") {
-		t.Fatalf("expected final content snapshot, got %#v", msg)
+	if msg["_contentId"] != "content_1" || strings.Contains(extractTextFromContent(msg["content"]), "完整正文") {
+		t.Fatalf("expected post-complete snapshot to be ignored, got %#v", msg)
 	}
 }
 
@@ -2482,6 +2757,26 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 	}
 
 	contentTs := int64(2001)
+	if err := store.AppendQueryLine("chat-subagent-replay", QueryLine{
+		ChatID:         "chat-subagent-replay",
+		RunID:          "run-subagent-replay",
+		UpdatedAt:      2000,
+		TaskID:         "task_1",
+		TaskName:       "分析",
+		TaskGroupID:    "group_tool_main_1",
+		TaskMainToolID: "tool_main_1",
+		SubAgentKey:    "analyzer",
+		Query: map[string]any{
+			"chatId":   "chat-subagent-replay",
+			"runId":    "run-subagent-replay",
+			"agentKey": "analyzer",
+			"message":  "run analysis",
+			"role":     "user",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append sub-agent query line: %v", err)
+	}
 	if err := store.AppendStepLine("chat-subagent-replay", StepLine{
 		ChatID:          "chat-subagent-replay",
 		RunID:           "run-subagent-replay",
@@ -2489,11 +2784,8 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 		Type:            "react",
 		Seq:             1,
 		TaskID:          "task_1",
-		TaskName:        "分析",
-		TaskDescription: "run analysis",
 		TaskStatus:      "completed",
 		TaskSubAgentKey: "analyzer",
-		TaskMainToolID:  "tool_main_1",
 		Messages: []StoredMessage{{
 			Role:      "assistant",
 			Content:   []ContentPart{{Type: "text", Text: "child result"}},

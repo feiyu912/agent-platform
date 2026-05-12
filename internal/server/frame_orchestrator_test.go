@@ -1,9 +1,12 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -114,6 +117,28 @@ func (s *blockingOrchestratableStream) FinalAssistantContent() (string, bool) {
 
 var _ llm.OrchestratableAgentStream = (*stubOrchestratableStream)(nil)
 var _ llm.OrchestratableAgentStream = (*blockingOrchestratableStream)(nil)
+
+func readServerTestJSONLines(store *chat.FileStore, chatID string) ([]map[string]any, error) {
+	path := filepath.Join(filepath.Dir(store.ChatDir(chatID)), chatID+".jsonl")
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	var lines []map[string]any
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var line map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
+			return nil, err
+		}
+		lines = append(lines, line)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return lines, nil
+}
 
 func newInvokeAgentsDelta(tasks ...contracts.SubAgentTaskSpec) contracts.DeltaInvokeSubAgents {
 	return contracts.DeltaInvokeSubAgents{
@@ -255,6 +280,7 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 	}
 	childOne := &stubOrchestratableStream{
 		deltas: []contracts.AgentDelta{
+			contracts.DeltaDebugPreCall{ChatID: "chat_1", ModelKey: "mock"},
 			contracts.DeltaReasoning{Text: "thinking"},
 			contracts.DeltaContent{Text: "child answer"},
 		},
@@ -329,8 +355,13 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 	}
 	foundReasoning := false
 	foundContent := false
+	foundPreCall := false
 	for _, input := range routed {
 		switch value := input.(type) {
+		case stream.InputDebugPreCall:
+			if value.TaskID == "run_1_t_1" {
+				foundPreCall = true
+			}
 		case stream.ReasoningDelta:
 			if value.TaskID == "run_1_t_1" && value.ReasoningID == "run_1_t_1_r_1" {
 				foundReasoning = true
@@ -341,8 +372,78 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 			}
 		}
 	}
-	if !foundReasoning || !foundContent {
-		t.Fatalf("expected child reasoning/content IDs to use task prefix; reasoning=%v content=%v routed=%#v", foundReasoning, foundContent, routed)
+	if !foundPreCall || !foundReasoning || !foundContent {
+		t.Fatalf("expected child debug/reasoning/content IDs to use task prefix; preCall=%v reasoning=%v content=%v routed=%#v", foundPreCall, foundReasoning, foundContent, routed)
+	}
+}
+
+func TestFrameOrchestratorWritesSubAgentQueryAndSystemLines(t *testing.T) {
+	store, err := chat.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	mainStream := &stubOrchestratableStream{
+		deltas: []contracts.AgentDelta{
+			newInvokeAgentsDelta(
+				contracts.SubAgentTaskSpec{SubAgentKey: "writer", TaskText: "write a summary", TaskName: "写作"},
+				contracts.SubAgentTaskSpec{SubAgentKey: "writer", TaskText: "write another", TaskName: "再写"},
+			),
+		},
+	}
+	childOne := &stubOrchestratableStream{finalText: "first"}
+	childTwo := &stubOrchestratableStream{finalText: "second"}
+	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{streams: []contracts.AgentStream{childOne, childTwo}}, map[string]catalog.AgentDefinition{
+		"writer": {Key: "writer", Name: "Writer", Mode: "REACT"},
+	}, nil, nil)
+	orchestrator.chats = store
+	orchestrator.prepareSystemInits = func(req api.QueryRequest, session *contracts.QuerySession, _ bool) ([]chat.SystemInitLine, error) {
+		existing, err := store.LoadAllSystemInits(req.ChatID)
+		if err != nil {
+			return nil, err
+		}
+		if existing["react:writer"] != nil {
+			return nil, nil
+		}
+		return []chat.SystemInitLine{{
+			Type:        "system",
+			ChatID:      req.ChatID,
+			AgentKey:    session.AgentKey,
+			RunID:       session.RunID,
+			CacheKey:    "react:writer",
+			Fingerprint: "sha256:writer",
+			SystemMessage: map[string]any{
+				"role":    "system",
+				"content": "writer system",
+			},
+		}}, nil
+	}
+
+	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
+	if err != nil || streamFailed || streamInterrupted {
+		t.Fatalf("unexpected orchestrator result err=%v failed=%v interrupted=%v", err, streamFailed, streamInterrupted)
+	}
+
+	lines, err := readServerTestJSONLines(store, "chat_1")
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	var queryCount, systemCount int
+	for _, line := range lines {
+		switch line["_type"] {
+		case "query":
+			if line["taskId"] == "" || line["subAgentKey"] != "writer" || line["taskMainToolId"] != "tool_main_1" {
+				t.Fatalf("unexpected child query line %#v", line)
+			}
+			queryCount++
+		case "system":
+			if line["agentKey"] != "writer" || line["cacheKey"] != "react:writer" {
+				t.Fatalf("unexpected child system line %#v", line)
+			}
+			systemCount++
+		}
+	}
+	if queryCount != 2 || systemCount != 1 {
+		t.Fatalf("expected two child query lines and one deduped system line, got queries=%d systems=%d lines=%#v", queryCount, systemCount, lines)
 	}
 }
 

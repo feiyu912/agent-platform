@@ -41,6 +41,7 @@ type StepWriter struct {
 	latestPlan     *PlanState
 	latestArtifact *ArtifactState
 	taskBuffers    map[string]*taskStepBuffer
+	closedTaskIDs  map[string]bool
 
 	// tool/action name tracking (for tool.result → StoredMessage.Name)
 	toolNames     map[string]string
@@ -65,15 +66,16 @@ type StepWriter struct {
 }
 
 type taskStepBuffer struct {
-	taskID          string
-	taskStage       string
-	taskName        string
-	taskGroupID     string
-	taskDescription string
-	taskStatus      string
-	taskSubAgentKey string
-	taskMainToolID  string
-	messages        []StoredMessage
+	taskID                  string
+	taskStage               string
+	taskStatus              string
+	taskSubAgentKey         string
+	messages                []StoredMessage
+	pendingPreCallData      map[string]any
+	pendingSystemRef        map[string]any
+	pendingUsage            map[string]any
+	pendingContextWindowMax int
+	pendingEstimated        int
 }
 
 type StepWriterOption func(*StepWriter)
@@ -95,6 +97,7 @@ func NewStepWriter(store Store, chatID, runID, mode string, hidden bool, opts ..
 		mode:          strings.ToUpper(strings.TrimSpace(mode)),
 		hidden:        hidden,
 		taskBuffers:   map[string]*taskStepBuffer{},
+		closedTaskIDs: map[string]bool{},
 		toolNames:     map[string]string{},
 		actionNames:   map[string]string{},
 		toolTaskIDs:   map[string]string{},
@@ -271,16 +274,13 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		if strings.TrimSpace(taskID) == "" {
 			break
 		}
+		delete(w.closedTaskIDs, taskID)
 		buffer := w.ensureTaskBuffer(taskID)
 		if strings.TrimSpace(buffer.taskStage) == "" {
 			buffer.taskStage = w.currentStage
 		}
-		buffer.taskName = event.String("taskName")
-		buffer.taskGroupID = event.String("groupId")
-		buffer.taskDescription = event.String("description")
 		buffer.taskStatus = ""
 		buffer.taskSubAgentKey = event.String("subAgentKey")
-		buffer.taskMainToolID = event.String("mainToolId")
 	case "task.complete", "task.cancel", "task.fail":
 		taskID := event.String("taskId")
 		if strings.TrimSpace(taskID) == "" {
@@ -293,35 +293,27 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			case "task.cancel":
 				buffer.taskStatus = "cancelled"
 			case "task.fail":
-				buffer.taskStatus = "error"
+				buffer.taskStatus = "failed"
 			default:
 				buffer.taskStatus = "completed"
 			}
 		}
+		w.flushTaskStep(taskID)
+		delete(w.taskBuffers, taskID)
+		w.closedTaskIDs[taskID] = true
 
 	case "artifact.publish":
 		w.updateArtifact(event)
 
 	case "debug.preCall", "debug.postCall":
 		if inner, ok := event.Value("data").(map[string]any); ok {
-			if event.Type == "debug.preCall" {
-				if w.debugEventsEnabled {
-					w.pendingPreCallData = sanitizePreCallData(inner)
+			if taskID := w.taskIDForEvent(event); taskID != "" {
+				if w.closedTaskIDs[taskID] {
+					break
 				}
-				w.pendingSystemRef = systemRefFromPreCall(inner)
-			}
-			if cw, ok := inner["contextWindow"].(map[string]any); ok {
-				w.pendingContextWindowMax = toIntFromKeys(cw, "maxSize", "max_size")
-				w.pendingEstimated = toIntFromKeys(cw, "estimatedSize", "estimated_size")
-			}
-			if usage, ok := inner["usage"].(map[string]any); ok {
-				if llm, ok := usage["llmReturnUsage"].(map[string]any); ok {
-					w.pendingUsage = map[string]any{
-						"promptTokens":     toInt(llm["promptTokens"]),
-						"completionTokens": toInt(llm["completionTokens"]),
-						"totalTokens":      toInt(llm["totalTokens"]),
-					}
-				}
+				w.captureTaskDebugData(w.ensureTaskBuffer(taskID), event.Type, inner)
+			} else {
+				w.captureRootDebugData(event.Type, inner)
 			}
 		}
 
@@ -424,6 +416,9 @@ func (w *StepWriter) flushPendingSystemInits() {
 
 func (w *StepWriter) appendStoredMessage(event stream.EventData, message StoredMessage) {
 	if taskID := w.taskIDForEvent(event); taskID != "" {
+		if w.closedTaskIDs[taskID] {
+			return
+		}
 		buffer := w.ensureTaskBuffer(taskID)
 		if strings.TrimSpace(buffer.taskStage) == "" {
 			buffer.taskStage = w.currentStage
@@ -432,6 +427,53 @@ func (w *StepWriter) appendStoredMessage(event stream.EventData, message StoredM
 		return
 	}
 	w.messages = upsertStoredMessage(w.messages, message)
+}
+
+func (w *StepWriter) captureRootDebugData(eventType string, inner map[string]any) {
+	if eventType == "debug.preCall" {
+		if w.debugEventsEnabled {
+			w.pendingPreCallData = sanitizePreCallData(inner)
+		}
+		w.pendingSystemRef = systemRefFromPreCall(inner)
+	}
+	if cw, ok := inner["contextWindow"].(map[string]any); ok {
+		w.pendingContextWindowMax = toIntFromKeys(cw, "maxSize", "max_size")
+		w.pendingEstimated = toIntFromKeys(cw, "estimatedSize", "estimated_size")
+	}
+	if usage, ok := inner["usage"].(map[string]any); ok {
+		if llm, ok := usage["llmReturnUsage"].(map[string]any); ok {
+			w.pendingUsage = map[string]any{
+				"promptTokens":     toInt(llm["promptTokens"]),
+				"completionTokens": toInt(llm["completionTokens"]),
+				"totalTokens":      toInt(llm["totalTokens"]),
+			}
+		}
+	}
+}
+
+func (w *StepWriter) captureTaskDebugData(buffer *taskStepBuffer, eventType string, inner map[string]any) {
+	if buffer == nil {
+		return
+	}
+	if eventType == "debug.preCall" {
+		if w.debugEventsEnabled {
+			buffer.pendingPreCallData = sanitizePreCallData(inner)
+		}
+		buffer.pendingSystemRef = systemRefFromPreCall(inner)
+	}
+	if cw, ok := inner["contextWindow"].(map[string]any); ok {
+		buffer.pendingContextWindowMax = toIntFromKeys(cw, "maxSize", "max_size")
+		buffer.pendingEstimated = toIntFromKeys(cw, "estimatedSize", "estimated_size")
+	}
+	if usage, ok := inner["usage"].(map[string]any); ok {
+		if llm, ok := usage["llmReturnUsage"].(map[string]any); ok {
+			buffer.pendingUsage = map[string]any{
+				"promptTokens":     toInt(llm["promptTokens"]),
+				"completionTokens": toInt(llm["completionTokens"]),
+				"totalTokens":      toInt(llm["totalTokens"]),
+			}
+		}
+	}
 }
 
 func (w *StepWriter) flushCurrentStep() {
@@ -483,21 +525,7 @@ func (w *StepWriter) flushCurrentStep() {
 		line.SystemRef = cloneStepSystemPayload(w.pendingSystemRef)
 	}
 	if w.pendingUsage != nil || w.pendingContextWindowMax > 0 || w.pendingEstimated > 0 {
-		actual := 0
-		if w.pendingUsage != nil {
-			actual = toIntFromKeys(w.pendingUsage, "promptTokens", "prompt_tokens")
-		}
-		cw := map[string]any{}
-		if w.pendingContextWindowMax > 0 {
-			cw["maxSize"] = w.pendingContextWindowMax
-		}
-		if actual > 0 {
-			cw["actualSize"] = actual
-		}
-		if w.pendingEstimated > 0 {
-			cw["estimatedSize"] = w.pendingEstimated
-		}
-		if len(cw) > 0 {
+		if cw := buildContextWindow(w.pendingUsage, w.pendingContextWindowMax, w.pendingEstimated); len(cw) > 0 {
 			line.ContextWindow = cw
 		}
 		w.pendingUsage = nil
@@ -553,13 +581,25 @@ func (w *StepWriter) flushTaskStep(taskID string) {
 		RunID:           w.runID,
 		UpdatedAt:       time.Now().UnixMilli(),
 		TaskID:          buffer.taskID,
-		TaskName:        buffer.taskName,
-		TaskGroupID:     buffer.taskGroupID,
-		TaskDescription: buffer.taskDescription,
 		TaskStatus:      buffer.taskStatus,
 		TaskSubAgentKey: buffer.taskSubAgentKey,
-		TaskMainToolID:  buffer.taskMainToolID,
 		Messages:        append([]StoredMessage(nil), buffer.messages...),
+	}
+	if buffer.pendingUsage != nil {
+		line.Usage = buffer.pendingUsage
+	}
+	if buffer.pendingPreCallData != nil {
+		line.Debug = map[string]any{
+			"preCall": cloneStepSystemPayload(buffer.pendingPreCallData),
+		}
+	}
+	if len(buffer.pendingSystemRef) > 0 {
+		line.SystemRef = cloneStepSystemPayload(buffer.pendingSystemRef)
+	}
+	if buffer.pendingUsage != nil || buffer.pendingContextWindowMax > 0 || buffer.pendingEstimated > 0 {
+		if cw := buildContextWindow(buffer.pendingUsage, buffer.pendingContextWindowMax, buffer.pendingEstimated); len(cw) > 0 {
+			line.ContextWindow = cw
+		}
 	}
 	if w.latestPlan != nil {
 		line.Plan = w.latestPlan
@@ -586,6 +626,11 @@ func (w *StepWriter) flushTaskStep(taskID string) {
 
 	_ = w.store.AppendStepLine(w.chatID, line)
 	buffer.messages = nil
+	buffer.pendingUsage = nil
+	buffer.pendingContextWindowMax = 0
+	buffer.pendingEstimated = 0
+	buffer.pendingPreCallData = nil
+	buffer.pendingSystemRef = nil
 }
 
 func (w *StepWriter) flushAllTaskSteps() {
@@ -819,6 +864,27 @@ func cloneStepSystemPayload(value map[string]any) map[string]any {
 		return cloneStringAnyMap(value)
 	}
 	return cloned
+}
+
+func buildContextWindow(usage map[string]any, maxSize int, estimatedSize int) map[string]any {
+	actual := 0
+	if usage != nil {
+		actual = toIntFromKeys(usage, "promptTokens", "prompt_tokens")
+	}
+	cw := map[string]any{}
+	if maxSize > 0 {
+		cw["maxSize"] = maxSize
+	}
+	if actual > 0 {
+		cw["actualSize"] = actual
+	}
+	if estimatedSize > 0 {
+		cw["estimatedSize"] = estimatedSize
+	}
+	if len(cw) == 0 {
+		return nil
+	}
+	return cw
 }
 
 func sanitizePreCallData(value map[string]any) map[string]any {
