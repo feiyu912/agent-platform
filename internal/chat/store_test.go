@@ -2955,6 +2955,15 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 	if toIntValue(llmUsage["promptTokens"]) != 100 || toIntValue(llmUsage["completionTokens"]) != 50 || toIntValue(llmUsage["totalTokens"]) != 150 {
 		t.Fatalf("unexpected debug.postCall usage %#v", detail.Events[5])
 	}
+	terminalUsage, _ := detail.Events[6].Value("usage").(map[string]any)
+	terminalRunUsage, _ := terminalUsage["run"].(map[string]any)
+	if toIntValue(terminalRunUsage["promptTokens"]) != 100 || toIntValue(terminalRunUsage["completionTokens"]) != 50 || toIntValue(terminalRunUsage["totalTokens"]) != 150 {
+		t.Fatalf("unexpected synthesized run.complete run usage %#v", detail.Events[6])
+	}
+	terminalChatUsage, _ := terminalUsage["chat"].(map[string]any)
+	if toIntValue(terminalChatUsage["promptTokens"]) != 100 || toIntValue(terminalChatUsage["completionTokens"]) != 50 || toIntValue(terminalChatUsage["totalTokens"]) != 150 {
+		t.Fatalf("unexpected synthesized run.complete chat usage %#v", detail.Events[6])
+	}
 }
 
 func TestLoadChatReplaysLegacySystemDebugPreCall(t *testing.T) {

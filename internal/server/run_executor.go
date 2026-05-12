@@ -105,15 +105,31 @@ func (p *runEventProcessor) decorate(data *stream.EventData) {
 				p.runUsage.CompletionTokens = contracts.AnyIntNode(usage["completionTokens"])
 				p.runUsage.TotalTokens = contracts.AnyIntNode(usage["totalTokens"])
 			}
-			if data.Payload == nil {
-				data.Payload = map[string]any{}
-			}
-			data.Payload["chatUsage"] = map[string]any{
-				"promptTokens":     p.chatUsage.PromptTokens + p.runUsage.PromptTokens,
-				"completionTokens": p.chatUsage.CompletionTokens + p.runUsage.CompletionTokens,
-				"totalTokens":      p.chatUsage.TotalTokens + p.runUsage.TotalTokens,
-			}
 		}
+		p.decorateTerminalUsage(data)
+	}
+}
+
+func (p *runEventProcessor) decorateTerminalUsage(data *stream.EventData) {
+	if data == nil || data.Payload == nil {
+		return
+	}
+	delete(data.Payload, "chatUsage")
+	if p.runUsage == nil || p.runUsage.TotalTokens == 0 {
+		delete(data.Payload, "usage")
+		return
+	}
+	data.Payload["usage"] = map[string]any{
+		"chat": map[string]any{
+			"promptTokens":     p.chatUsage.PromptTokens + p.runUsage.PromptTokens,
+			"completionTokens": p.chatUsage.CompletionTokens + p.runUsage.CompletionTokens,
+			"totalTokens":      p.chatUsage.TotalTokens + p.runUsage.TotalTokens,
+		},
+		"run": map[string]any{
+			"promptTokens":     p.runUsage.PromptTokens,
+			"completionTokens": p.runUsage.CompletionTokens,
+			"totalTokens":      p.runUsage.TotalTokens,
+		},
 	}
 }
 

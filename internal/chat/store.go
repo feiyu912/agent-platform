@@ -1282,6 +1282,9 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				chatTotalPromptTokens += toIntValue(stepUsage["prompt_tokens"])
 				chatTotalCompletionTokens += toIntValue(stepUsage["completion_tokens"])
 				chatTotalTotalTokens += toIntValue(stepUsage["total_tokens"])
+				rd.chatTotalPromptTokens = chatTotalPromptTokens
+				rd.chatTotalCompletionTokens = chatTotalCompletionTokens
+				rd.chatTotalTotalTokens = chatTotalTotalTokens
 			}
 			if stepUsage != nil || len(stepContextWindow) > 0 {
 				runCumulativePost := map[string]int{
@@ -1370,9 +1373,16 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			payload := map[string]any{"runId": runID, "finishReason": "stop"}
 			if rd.totalTotalTokens > 0 {
 				payload["usage"] = map[string]any{
-					"promptTokens":     rd.totalPromptTokens,
-					"completionTokens": rd.totalCompletionTokens,
-					"totalTokens":      rd.totalTotalTokens,
+					"chat": map[string]any{
+						"promptTokens":     rd.chatTotalPromptTokens,
+						"completionTokens": rd.chatTotalCompletionTokens,
+						"totalTokens":      rd.chatTotalTotalTokens,
+					},
+					"run": map[string]any{
+						"promptTokens":     rd.totalPromptTokens,
+						"completionTokens": rd.totalCompletionTokens,
+						"totalTokens":      rd.totalTotalTokens,
+					},
 				}
 			}
 			allEvents = append(allEvents, stream.EventData{
@@ -1812,13 +1822,16 @@ func parseArtifactFromStep(raw map[string]any) *ArtifactState {
 }
 
 type chatRunData struct {
-	runID                 string
-	agentKey              string
-	events                []stream.EventData
-	totalPromptTokens     int
-	totalCompletionTokens int
-	totalTotalTokens      int
-	activeSubTasks        map[string]*replayedSubTask
+	runID                     string
+	agentKey                  string
+	events                    []stream.EventData
+	totalPromptTokens         int
+	totalCompletionTokens     int
+	totalTotalTokens          int
+	chatTotalPromptTokens     int
+	chatTotalCompletionTokens int
+	chatTotalTotalTokens      int
+	activeSubTasks            map[string]*replayedSubTask
 }
 
 type replayedSubTask struct {
