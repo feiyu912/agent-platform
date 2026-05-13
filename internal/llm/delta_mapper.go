@@ -180,7 +180,6 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 			return []stream.StreamInput{stream.TaskStart{
 				TaskID:      value.TaskID,
 				RunID:       value.RunID,
-				GroupID:     value.GroupID,
 				TaskName:    value.TaskName,
 				Description: value.Description,
 				SubAgentKey: value.SubAgentKey,

@@ -31,6 +31,7 @@ type RunExecutorParams struct {
 	RunControl         *contracts.RunControl
 	BuildQuerySession  func(context.Context, api.QueryRequest, chat.Summary, catalog.AgentDefinition, querySessionBuildOptions) (contracts.QuerySession, error)
 	PrepareSystemInits func(api.QueryRequest, *contracts.QuerySession, bool) ([]chat.QueryLineSystemInit, error)
+	BuildChildSystems  func(api.QueryRequest, *contracts.QuerySession) []chat.QueryLineSystemInit
 	Notifications      contracts.NotificationSink
 	OnUnreadChanged    func(chat.Summary)
 	OnPersisted        func(chat.RunCompletion)
@@ -248,6 +249,7 @@ func runExecutor(params RunExecutorParams) {
 		buildQuerySession:  params.BuildQuerySession,
 		chats:              params.Chats,
 		prepareSystemInits: params.PrepareSystemInits,
+		buildChildSystems:  params.BuildChildSystems,
 		mapper:             params.Mapper,
 		emitDelta:          emitDelta,
 		emitInputs:         emitInputs,

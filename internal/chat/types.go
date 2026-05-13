@@ -52,9 +52,6 @@ type SystemInitLine struct {
 type QueryLineSystemInit struct {
 	CacheKey      string         `json:"cacheKey"`
 	Fingerprint   string         `json:"fingerprint"`
-	Mode          string         `json:"mode,omitempty"`
-	Stage         string         `json:"stage,omitempty"`
-	AgentKey      string         `json:"agentKey,omitempty"`
 	SystemMessage map[string]any `json:"systemMessage"`
 	Tools         []any          `json:"tools"`
 }
@@ -68,7 +65,6 @@ type QueryLine struct {
 	Hidden         bool                  `json:"hidden,omitempty"`
 	TaskID         string                `json:"taskId,omitempty"`
 	TaskName       string                `json:"taskName,omitempty"`
-	TaskGroupID    string                `json:"taskGroupId,omitempty"`
 	TaskMainToolID string                `json:"taskMainToolId,omitempty"`
 	SubAgentKey    string                `json:"subAgentKey,omitempty"`
 	Query          map[string]any        `json:"query"`

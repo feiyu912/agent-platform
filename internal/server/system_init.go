@@ -48,11 +48,8 @@ func (s *Server) prepareSystemInitCache(req api.QueryRequest, session *contracts
 			continue
 		}
 		system := chat.QueryLineSystemInit{
-			AgentKey:      session.AgentKey,
 			Fingerprint:   profile.Fingerprint,
 			CacheKey:      profile.CacheKey,
-			Mode:          profile.Mode,
-			Stage:         profile.Stage,
 			SystemMessage: cloneMap(profile.SystemMessage),
 			Tools:         cloneAnySlice(profile.Tools),
 		}
@@ -67,6 +64,29 @@ func (s *Server) prepareSystemInitCache(req api.QueryRequest, session *contracts
 		session.SystemInitCache = cache
 	}
 	return pendingSystems, nil
+}
+
+func (s *Server) buildSystemInitsForChildTask(req api.QueryRequest, session *contracts.QuerySession) []chat.QueryLineSystemInit {
+	if session == nil || s.deps.Tools == nil {
+		return nil
+	}
+	profiles := llm.BuildSystemInitProfiles(
+		*session,
+		req,
+		s.deps.Tools.Definitions(),
+		s.deps.Config.Defaults.Plan.MaxSteps,
+		s.deps.Config.Defaults.Plan.MaxWorkRoundsPerTask,
+	)
+	systems := make([]chat.QueryLineSystemInit, 0, len(profiles))
+	for _, profile := range profiles {
+		systems = append(systems, chat.QueryLineSystemInit{
+			CacheKey:      profile.CacheKey,
+			Fingerprint:   profile.Fingerprint,
+			SystemMessage: cloneMap(profile.SystemMessage),
+			Tools:         cloneAnySlice(profile.Tools),
+		})
+	}
+	return systems
 }
 
 func cloneMap(src map[string]any) map[string]any {

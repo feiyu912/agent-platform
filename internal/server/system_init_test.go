@@ -58,11 +58,8 @@ func TestPrepareSystemInitCacheUsesFreshSystemMessageOnFingerprintMatch(t *testi
 		UpdatedAt: 1001,
 		Query:     map[string]any{"role": "user", "message": "hello", "agentKey": oldSession.AgentKey},
 		Systems: []chat.QueryLineSystemInit{{
-			AgentKey:      oldSession.AgentKey,
 			Fingerprint:   oldProfiles[0].Fingerprint,
 			CacheKey:      oldProfiles[0].CacheKey,
-			Mode:          oldProfiles[0].Mode,
-			Stage:         oldProfiles[0].Stage,
 			SystemMessage: oldProfiles[0].SystemMessage,
 			Tools:         cachedTools,
 		}},
@@ -133,7 +130,7 @@ func TestPrepareSystemInitCacheReturnsPendingLineOnFingerprintChange(t *testing.
 	if len(pending) != 1 {
 		t.Fatalf("expected one pending system cache line, got %#v", pending)
 	}
-	if pending[0].AgentKey != "agent" || pending[0].CacheKey != "react:main" || pending[0].Fingerprint == "" {
+	if pending[0].CacheKey != "react:main" || pending[0].Fingerprint == "" {
 		t.Fatalf("unexpected pending system cache line %#v", pending[0])
 	}
 	if _, ok := session.SystemInitCache["react:main"]; !ok {
@@ -145,5 +142,59 @@ func TestPrepareSystemInitCacheReturnsPendingLineOnFingerprintChange(t *testing.
 	}
 	if loaded != nil {
 		t.Fatalf("prepare should not append before query, got %#v", loaded)
+	}
+}
+
+func TestMainQueryStillDedupsSystemsByFingerprint(t *testing.T) {
+	store, err := chat.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new chat store: %v", err)
+	}
+
+	req := api.QueryRequest{ChatID: "chat-1", Message: "hello"}
+	toolDefs := []api.ToolDetailResponse{{Name: "datetime", Description: "get current time"}}
+	server := &Server{deps: Dependencies{
+		Config: config.Config{},
+		Chats:  store,
+		Tools:  systemInitStaticToolExecutor{defs: toolDefs},
+	}}
+	session := contracts.QuerySession{
+		RunID:                "run-1",
+		ChatID:               "chat-1",
+		AgentKey:             "agent",
+		ModelKey:             "mock-model",
+		ToolNames:            []string{"datetime"},
+		Mode:                 "REACT",
+		ContextTags:          []string{"system"},
+		PromptAppend:         contracts.DefaultPromptAppendConfig(),
+		AgentHasMemoryConfig: true,
+	}
+
+	firstPending, err := server.prepareSystemInitCache(req, &session, true)
+	if err != nil {
+		t.Fatalf("first prepare system init cache: %v", err)
+	}
+	if len(firstPending) != 1 {
+		t.Fatalf("expected first main query to carry system init, got %#v", firstPending)
+	}
+	if err := store.AppendQueryLine(req.ChatID, chat.QueryLine{
+		Type:      "query",
+		ChatID:    req.ChatID,
+		RunID:     session.RunID,
+		UpdatedAt: 1001,
+		Query:     map[string]any{"role": "user", "message": req.Message, "agentKey": session.AgentKey},
+		Systems:   firstPending,
+	}); err != nil {
+		t.Fatalf("append first query: %v", err)
+	}
+
+	nextSession := session
+	nextSession.RunID = "run-2"
+	secondPending, err := server.prepareSystemInitCache(req, &nextSession, false)
+	if err != nil {
+		t.Fatalf("second prepare system init cache: %v", err)
+	}
+	if len(secondPending) != 0 {
+		t.Fatalf("expected second main query to dedup unchanged system init, got %#v", secondPending)
 	}
 }

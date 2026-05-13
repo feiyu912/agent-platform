@@ -72,7 +72,6 @@ type DeltaTaskLifecycle struct {
 	Kind        string
 	TaskID      string
 	RunID       string
-	GroupID     string
 	TaskName    string
 	Description string
 	SubAgentKey string
@@ -91,7 +90,6 @@ type SubAgentTaskSpec struct {
 
 type DeltaInvokeSubAgents struct {
 	MainToolID string
-	GroupID    string
 	Tasks      []SubAgentTaskSpec
 }
 

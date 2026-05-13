@@ -162,7 +162,6 @@ func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolIn
 				TaskName:    taskName,
 			})
 		}
-		groupID := "group_" + toolID
 		return &preparedToolInvocation{
 			toolID:              toolID,
 			toolName:            toolCall.Function.Name,
@@ -170,7 +169,6 @@ func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolIn
 			awaitExternalResult: true,
 			prelude: []AgentDelta{DeltaInvokeSubAgents{
 				MainToolID: toolID,
-				GroupID:    groupID,
 				Tasks:      tasks,
 			}},
 		}, nil, nil

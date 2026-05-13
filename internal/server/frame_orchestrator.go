@@ -28,6 +28,7 @@ type frameOrchestrator struct {
 	buildQuerySession  func(context.Context, api.QueryRequest, chat.Summary, catalog.AgentDefinition, querySessionBuildOptions) (contracts.QuerySession, error)
 	chats              chat.Store
 	prepareSystemInits func(api.QueryRequest, *contracts.QuerySession, bool) ([]chat.QueryLineSystemInit, error)
+	buildChildSystems  func(api.QueryRequest, *contracts.QuerySession) []chat.QueryLineSystemInit
 	systemInitMu       sync.Mutex
 	mapper             *llm.DeltaMapper
 	emitDelta          func(contracts.AgentDelta)
@@ -79,7 +80,6 @@ type preparedSubTask struct {
 	agentDef   catalog.AgentDefinition
 	taskID     string
 	requestID  string
-	groupID    string
 	mainToolID string
 }
 
@@ -139,12 +139,7 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 		})
 	}
 
-	groupID := strings.TrimSpace(invoke.GroupID)
-	if groupID == "" {
-		groupID = "group_" + strings.TrimSpace(invoke.MainToolID)
-	}
 	for index := range prepared {
-		prepared[index].groupID = groupID
 		prepared[index].mainToolID = invoke.MainToolID
 	}
 
@@ -153,7 +148,6 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 			Kind:        "start",
 			TaskID:      task.taskID,
 			RunID:       o.session.RunID,
-			GroupID:     groupID,
 			TaskName:    task.spec.TaskName,
 			Description: task.spec.TaskText,
 			SubAgentKey: task.spec.SubAgentKey,
@@ -199,10 +193,9 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 			terminalKind = "cancel"
 		}
 		lifecycle := contracts.DeltaTaskLifecycle{
-			Kind:    terminalKind,
-			TaskID:  routed.result.TaskID,
-			GroupID: groupID,
-			Status:  routed.result.Status,
+			Kind:   terminalKind,
+			TaskID: routed.result.TaskID,
+			Status: routed.result.Status,
 		}
 		if terminalKind == "fail" {
 			lifecycle.Error = contracts.NewErrorPayload("sub_agent_failed", firstNonEmpty(routed.result.Error, routed.result.Text), contracts.ErrorScopeTask, contracts.ErrorCategorySystem, nil)
@@ -333,12 +326,14 @@ func (o *frameOrchestrator) writeChildTaskQueryAndSystem(subReq api.QueryRequest
 		return
 	}
 	var systems []chat.QueryLineSystemInit
-	if o.prepareSystemInits != nil && subSession != nil {
+	if subSession != nil && (o.prepareSystemInits != nil || o.buildChildSystems != nil) {
 		o.systemInitMu.Lock()
 		defer o.systemInitMu.Unlock()
-		pending, err := o.prepareSystemInits(subReq, subSession, false)
-		if err == nil {
-			systems = pending
+		if o.prepareSystemInits != nil {
+			_, _ = o.prepareSystemInits(subReq, subSession, false)
+		}
+		if o.buildChildSystems != nil {
+			systems = o.buildChildSystems(subReq, subSession)
 		}
 	}
 	_ = o.chats.AppendQueryLine(o.summary.ChatID, chat.QueryLine{
@@ -348,7 +343,6 @@ func (o *frameOrchestrator) writeChildTaskQueryAndSystem(subReq api.QueryRequest
 		UpdatedAt:      time.Now().UnixMilli(),
 		TaskID:         task.taskID,
 		TaskName:       task.spec.TaskName,
-		TaskGroupID:    task.groupID,
 		TaskMainToolID: task.mainToolID,
 		SubAgentKey:    task.spec.SubAgentKey,
 		Query: map[string]any{

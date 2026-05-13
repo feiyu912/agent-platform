@@ -1624,7 +1624,6 @@ func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 		Payload: map[string]any{
 			"taskId":      "task_1",
 			"taskName":    "分析",
-			"groupId":     "group_tool_main_1",
 			"description": "run analysis",
 			"subAgentKey": "analyzer",
 			"mainToolId":  "tool_main_1",
@@ -1704,7 +1703,7 @@ func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 	if taskLine["taskId"] != "task_1" || taskLine["taskStatus"] != "completed" || taskLine["taskSubAgentKey"] != "analyzer" {
 		t.Fatalf("expected slim task metadata, got %#v", taskLine)
 	}
-	for _, field := range []string{"taskName", "taskGroupId", "taskDescription", "taskMainToolId"} {
+	for _, field := range []string{"taskName", "taskDescription", "taskMainToolId"} {
 		if _, ok := taskLine[field]; ok {
 			t.Fatalf("did not expect %s on task react line: %#v", field, taskLine)
 		}
@@ -1814,7 +1813,6 @@ func TestQueryLineWithTaskIDSerializesSubAgentMetadata(t *testing.T) {
 		UpdatedAt:      1001,
 		TaskID:         "task_1",
 		TaskName:       "分析",
-		TaskGroupID:    "group_tool_main_1",
 		TaskMainToolID: "tool_main_1",
 		SubAgentKey:    "analyzer",
 		Query: map[string]any{
@@ -1836,8 +1834,11 @@ func TestQueryLineWithTaskIDSerializesSubAgentMetadata(t *testing.T) {
 		t.Fatalf("expected one query line, got %#v", lines)
 	}
 	line := lines[0]
-	if line["taskId"] != "task_1" || line["taskName"] != "分析" || line["taskGroupId"] != "group_tool_main_1" || line["taskMainToolId"] != "tool_main_1" || line["subAgentKey"] != "analyzer" {
+	if line["taskId"] != "task_1" || line["taskName"] != "分析" || line["taskMainToolId"] != "tool_main_1" || line["subAgentKey"] != "analyzer" {
 		t.Fatalf("expected sub-agent query metadata, got %#v", line)
+	}
+	if _, ok := line["taskGroupId"]; ok {
+		t.Fatalf("did not expect taskGroupId on sub-agent query, got %#v", line)
 	}
 }
 
@@ -1893,11 +1894,8 @@ func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	first := QueryLineSystemInit{
-		AgentKey:      "agent",
 		Fingerprint:   "sha256:first",
 		CacheKey:      "react:main",
-		Mode:          "react",
-		Stage:         "main",
 		SystemMessage: map[string]any{"role": "system", "content": "first"},
 		Tools:         []any{map[string]any{"type": "function"}},
 	}
@@ -1945,6 +1943,9 @@ func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
 	if loaded.ChatID != "chat-system-init" || loaded.RunID != "run-2" || loaded.CreatedAt != 2 {
 		t.Fatalf("expected container query metadata on system init, got %#v", loaded)
 	}
+	if loaded.Mode != "react" || loaded.Stage != "main" {
+		t.Fatalf("expected mode/stage parsed from cacheKey, got %#v", loaded)
+	}
 	all, err := store.LoadAllSystemInits("chat-system-init")
 	if err != nil {
 		t.Fatalf("load all system inits: %v", err)
@@ -1957,6 +1958,77 @@ func TestFileStoreLoadsLatestSystemInitByCacheKey(t *testing.T) {
 	}
 	if got := all["plan-execute:plan"]; got == nil || got.Fingerprint != "sha256:other" {
 		t.Fatalf("expected plan profile, got %#v", got)
+	}
+}
+
+func TestQueryLineSystemInitOmitsModeStageAgentKey(t *testing.T) {
+	raw, err := json.Marshal(QueryLineSystemInit{
+		CacheKey:      "react:main",
+		Fingerprint:   "sha256:init",
+		SystemMessage: map[string]any{"role": "system", "content": "system"},
+		Tools:         []any{},
+	})
+	if err != nil {
+		t.Fatalf("marshal query system init: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal query system init: %v", err)
+	}
+	for _, field := range []string{"mode", "stage", "agentKey"} {
+		if _, ok := got[field]; ok {
+			t.Fatalf("did not expect %s in serialized system init: %s", field, raw)
+		}
+	}
+	for _, field := range []string{"cacheKey", "fingerprint", "systemMessage", "tools"} {
+		if _, ok := got[field]; !ok {
+			t.Fatalf("expected %s in serialized system init: %s", field, raw)
+		}
+	}
+}
+
+func TestLoadSystemInitsParsesCacheKeyToModeStage(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-system-cache-key", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	for _, system := range []QueryLineSystemInit{
+		{
+			CacheKey:      "react:main",
+			Fingerprint:   "sha256:react",
+			SystemMessage: map[string]any{"role": "system", "content": "react"},
+			Tools:         []any{},
+		},
+		{
+			CacheKey:      "plan-execute:execute",
+			Fingerprint:   "sha256:execute",
+			SystemMessage: map[string]any{"role": "system", "content": "execute"},
+			Tools:         []any{},
+		},
+	} {
+		if err := store.AppendQueryLine("chat-system-cache-key", QueryLine{
+			Type:      "query",
+			ChatID:    "chat-system-cache-key",
+			RunID:     "run-1",
+			UpdatedAt: 1,
+			Query:     map[string]any{"role": "user", "message": "hello", "agentKey": "agent"},
+			Systems:   []QueryLineSystemInit{system},
+		}); err != nil {
+			t.Fatalf("append query line: %v", err)
+		}
+	}
+	all, err := store.LoadAllSystemInits("chat-system-cache-key")
+	if err != nil {
+		t.Fatalf("load all system inits: %v", err)
+	}
+	if got := all["react:main"]; got == nil || got.Mode != "react" || got.Stage != "main" {
+		t.Fatalf("expected react:main to parse mode/stage, got %#v", got)
+	}
+	if got := all["plan-execute:execute"]; got == nil || got.Mode != "plan-execute" || got.Stage != "execute" {
+		t.Fatalf("expected plan-execute:execute to parse mode/stage, got %#v", got)
 	}
 }
 
@@ -2008,7 +2080,6 @@ func TestRawMessagesSkipSystemInitLines(t *testing.T) {
 		UpdatedAt: 2,
 		Query:     map[string]any{"role": "user", "message": "hello"},
 		Systems: []QueryLineSystemInit{{
-			AgentKey:      "agent",
 			Fingerprint:   "sha256:init",
 			CacheKey:      "react:main",
 			SystemMessage: map[string]any{"role": "system", "content": "frozen"},
@@ -2037,11 +2108,8 @@ func TestStepWriterWritesSystemInitAfterQuery(t *testing.T) {
 
 	writer := NewStepWriter(store, "chat-query-system-init", "run-1", "react", false)
 	writer.SetPendingSystemInits([]QueryLineSystemInit{{
-		AgentKey:      "agent",
 		Fingerprint:   "sha256:first",
 		CacheKey:      "react:main",
-		Mode:          "react",
-		Stage:         "main",
 		SystemMessage: map[string]any{"role": "system", "content": "system"},
 		Tools:         []any{map[string]any{"type": "function"}},
 	}})
@@ -2803,7 +2871,6 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 		UpdatedAt:      2000,
 		TaskID:         "task_1",
 		TaskName:       "分析",
-		TaskGroupID:    "group_tool_main_1",
 		TaskMainToolID: "tool_main_1",
 		SubAgentKey:    "analyzer",
 		Query: map[string]any{
@@ -2868,6 +2935,9 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 
 	var sawStart, sawComplete bool
 	for _, event := range detail.Events {
+		if _, ok := event.Payload["groupId"]; ok {
+			t.Fatalf("did not expect groupId in replayed task lifecycle payload: %#v", event)
+		}
 		switch event.Type {
 		case "task.start":
 			if event.String("subAgentKey") == "analyzer" && event.String("mainToolId") == "tool_main_1" && event.String("taskName") == "分析" {

@@ -136,7 +136,6 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		query, _ := line["query"].(map[string]any)
 		taskQueries[replayedTaskQueryKey(runID, taskID)] = replayedSubTaskQuery{
 			TaskID:      taskID,
-			GroupID:     stringFromAny(line["taskGroupId"]),
 			TaskName:    stringFromAny(line["taskName"]),
 			TaskDesc:    stringFromAny(query["message"]),
 			SubAgentKey: stringFromAny(line["subAgentKey"]),
@@ -190,16 +189,12 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				stage, _ = line["_stage"].(string)
 			}
 			taskID, _ := line["taskId"].(string)
-			taskGroupID, _ := line["taskGroupId"].(string)
 			taskName, _ := line["taskName"].(string)
 			taskDescription, _ := line["taskDescription"].(string)
 			taskStatus, _ := line["taskStatus"].(string)
 			taskSubAgentKey, _ := line["taskSubAgentKey"].(string)
 			taskMainToolID, _ := line["taskMainToolId"].(string)
 			if meta, ok := taskQueries[replayedTaskQueryKey(runID, taskID)]; ok {
-				if strings.TrimSpace(taskGroupID) == "" {
-					taskGroupID = meta.GroupID
-				}
 				if strings.TrimSpace(taskName) == "" {
 					taskName = meta.TaskName
 				}
@@ -213,7 +208,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					taskMainToolID = meta.MainToolID
 				}
 			}
-			if events := reconcileReplayedSubTask(rd, runID, taskID, taskGroupID, taskName, taskDescription, taskStatus, taskSubAgentKey, taskMainToolID, int64FromAny(line["updatedAt"]), nextSeq); len(events) > 0 {
+			if events := reconcileReplayedSubTask(rd, runID, taskID, taskName, taskDescription, taskStatus, taskSubAgentKey, taskMainToolID, int64FromAny(line["updatedAt"]), nextSeq); len(events) > 0 {
 				rd.events = append(rd.events, events...)
 			}
 			msgs, _ := line["messages"].([]any)

@@ -43,6 +43,7 @@ func (s *FileStore) loadSystemInits(chatID string) (map[string]*SystemInitLine, 
 			}
 			query, _ := line["query"].(map[string]any)
 			for _, rawSystem := range rawSystems {
+				systemMap, _ := rawSystem.(map[string]any)
 				raw, err := json.Marshal(rawSystem)
 				if err != nil {
 					return nil, nil, err
@@ -55,16 +56,17 @@ func (s *FileStore) loadSystemInits(chatID string) (map[string]*SystemInitLine, 
 				if cacheKey == "" {
 					continue
 				}
+				mode, stage := parseCacheKey(cacheKey)
 				converted := SystemInitLine{
 					Type:          "system",
 					ChatID:        stringFromAny(line["chatId"]),
-					AgentKey:      firstNonEmptyString(parsed.AgentKey, stringFromAny(line["agentKey"]), stringFromAny(query["agentKey"])),
+					AgentKey:      firstNonEmptyString(stringFromAny(line["subAgentKey"]), stringFromAny(line["agentKey"]), stringFromAny(query["agentKey"]), stringFromAny(systemMap["agentKey"])),
 					RunID:         stringFromAny(line["runId"]),
 					CreatedAt:     int64FromAny(line["updatedAt"]),
 					Fingerprint:   parsed.Fingerprint,
 					CacheKey:      parsed.CacheKey,
-					Mode:          parsed.Mode,
-					Stage:         parsed.Stage,
+					Mode:          mode,
+					Stage:         stage,
 					SystemMessage: parsed.SystemMessage,
 					Tools:         parsed.Tools,
 				}
@@ -89,6 +91,18 @@ func (s *FileStore) loadSystemInits(chatID string) (map[string]*SystemInitLine, 
 		}
 	}
 	return byCacheKey, latest, nil
+}
+
+func parseCacheKey(cacheKey string) (string, string) {
+	cacheKey = strings.TrimSpace(cacheKey)
+	if cacheKey == "" {
+		return "", ""
+	}
+	mode, stage, ok := strings.Cut(cacheKey, ":")
+	if !ok {
+		return strings.TrimSpace(cacheKey), ""
+	}
+	return strings.TrimSpace(mode), strings.TrimSpace(stage)
 }
 
 func firstNonEmptyString(values ...string) string {

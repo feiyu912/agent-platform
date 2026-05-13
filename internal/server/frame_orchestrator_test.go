@@ -143,7 +143,6 @@ func readServerTestJSONLines(store *chat.FileStore, chatID string) ([]map[string
 func newInvokeAgentsDelta(tasks ...contracts.SubAgentTaskSpec) contracts.DeltaInvokeSubAgents {
 	return contracts.DeltaInvokeSubAgents{
 		MainToolID: "tool_main_1",
-		GroupID:    "group_tool_main_1",
 		Tasks:      tasks,
 	}
 }
@@ -257,7 +256,7 @@ func TestFrameOrchestratorRunsBatchedSubAgentsAndAggregatesResult(t *testing.T) 
 		t.Fatalf("expected start/start/terminal/terminal lifecycle deltas, got %#v", emitted)
 	}
 	startOne, ok := emitted[0].(contracts.DeltaTaskLifecycle)
-	if !ok || startOne.Kind != "start" || startOne.TaskName != "写作" || startOne.GroupID != "group_tool_main_1" {
+	if !ok || startOne.Kind != "start" || startOne.TaskName != "写作" {
 		t.Fatalf("unexpected first task.start %#v", emitted[0])
 	}
 	startTwo, ok := emitted[1].(contracts.DeltaTaskLifecycle)
@@ -397,15 +396,7 @@ func TestFrameOrchestratorWritesSubAgentQueryAndSystemLines(t *testing.T) {
 	}, nil, nil)
 	orchestrator.chats = store
 	orchestrator.prepareSystemInits = func(req api.QueryRequest, session *contracts.QuerySession, _ bool) ([]chat.QueryLineSystemInit, error) {
-		existing, err := store.LoadAllSystemInits(req.ChatID)
-		if err != nil {
-			return nil, err
-		}
-		if existing["react:writer"] != nil {
-			return nil, nil
-		}
 		return []chat.QueryLineSystemInit{{
-			AgentKey:    session.AgentKey,
 			CacheKey:    "react:writer",
 			Fingerprint: "sha256:writer",
 			SystemMessage: map[string]any{
@@ -413,6 +404,16 @@ func TestFrameOrchestratorWritesSubAgentQueryAndSystemLines(t *testing.T) {
 				"content": "writer system",
 			},
 		}}, nil
+	}
+	orchestrator.buildChildSystems = func(api.QueryRequest, *contracts.QuerySession) []chat.QueryLineSystemInit {
+		return []chat.QueryLineSystemInit{{
+			CacheKey:    "react:writer",
+			Fingerprint: "sha256:writer",
+			SystemMessage: map[string]any{
+				"role":    "system",
+				"content": "writer system",
+			},
+		}}
 	}
 
 	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
@@ -431,15 +432,29 @@ func TestFrameOrchestratorWritesSubAgentQueryAndSystemLines(t *testing.T) {
 			if line["taskId"] == "" || line["subAgentKey"] != "writer" || line["taskMainToolId"] != "tool_main_1" {
 				t.Fatalf("unexpected child query line %#v", line)
 			}
+			if _, ok := line["taskGroupId"]; ok {
+				t.Fatalf("did not expect taskGroupId on child query line %#v", line)
+			}
 			systems, _ := line["systems"].([]any)
+			if len(systems) == 0 {
+				t.Fatalf("expected every child query line to carry systems, got %#v", line)
+			}
+			for _, rawSystem := range systems {
+				system, _ := rawSystem.(map[string]any)
+				for _, field := range []string{"mode", "stage", "agentKey"} {
+					if _, ok := system[field]; ok {
+						t.Fatalf("did not expect %s on child system init %#v", field, system)
+					}
+				}
+			}
 			embeddedSystemCount += len(systems)
 			queryCount++
 		case "system":
 			standaloneSystemCount++
 		}
 	}
-	if queryCount != 2 || embeddedSystemCount != 1 || standaloneSystemCount != 0 {
-		t.Fatalf("expected two child query lines, one embedded system, and no standalone system lines; queries=%d embedded=%d standalone=%d lines=%#v", queryCount, embeddedSystemCount, standaloneSystemCount, lines)
+	if queryCount != 2 || embeddedSystemCount != 2 || standaloneSystemCount != 0 {
+		t.Fatalf("expected two child query lines, two embedded systems, and no standalone system lines; queries=%d embedded=%d standalone=%d lines=%#v", queryCount, embeddedSystemCount, standaloneSystemCount, lines)
 	}
 }
 

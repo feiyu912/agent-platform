@@ -86,6 +86,7 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 		RunControl:         control,
 		BuildQuerySession:  s.BuildQuerySession,
 		PrepareSystemInits: s.prepareSystemInitCache,
+		BuildChildSystems:  s.buildSystemInitsForChildTask,
 		Notifications:      s.deps.Notifications,
 		OnUnreadChanged: func(summary chat.Summary) {
 			agentUnreadCount, err := s.agentUnreadCount(summary.AgentKey)

@@ -738,7 +738,7 @@ func TestPrepareToolCall_InvokeAgentsReturnsBatchPrelude(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected DeltaInvokeSubAgents prelude, got %#v", invocation.prelude[0])
 	}
-	if invoke.MainToolID != "tool_1" || len(invoke.Tasks) != 1 || invoke.Tasks[0].SubAgentKey != "writer" || invoke.Tasks[0].TaskText != "Write a short summary" || invoke.Tasks[0].TaskName != "总结" || invoke.GroupID == "" {
+	if invoke.MainToolID != "tool_1" || len(invoke.Tasks) != 1 || invoke.Tasks[0].SubAgentKey != "writer" || invoke.Tasks[0].TaskText != "Write a short summary" || invoke.Tasks[0].TaskName != "总结" {
 		t.Fatalf("unexpected invoke delta %#v", invoke)
 	}
 }

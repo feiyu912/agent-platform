@@ -511,6 +511,7 @@ func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepar
 		RunControl:         control,
 		BuildQuerySession:  s.BuildQuerySession,
 		PrepareSystemInits: s.prepareSystemInitCache,
+		BuildChildSystems:  s.buildSystemInitsForChildTask,
 		Notifications:      s.deps.Notifications,
 		OnUnreadChanged: func(summary chat.Summary) {
 			agentUnreadCount, err := s.agentUnreadCount(summary.AgentKey)
@@ -691,6 +692,7 @@ func syncRunExecutorParams(s *Server, prepared preparedQuery, control *contracts
 		Chats:              s.deps.Chats,
 		RunControl:         control,
 		PrepareSystemInits: s.prepareSystemInitCache,
+		BuildChildSystems:  s.buildSystemInitsForChildTask,
 		Notifications:      s.deps.Notifications,
 		OnUnreadChanged: func(summary chat.Summary) {
 			agentUnreadCount, err := s.agentUnreadCount(summary.AgentKey)

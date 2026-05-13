@@ -22,7 +22,6 @@ type chatRunData struct {
 
 type replayedSubTask struct {
 	TaskID        string
-	GroupID       string
 	TaskName      string
 	TaskDesc      string
 	SubAgentKey   string
@@ -33,7 +32,6 @@ type replayedSubTask struct {
 
 type replayedSubTaskQuery struct {
 	TaskID      string
-	GroupID     string
 	TaskName    string
 	TaskDesc    string
 	SubAgentKey string
@@ -59,7 +57,7 @@ func ensureRun(runs map[string]*chatRunData, order *[]string, runID string) *cha
 	return rd
 }
 
-func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, taskGroupID string, taskName string, taskDescription string, taskStatus string, taskSubAgentKey string, taskMainToolID string, ts int64, nextSeq func() int64) []stream.EventData {
+func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, taskName string, taskDescription string, taskStatus string, taskSubAgentKey string, taskMainToolID string, ts int64, nextSeq func() int64) []stream.EventData {
 	if rd == nil {
 		return nil
 	}
@@ -75,7 +73,6 @@ func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, task
 	if active == nil {
 		active = &replayedSubTask{
 			TaskID:        taskID,
-			GroupID:       taskGroupID,
 			TaskName:      taskName,
 			TaskDesc:      taskDescription,
 			SubAgentKey:   taskSubAgentKey,
@@ -91,16 +88,12 @@ func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, task
 			Payload: map[string]any{
 				"taskId":      taskID,
 				"runId":       runID,
-				"groupId":     taskGroupID,
 				"taskName":    taskName,
 				"description": taskDescription,
 				"subAgentKey": taskSubAgentKey,
 				"mainToolId":  taskMainToolID,
 			},
 		})
-	}
-	if strings.TrimSpace(taskGroupID) != "" {
-		active.GroupID = taskGroupID
 	}
 	if strings.TrimSpace(taskName) != "" {
 		active.TaskName = taskName
@@ -154,9 +147,8 @@ func synthesizeReplayedSubTaskTerminal(runID string, task *replayedSubTask, next
 			Type:      "task.cancel",
 			Timestamp: task.LastTimestamp,
 			Payload: map[string]any{
-				"taskId":  task.TaskID,
-				"groupId": task.GroupID,
-				"status":  "cancelled",
+				"taskId": task.TaskID,
+				"status": "cancelled",
 			},
 		}}
 	case "error", "failed", "fail":
@@ -165,9 +157,8 @@ func synthesizeReplayedSubTaskTerminal(runID string, task *replayedSubTask, next
 			Type:      "task.fail",
 			Timestamp: task.LastTimestamp,
 			Payload: map[string]any{
-				"taskId":  task.TaskID,
-				"groupId": task.GroupID,
-				"status":  "error",
+				"taskId": task.TaskID,
+				"status": "error",
 				"error": map[string]any{
 					"code":     "sub_agent_failed",
 					"message":  "sub-agent failed",
@@ -182,9 +173,8 @@ func synthesizeReplayedSubTaskTerminal(runID string, task *replayedSubTask, next
 			Type:      "task.complete",
 			Timestamp: task.LastTimestamp,
 			Payload: map[string]any{
-				"taskId":  task.TaskID,
-				"groupId": task.GroupID,
-				"status":  "completed",
+				"taskId": task.TaskID,
+				"status": "completed",
 			},
 		}}
 	}
