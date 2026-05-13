@@ -156,6 +156,14 @@ type ExecutionContext struct {
 	RuntimeEnvOverrides map[string]string
 	// BashSecurityApprovals stores one-shot approvals for exact host bash command fingerprints.
 	BashSecurityApprovals map[string]int
+	// FileReadApprovals stores one-shot approvals for exact read/grep file access paths.
+	FileReadApprovals map[string]int
+	// FileReadRuleApprovals stores run-scoped approvals for read/grep access under a directory root.
+	FileReadRuleApprovals map[string]bool
+	// FileAccessApprovals stores one-shot approvals for exact non-read file access paths.
+	FileAccessApprovals map[string]int
+	// FileAccessRuleApprovals stores run-scoped approvals for non-read file access under a directory root.
+	FileAccessRuleApprovals map[string]bool
 	// FileWriteApprovals stores one-shot approvals for exact structured write plans.
 	FileWriteApprovals map[string]int
 	// FileWriteRuleApprovals stores run-scoped approvals for write operation classes under allowed roots.

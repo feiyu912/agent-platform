@@ -96,8 +96,8 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 		o.injectMainToolError(main, invoke.MainToolID, "sub-agent orchestration is only supported for REACT/ONESHOT main agents")
 		return nil
 	}
-	if len(invoke.Tasks) < 1 || len(invoke.Tasks) > 3 {
-		o.injectMainToolError(main, invoke.MainToolID, "invalid agent_invoke call: tasks must contain between 1 and 3 items")
+	if len(invoke.Tasks) < 1 || len(invoke.Tasks) > contracts.MaxInvokeAgentTasks {
+		o.injectMainToolError(main, invoke.MainToolID, fmt.Sprintf("invalid agent_invoke call: tasks must contain between 1 and %d items", contracts.MaxInvokeAgentTasks))
 		return nil
 	}
 	prepared := make([]preparedSubTask, 0, len(invoke.Tasks))

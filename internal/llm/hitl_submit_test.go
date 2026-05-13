@@ -42,6 +42,30 @@ func TestNormalizeHITLApprovalSubmitSupportsApprovePrefixRun(t *testing.T) {
 	}
 }
 
+func TestNormalizeHITLApprovalSubmitSupportsApproveRootRun(t *testing.T) {
+	normalized, err := normalizeHITLApprovalSubmit(map[string]any{
+		"approvals": []any{
+			map[string]any{"id": "tool_1", "command": "read /tmp/owner.md"},
+		},
+	}, mustEncodeHITLSubmitParams(t, []map[string]any{
+		{"id": "tool_1", "decision": "approve_root_run", "reason": "同目录本轮一并放行"},
+	}))
+	if err != nil {
+		t.Fatalf("normalizeHITLApprovalSubmit returned error: %v", err)
+	}
+
+	approvals, ok := normalized["approvals"].([]map[string]any)
+	if !ok || len(approvals) != 1 {
+		t.Fatalf("expected one normalized approval, got %#v", normalized)
+	}
+	if approvals[0]["decision"] != "approve_root_run" {
+		t.Fatalf("expected approve_root_run decision to be preserved, got %#v", approvals[0])
+	}
+	if approvals[0]["reason"] != "同目录本轮一并放行" {
+		t.Fatalf("expected reason to be preserved, got %#v", approvals[0])
+	}
+}
+
 func TestNormalizeHITLApprovalSubmitRejectsEmptyDecision(t *testing.T) {
 	_, err := normalizeHITLApprovalSubmit(map[string]any{
 		"approvals": []any{

@@ -14,6 +14,9 @@ import (
 )
 
 func (s *llmRunStream) approvalHITLResult(invocation *preparedToolInvocation) hitl.InterceptResult {
+	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+		return fileAccessInterceptResult(*plan)
+	}
 	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
 		return fileWriteInterceptResult(*plan)
 	}
@@ -28,7 +31,7 @@ func (s *llmRunStream) executeApprovedBashInvocation(invocation *preparedToolInv
 	case "reject":
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
-	case "approve_prefix_run":
+	case "approve_prefix_run", "approve_root_run":
 		s.registerRuleWhitelist(result.Rule.RuleKey)
 		invocation.approvalDecision = ""
 		return s.executeOriginalBash(invocation)
@@ -376,13 +379,14 @@ func (s *llmRunStream) applyHITLDecision(invocation *preparedToolInvocation, res
 		Executed:   executed,
 		Mode:       hitlDecisionMode(result),
 	}
-	if normalizedDecision == "approve_prefix_run" {
+	if normalizedDecision == "approve_prefix_run" || normalizedDecision == "approve_root_run" {
 		s.registerRuleWhitelist(result.Rule.RuleKey)
 	}
 }
 
 func hitlDecisionScope(decision string) string {
-	if strings.EqualFold(strings.TrimSpace(decision), "approve_prefix_run") {
+	normalized := strings.ToLower(strings.TrimSpace(decision))
+	if normalized == "approve_prefix_run" || normalized == "approve_root_run" {
 		return "run_rule"
 	}
 	return ""

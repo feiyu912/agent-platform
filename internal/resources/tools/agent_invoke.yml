@@ -1,6 +1,6 @@
 name: agent_invoke
 label: 调度智能体
-description: Dispatch 1 to 3 sub-agents in parallel, stream each sub-agent's activity live, and continue after all final answers are returned as one aggregated tool result.
+description: Dispatch 1 to 5 sub-agents in parallel, stream each sub-agent's activity live, and continue after all final answers are returned as one aggregated tool result.
 type: function
 clientVisible: true
 inputSchema:
@@ -8,9 +8,9 @@ inputSchema:
   properties:
     tasks:
       type: array
-      description: Required. Up to 3 sub-agent tasks to execute in parallel.
+      description: Required. Up to 5 sub-agent tasks to execute in parallel.
       minItems: 1
-      maxItems: 3
+      maxItems: 5
       items:
         type: object
         properties:

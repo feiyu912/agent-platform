@@ -150,12 +150,14 @@ Container Hub 默认基础挂载为：
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
 | `AGENT_FILE_WORKING_DIRECTORY` | 继承 `AGENT_BASH_WORKING_DIRECTORY` | `Advanced / operator` | `read` / `write` 解析相对路径时使用的工作目录 |
-| `AGENT_FILE_ALLOWED_READ_PATHS` | 继承 `AGENT_BASH_ALLOWED_PATHS` | `Advanced / operator` | `read` 允许访问的路径白名单 |
-| `AGENT_FILE_ALLOWED_WRITE_PATHS` | 继承 `AGENT_BASH_ALLOWED_PATHS` | `Advanced / operator` | `write` 允许写入的路径白名单 |
+| `AGENT_FILE_ALLOWED_READ_PATHS` | `.,/tmp` | `Advanced / operator` | `read` / `grep` 允许访问的路径白名单；不再继承 bash allowed paths |
+| `AGENT_FILE_ALLOWED_WRITE_PATHS` | `.,/tmp` | `Advanced / operator` | `write` 允许写入的路径白名单；不再继承 bash allowed paths |
 | `AGENT_FILE_MAX_READ_BYTES` | `1048576` | `Advanced / operator` | 单次 `read` 最多返回的文件字节数 |
 | `AGENT_FILE_MAX_WRITE_BYTES` | `1048576` | `Advanced / operator` | 单次 `write` 最多写入的字节数 |
 | `AGENT_FILE_MAX_BATCH_OPS` | `20` | `Internal / compatibility` | 预留批量文件工具上限；当前 `read` / `write` 都是单文件工具 |
 | `AGENT_FILE_REQUIRE_WRITE_APPROVAL` | `true` | `Advanced / operator` | 是否要求 `write` 先走人工审批 |
+
+文件工具白名单命中时直接执行；越权路径会走 `mode=approval`，用户可单次批准或用 `approve_root_run` 在当前 run 内批准同一目录规则。
 
 ### Memory 行为调优
 

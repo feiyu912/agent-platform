@@ -743,6 +743,39 @@ func TestPrepareToolCall_InvokeAgentsReturnsBatchPrelude(t *testing.T) {
 	}
 }
 
+func TestPrepareToolCall_InvokeAgentsAcceptsMaxTasks(t *testing.T) {
+	stream := &llmRunStream{
+		engine: &LLMAgentEngine{
+			tools:    stubToolExecutor{defs: []api.ToolDetailResponse{invokeAgentsToolDefinition()}},
+			frontend: frontendtools.NewDefaultRegistry(),
+		},
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{},
+	}
+
+	invocation, deltas, toolMsg := stream.prepareToolCall(openAIToolCall{
+		ID:   "tool_1",
+		Type: "function",
+		Function: openAIFunctionCall{
+			Name:      contracts.InvokeAgentsToolName,
+			Arguments: `{"tasks":[{"subAgentKey":"a","task":"1"},{"subAgentKey":"b","task":"2"},{"subAgentKey":"c","task":"3"},{"subAgentKey":"d","task":"4"},{"subAgentKey":"e","task":"5"}]}`,
+		},
+	})
+	if toolMsg != nil {
+		t.Fatalf("expected no immediate tool message, got %#v", toolMsg)
+	}
+	if len(deltas) != 0 {
+		t.Fatalf("expected no immediate error deltas, got %#v", deltas)
+	}
+	if invocation == nil || !invocation.awaitExternalResult {
+		t.Fatalf("expected external-result invocation, got %#v", invocation)
+	}
+	invoke, ok := invocation.prelude[0].(contracts.DeltaInvokeSubAgents)
+	if !ok || len(invoke.Tasks) != contracts.MaxInvokeAgentTasks {
+		t.Fatalf("unexpected invoke delta %#v", invocation.prelude)
+	}
+}
+
 func TestPrepareToolCall_InvokeAgentsRejectsTooManyTasks(t *testing.T) {
 	stream := &llmRunStream{
 		engine: &LLMAgentEngine{
@@ -758,7 +791,7 @@ func TestPrepareToolCall_InvokeAgentsRejectsTooManyTasks(t *testing.T) {
 		Type: "function",
 		Function: openAIFunctionCall{
 			Name:      contracts.InvokeAgentsToolName,
-			Arguments: `{"tasks":[{"subAgentKey":"a","task":"1"},{"subAgentKey":"b","task":"2"},{"subAgentKey":"c","task":"3"},{"subAgentKey":"d","task":"4"}]}`,
+			Arguments: `{"tasks":[{"subAgentKey":"a","task":"1"},{"subAgentKey":"b","task":"2"},{"subAgentKey":"c","task":"3"},{"subAgentKey":"d","task":"4"},{"subAgentKey":"e","task":"5"},{"subAgentKey":"f","task":"6"}]}`,
 		},
 	})
 	if invocation != nil {
@@ -1329,6 +1362,16 @@ func TestBashSecuritySoftBlockEmitsApprovalWithoutChecker(t *testing.T) {
 	}
 }
 
+func approvalOptionsContainDecision(options []any, decision string) bool {
+	for _, option := range options {
+		item, _ := option.(map[string]any)
+		if item["decision"] == decision {
+			return true
+		}
+	}
+	return false
+}
+
 func TestBashSecuritySoftBlockApproveExecutesOriginalCommand(t *testing.T) {
 	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
 	runControl := contracts.NewRunControl(context.Background(), "run_1")
@@ -1608,6 +1651,204 @@ func TestWriteToolApprovalExecutesAndWritesFile(t *testing.T) {
 	result, ok := stream.pending[0].(contracts.DeltaToolResult)
 	if !ok || result.Result.Error != "" || result.Result.ExitCode != 0 {
 		t.Fatalf("expected successful tool result, got %#v", stream.pending)
+	}
+}
+
+func TestFileReadAccessApprovalEmitsAwaitingAsk(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:       root,
+					AllowedReadPaths:       []string{"."},
+					AllowedWritePaths:      []string{"."},
+					MaxReadBytes:           1024,
+					MaxWriteBytes:          1024,
+					RequireReadBeforeWrite: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "read",
+			args: map[string]any{
+				"file_path": filepath.Join(outside, "secret.txt"),
+			},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active read: %v", err)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected read not to execute before path approval, got %#v", executor.invocations)
+	}
+	if len(stream.pending) != 1 {
+		t.Fatalf("expected one pending approval, got %#v", stream.pending)
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
+		t.Fatalf("expected approval ask, got %#v", stream.pending)
+	}
+	item, _ := ask.Approvals[0].(map[string]any)
+	if item["description"] != "read超出允许目录" || !strings.Contains(fmt.Sprint(item["command"]), "read ") {
+		t.Fatalf("unexpected read approval item: %#v", item)
+	}
+	options, _ := item["options"].([]any)
+	if !approvalOptionsContainDecision(options, "approve_root_run") {
+		t.Fatalf("expected approve_root_run option, got %#v", options)
+	}
+}
+
+func TestFileReadAccessApprovalDecisions(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	for _, decision := range []string{"approve", "approve_root_run", "approve_prefix_run"} {
+		t.Run(decision, func(t *testing.T) {
+			executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
+			stream := &llmRunStream{
+				ctx:     context.Background(),
+				session: contracts.QuerySession{RunID: "run_1"},
+				engine: &LLMAgentEngine{
+					cfg: config.Config{
+						FileTools: config.FileToolsConfig{
+							WorkingDirectory:  root,
+							AllowedReadPaths:  []string{"."},
+							AllowedWritePaths: []string{"."},
+							MaxReadBytes:      1024,
+							MaxWriteBytes:     1024,
+						},
+					},
+					tools: executor,
+				},
+				execCtx: &contracts.ExecutionContext{},
+				activeToolCall: &preparedToolInvocation{
+					toolID:           "tool_1",
+					toolName:         "read",
+					approvalDecision: decision,
+					args: map[string]any{
+						"file_path": filepath.Join(outside, "secret.txt"),
+					},
+				},
+			}
+			if err := stream.invokeActiveToolCall(); err != nil {
+				t.Fatalf("invoke active read: %v", err)
+			}
+			if len(executor.invocations) != 1 {
+				t.Fatalf("expected approved read to execute, got %#v", executor.invocations)
+			}
+			if decision == "approve" && len(stream.execCtx.FileReadApprovals) != 1 {
+				t.Fatalf("expected exact read approval registration, got %#v", stream.execCtx.FileReadApprovals)
+			}
+			if decision != "approve" && len(stream.execCtx.FileReadRuleApprovals) != 1 {
+				t.Fatalf("expected rule read approval registration, got %#v", stream.execCtx.FileReadRuleApprovals)
+			}
+		})
+	}
+}
+
+func TestFileReadAccessRejectDoesNotExecute(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:  root,
+					AllowedReadPaths:  []string{"."},
+					AllowedWritePaths: []string{"."},
+					MaxReadBytes:      1024,
+					MaxWriteBytes:     1024,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:           "tool_1",
+			toolName:         "read",
+			approvalDecision: "reject",
+			args: map[string]any{
+				"file_path": filepath.Join(outside, "secret.txt"),
+			},
+		},
+	}
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active read: %v", err)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected rejected read not to execute, got %#v", executor.invocations)
+	}
+	if len(stream.pending) != 1 {
+		t.Fatalf("expected tool result pending, got %#v", stream.pending)
+	}
+	result, ok := stream.pending[0].(contracts.DeltaToolResult)
+	if !ok || result.Result.Error != "file_read_denied" {
+		t.Fatalf("expected file_read_denied tool result, got %#v", stream.pending)
+	}
+}
+
+func TestWritePathApprovalPrecedesWriteApproval(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{writeToolDefinition()}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     root,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:           "tool_1",
+			toolName:         "write",
+			approvalDecision: "approve_root_run",
+			args: map[string]any{
+				"file_path":   filepath.Join(outside, "owner.md"),
+				"content":     "hello",
+				"description": "写入 owner 文档",
+			},
+		},
+	}
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active write: %v", err)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected write not to execute before write approval, got %#v", executor.invocations)
+	}
+	if len(stream.execCtx.FileAccessRuleApprovals) != 1 {
+		t.Fatalf("expected write path rule approval, got %#v", stream.execCtx.FileAccessRuleApprovals)
+	}
+	if len(stream.pending) != 1 {
+		t.Fatalf("expected write approval pending, got %#v", stream.pending)
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
+		t.Fatalf("expected write approval ask, got %#v", stream.pending)
+	}
+	item, _ := ask.Approvals[0].(map[string]any)
+	if !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") || item["description"] != "写入 owner 文档" {
+		t.Fatalf("unexpected write approval item: %#v", item)
 	}
 }
 

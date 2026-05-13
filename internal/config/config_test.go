@@ -427,7 +427,7 @@ func TestLoadBashShellArgsFromFile(t *testing.T) {
 	})
 }
 
-func TestFileToolsConfigFallsBackToBashConfig(t *testing.T) {
+func TestFileToolsConfigDefaultsDoNotInheritBashPaths(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"AGENT_BASH_WORKING_DIRECTORY": filepath.Join("var", "runner"),
 		"AGENT_BASH_ALLOWED_PATHS":     ".,/tmp/example",
@@ -439,10 +439,10 @@ func TestFileToolsConfigFallsBackToBashConfig(t *testing.T) {
 		if cfg.FileTools.WorkingDirectory != filepath.Join("var", "runner") {
 			t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
 		}
-		if strings.Join(cfg.FileTools.AllowedReadPaths, ",") != ".,/tmp/example" {
+		if strings.Join(cfg.FileTools.AllowedReadPaths, ",") != ".,/tmp" {
 			t.Fatalf("unexpected read paths: %#v", cfg.FileTools.AllowedReadPaths)
 		}
-		if strings.Join(cfg.FileTools.AllowedWritePaths, ",") != ".,/tmp/example" {
+		if strings.Join(cfg.FileTools.AllowedWritePaths, ",") != ".,/tmp" {
 			t.Fatalf("unexpected write paths: %#v", cfg.FileTools.AllowedWritePaths)
 		}
 		if !cfg.FileTools.RequireWriteApproval {

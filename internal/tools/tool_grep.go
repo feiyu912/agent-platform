@@ -29,10 +29,17 @@ func (t *RuntimeToolExecutor) invokeGrep(ctx context.Context, args map[string]an
 	if rawPath == "" {
 		rawPath = "."
 	}
-	resolved, err := filetools.ResolvePath(t.cfg.FileTools, filetools.ReadAccess, rawPath)
+	access, err := filetools.BuildAccessPlan(t.cfg.FileTools, filetools.ReadAccess, rawPath)
 	if err != nil {
-		return fileToolError("grep_read_denied", err.Error()), nil
+		return fileToolError("grep_invalid_path", err.Error()), nil
 	}
+	if filetools.IsBlockedDeviceFile(access.Path) {
+		return fileToolError("file_read_device_blocked", "device file is blocked"), nil
+	}
+	if !access.AllowedByWhitelist && !filetools.ConsumeReadApproval(execCtx, access) {
+		return fileAccessApprovalRequired("file_read_approval_required", "grep超出允许目录", access), nil
+	}
+	resolved := filetools.ResolvedPath{Raw: access.RawPath, Path: access.Path, Root: access.Root}
 	rgPath, err := exec.LookPath("rg")
 	if err != nil {
 		return fileToolError("grep_ripgrep_missing", "ripgrep (rg) is not installed or not on PATH"), nil

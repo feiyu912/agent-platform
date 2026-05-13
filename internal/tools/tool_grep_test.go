@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"agent-platform-runner-go/internal/contracts"
+	"agent-platform-runner-go/internal/filetools"
 )
 
 func TestInvokeGrepFilesWithMatchesGlobAndNameSort(t *testing.T) {
@@ -118,7 +119,7 @@ func TestInvokeGrepContextMultilineAndDashPattern(t *testing.T) {
 	}
 }
 
-func TestInvokeGrepRejectsPathEscape(t *testing.T) {
+func TestInvokeGrepPathEscapeRequiresApproval(t *testing.T) {
 	requireRipgrep(t)
 	root := t.TempDir()
 	outside := t.TempDir()
@@ -132,8 +133,40 @@ func TestInvokeGrepRejectsPathEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invokeGrep: %v", err)
 	}
-	if result.ExitCode == 0 || result.Structured["error"] != "grep_read_denied" {
-		t.Fatalf("expected read denial, got %#v", result.Structured)
+	if result.ExitCode == 0 || result.Structured["error"] != "file_read_approval_required" {
+		t.Fatalf("expected read approval requirement, got %#v", result.Structured)
+	}
+	if result.Structured["fingerprint"] == "" || result.Structured["ruleKey"] == "" {
+		t.Fatalf("expected approval metadata, got %#v", result.Structured)
+	}
+}
+
+func TestInvokeGrepConsumesReadPathApproval(t *testing.T) {
+	requireRipgrep(t)
+	root := t.TempDir()
+	outside := t.TempDir()
+	mustWriteFile(t, filepath.Join(outside, "secret.txt"), "needle\n")
+	executor := fileToolExecutor(root, false)
+	execCtx := &contracts.ExecutionContext{}
+	plan, err := filetools.BuildAccessPlan(executor.cfg.FileTools, filetools.ReadAccess, outside)
+	if err != nil {
+		t.Fatalf("build access plan: %v", err)
+	}
+	filetools.RegisterExactReadApproval(execCtx, plan.Fingerprint)
+
+	result, err := executor.invokeGrep(context.Background(), map[string]any{
+		"pattern":     "needle",
+		"path":        outside,
+		"output_mode": "content",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeGrep: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected approved grep, got %#v", result)
+	}
+	if !strings.Contains(strings.Join(stringSliceResult(t, result.Structured["results"]), "\n"), "secret.txt") {
+		t.Fatalf("expected grep result, got %#v", result.Structured)
 	}
 }
 

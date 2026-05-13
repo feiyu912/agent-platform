@@ -53,6 +53,28 @@ func (s *llmRunStream) emitFileWriteApprovalDeltas(invocation *preparedToolInvoc
 	return nil
 }
 
+func (s *llmRunStream) emitFileAccessApprovalDeltas(invocation *preparedToolInvocation, plan filetools.AccessPlan) error {
+	result := fileAccessInterceptResult(plan)
+	s.hitlPendingCall = invocation
+	s.hitlMatch = &result
+	s.hitlAwaitingID = buildHITLAwaitingID(invocation.toolID)
+
+	args := s.buildConfirmApprovalArgs(invocation)
+	s.hitlAwaitArgs = CloneMap(args)
+	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args, 0))
+
+	if s.runControl != nil {
+		awaitDelta, _ := s.pending[len(s.pending)-1].(DeltaAwaitAsk)
+		s.runControl.ExpectSubmit(awaitingContextFromDeltaAsk(awaitDelta))
+	}
+	s.activeToolCall = nil
+	if s.execCtx != nil {
+		s.execCtx.CurrentToolID = ""
+		s.execCtx.CurrentToolName = ""
+	}
+	return nil
+}
+
 func (s *llmRunStream) registerBashSecurityApproval(fingerprint string) {
 	if s.execCtx == nil || strings.TrimSpace(fingerprint) == "" {
 		return
@@ -112,6 +134,26 @@ func fileWriteInterceptResult(plan filetools.WritePlan) hitl.InterceptResult {
 			RuleKey:      plan.RuleKey,
 			Level:        2,
 			Title:        "File write approval",
+			ViewportType: "builtin",
+			ViewportKey:  "confirm_dialog",
+		},
+		OriginalCommand: plan.CommandText,
+		MatchedCommand:  plan.CommandText,
+		MatchedWhole:    true,
+	}
+}
+
+func fileAccessInterceptResult(plan filetools.AccessPlan) hitl.InterceptResult {
+	title := "File read approval"
+	if plan.Mode == filetools.WriteAccess {
+		title = "File path approval"
+	}
+	return hitl.InterceptResult{
+		Intercepted: true,
+		Rule: hitl.FlatRule{
+			RuleKey:      plan.RuleKey,
+			Level:        1,
+			Title:        title,
 			ViewportType: "builtin",
 			ViewportKey:  "confirm_dialog",
 		},

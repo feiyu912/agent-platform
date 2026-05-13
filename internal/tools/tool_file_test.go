@@ -40,7 +40,7 @@ func TestInvokeReadReadsAllowedFileWithLineRange(t *testing.T) {
 	}
 }
 
-func TestInvokeReadRejectsSymlinkEscape(t *testing.T) {
+func TestInvokeReadPathEscapeRequiresApproval(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret"), 0o644); err != nil {
@@ -55,8 +55,66 @@ func TestInvokeReadRejectsSymlinkEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invokeRead: %v", err)
 	}
-	if result.ExitCode == 0 || result.Structured["error"] != "file_read_denied" {
-		t.Fatalf("expected read denial, got %#v", result)
+	if result.ExitCode == 0 || result.Structured["error"] != "file_read_approval_required" {
+		t.Fatalf("expected read approval requirement, got %#v", result)
+	}
+	if result.Structured["fingerprint"] == "" || result.Structured["ruleKey"] == "" || result.Structured["root"] == "" {
+		t.Fatalf("expected approval metadata, got %#v", result.Structured)
+	}
+}
+
+func TestInvokeReadConsumesExactPathApproval(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret\n"), 0o644); err != nil {
+		t.Fatalf("write outside: %v", err)
+	}
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{}
+	plan, err := filetools.BuildAccessPlan(executor.cfg.FileTools, filetools.ReadAccess, filepath.Join(outside, "secret.txt"))
+	if err != nil {
+		t.Fatalf("build access plan: %v", err)
+	}
+	filetools.RegisterExactReadApproval(execCtx, plan.Fingerprint)
+
+	result, err := executor.invokeRead(map[string]any{
+		"file_path":        filepath.Join(outside, "secret.txt"),
+		"add_line_numbers": false,
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeRead: %v", err)
+	}
+	if result.Error != "" || result.Structured["content"] != "secret\n" {
+		t.Fatalf("expected approved read, got %#v", result)
+	}
+	if len(execCtx.FileReadApprovals) != 0 {
+		t.Fatalf("expected exact read approval consumed, got %#v", execCtx.FileReadApprovals)
+	}
+}
+
+func TestInvokeReadUsesRulePathApproval(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret\n"), 0o644); err != nil {
+		t.Fatalf("write outside: %v", err)
+	}
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{}
+	plan, err := filetools.BuildAccessPlan(executor.cfg.FileTools, filetools.ReadAccess, filepath.Join(outside, "secret.txt"))
+	if err != nil {
+		t.Fatalf("build access plan: %v", err)
+	}
+	filetools.RegisterRuleReadApproval(execCtx, plan.RuleKey)
+
+	result, err := executor.invokeRead(map[string]any{
+		"file_path":        filepath.Join(outside, "secret.txt"),
+		"add_line_numbers": false,
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeRead: %v", err)
+	}
+	if result.Error != "" || result.Structured["content"] != "secret\n" {
+		t.Fatalf("expected approved read, got %#v", result)
 	}
 }
 
@@ -245,7 +303,7 @@ func TestInvokeWriteUsesPrefixApproval(t *testing.T) {
 	}
 }
 
-func TestInvokeWriteRejectsSymlinkEscape(t *testing.T) {
+func TestInvokeWritePathEscapeRequiresApproval(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
@@ -261,11 +319,70 @@ func TestInvokeWriteRejectsSymlinkEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invokeWrite: %v", err)
 	}
-	if result.ExitCode == 0 || result.Structured["error"] != "file_write_invalid_plan" {
-		t.Fatalf("expected invalid plan, got %#v", result)
+	if result.ExitCode == 0 || result.Structured["error"] != "file_write_path_approval_required" {
+		t.Fatalf("expected write path approval requirement, got %#v", result)
 	}
 	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
 		t.Fatalf("expected outside dir to stay empty")
+	}
+}
+
+func TestInvokeWriteConsumesExactPathApprovalBeforeWriting(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := fileToolExecutor(root, false)
+	args := map[string]any{
+		"file_path":   filepath.Join(outside, "owner.md"),
+		"content":     "hello",
+		"description": "写入 owner 文档",
+	}
+	plan, err := filetools.BuildAccessPlan(executor.cfg.FileTools, filetools.WriteAccess, filepath.Join(outside, "owner.md"))
+	if err != nil {
+		t.Fatalf("build access plan: %v", err)
+	}
+	execCtx := &contracts.ExecutionContext{}
+	filetools.RegisterExactAccessApproval(execCtx, plan.Fingerprint)
+
+	result, err := executor.invokeWrite(args, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected write success, got %#v", result)
+	}
+	if got, err := os.ReadFile(filepath.Join(outside, "owner.md")); err != nil || string(got) != "hello" {
+		t.Fatalf("unexpected outside write %q err=%v", string(got), err)
+	}
+	if len(execCtx.FileAccessApprovals) != 0 {
+		t.Fatalf("expected exact access approval consumed, got %#v", execCtx.FileAccessApprovals)
+	}
+}
+
+func TestInvokeWriteUsesRulePathApprovalBeforeWriting(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := fileToolExecutor(root, false)
+	args := map[string]any{
+		"file_path":   filepath.Join(outside, "owner.md"),
+		"content":     "hello",
+		"description": "写入 owner 文档",
+	}
+	plan, err := filetools.BuildAccessPlan(executor.cfg.FileTools, filetools.WriteAccess, filepath.Join(outside, "owner.md"))
+	if err != nil {
+		t.Fatalf("build access plan: %v", err)
+	}
+	execCtx := &contracts.ExecutionContext{}
+	filetools.RegisterRuleAccessApproval(execCtx, plan.RuleKey)
+
+	result, err := executor.invokeWrite(args, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected write success, got %#v", result)
+	}
+	if got, err := os.ReadFile(filepath.Join(outside, "owner.md")); err != nil || string(got) != "hello" {
+		t.Fatalf("unexpected outside write %q err=%v", string(got), err)
 	}
 }
 

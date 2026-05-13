@@ -113,8 +113,8 @@ func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolIn
 
 	if strings.EqualFold(strings.TrimSpace(toolCall.Function.Name), InvokeAgentsToolName) {
 		rawTasks, _ := args["tasks"].([]any)
-		if len(rawTasks) < 1 || len(rawTasks) > 3 {
-			message := "invalid tool arguments: tasks must contain between 1 and 3 items"
+		if len(rawTasks) < 1 || len(rawTasks) > MaxInvokeAgentTasks {
+			message := fmt.Sprintf("invalid tool arguments: tasks must contain between 1 and %d items", MaxInvokeAgentTasks)
 			return nil, []AgentDelta{DeltaToolResult{
 					ToolID:   toolID,
 					ToolName: toolCall.Function.Name,
@@ -185,6 +185,9 @@ func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolIn
 		if review.Decision == bashsec.ReviewRequiresApproval {
 			invocation.bashSecurityReview = &review
 		}
+	}
+	if accessPlan, ok := s.buildFileAccessPlan(invocation); ok {
+		invocation.fileAccessPlan = accessPlan
 	}
 	if isWriteTool(invocation.toolName) && s.engine.cfg.FileTools.RequireWriteApproval {
 		if plan, err := filetools.BuildWritePlan(s.engine.cfg.FileTools, invocation.args); err == nil {
@@ -287,6 +290,13 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 	if invocation.awaitExternalResult {
 		keepActive = true
 		return nil
+	}
+	if accessPlan := s.lookupFileAccessPlan(invocation); accessPlan != nil && s.fileAccessPlanNeedsApproval(*accessPlan) {
+		if strings.TrimSpace(invocation.approvalDecision) != "" {
+			return s.executeApprovedFileAccessInvocation(invocation, *accessPlan)
+		}
+		s.skipPostToolHook = true
+		return s.emitFileAccessApprovalDeltas(invocation, *accessPlan)
 	}
 	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
 		if strings.TrimSpace(invocation.approvalDecision) != "" {
@@ -459,6 +469,63 @@ func (s *llmRunStream) lookupFileWritePlan(invocation *preparedToolInvocation) *
 	return &plan
 }
 
+func (s *llmRunStream) buildFileAccessPlan(invocation *preparedToolInvocation) (*filetools.AccessPlan, bool) {
+	if invocation == nil {
+		return nil, false
+	}
+	mode, rawPath, ok := fileAccessPlanInput(invocation.toolName, invocation.args)
+	if !ok {
+		return nil, false
+	}
+	plan, err := filetools.BuildAccessPlan(s.engine.cfg.FileTools, mode, rawPath)
+	if err != nil {
+		return nil, false
+	}
+	return &plan, true
+}
+
+func (s *llmRunStream) lookupFileAccessPlan(invocation *preparedToolInvocation) *filetools.AccessPlan {
+	if invocation == nil {
+		return nil
+	}
+	if invocation.fileAccessPlan != nil {
+		return invocation.fileAccessPlan
+	}
+	plan, ok := s.buildFileAccessPlan(invocation)
+	if !ok {
+		return nil
+	}
+	invocation.fileAccessPlan = plan
+	return plan
+}
+
+func (s *llmRunStream) fileAccessPlanNeedsApproval(plan filetools.AccessPlan) bool {
+	if plan.AllowedByWhitelist {
+		return false
+	}
+	if plan.Mode == filetools.ReadAccess {
+		return !filetools.HasReadApproval(s.execCtx, plan)
+	}
+	return !filetools.HasAccessApproval(s.execCtx, plan)
+}
+
+func fileAccessPlanInput(toolName string, args map[string]any) (filetools.AccessMode, string, bool) {
+	switch strings.ToLower(strings.TrimSpace(toolName)) {
+	case "read":
+		return filetools.ReadAccess, mapStringArg(args, "file_path"), strings.TrimSpace(mapStringArg(args, "file_path")) != ""
+	case "grep":
+		rawPath := strings.TrimSpace(mapStringArg(args, "path"))
+		if rawPath == "" {
+			rawPath = "."
+		}
+		return filetools.ReadAccess, rawPath, true
+	case "write":
+		return filetools.WriteAccess, mapStringArg(args, "file_path"), strings.TrimSpace(mapStringArg(args, "file_path")) != ""
+	default:
+		return "", "", false
+	}
+}
+
 func (s *llmRunStream) reviewBashSecurity(command string) bashsec.ReviewResult {
 	if s == nil || s.execCtx == nil || len(s.execCtx.RuntimeEnvOverrides) == 0 {
 		return bashsec.ReviewBashSecurity(command)
@@ -466,12 +533,49 @@ func (s *llmRunStream) reviewBashSecurity(command string) bashsec.ReviewResult {
 	return bashsec.ReviewBashSecurityWithKnownVariables(command, s.execCtx.RuntimeEnvOverrides)
 }
 
+func (s *llmRunStream) executeApprovedFileAccessInvocation(invocation *preparedToolInvocation, plan filetools.AccessPlan) error {
+	switch strings.ToLower(strings.TrimSpace(invocation.approvalDecision)) {
+	case "reject":
+		if plan.Mode == filetools.ReadAccess {
+			s.appendOriginalToolResult(invocation, fileAccessDeniedToolResult(invocation, "file_read_denied"))
+			return nil
+		}
+		s.appendOriginalToolResult(invocation, fileAccessDeniedToolResult(invocation, "file_write_denied"))
+		return nil
+	case "approve_root_run", "approve_prefix_run":
+		if plan.Mode == filetools.ReadAccess {
+			filetools.RegisterRuleReadApproval(s.execCtx, plan.RuleKey)
+		} else {
+			filetools.RegisterRuleAccessApproval(s.execCtx, plan.RuleKey)
+		}
+		invocation.approvalDecision = ""
+		return s.executeAfterFileAccessApproval(invocation)
+	case "approve":
+		if plan.Mode == filetools.ReadAccess {
+			filetools.RegisterExactReadApproval(s.execCtx, plan.Fingerprint)
+		} else {
+			filetools.RegisterExactAccessApproval(s.execCtx, plan.Fingerprint)
+		}
+		invocation.approvalDecision = ""
+		return s.executeAfterFileAccessApproval(invocation)
+	default:
+		return s.emitFileAccessApprovalDeltas(invocation, plan)
+	}
+}
+
+func (s *llmRunStream) executeAfterFileAccessApproval(invocation *preparedToolInvocation) error {
+	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval && !filetools.HasWriteApproval(s.execCtx, *plan) {
+		return s.emitFileWriteApprovalDeltas(invocation, *plan)
+	}
+	return s.executeOriginalBash(invocation)
+}
+
 func (s *llmRunStream) executeApprovedFileWriteInvocation(invocation *preparedToolInvocation, plan filetools.WritePlan) error {
 	switch strings.ToLower(strings.TrimSpace(invocation.approvalDecision)) {
 	case "reject":
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
-	case "approve_prefix_run":
+	case "approve_prefix_run", "approve_root_run":
 		filetools.RegisterRuleWriteApproval(s.execCtx, plan.RuleKey)
 		invocation.approvalDecision = ""
 		return s.executeOriginalBash(invocation)
@@ -484,12 +588,26 @@ func (s *llmRunStream) executeApprovedFileWriteInvocation(invocation *preparedTo
 	}
 }
 
+func fileAccessDeniedToolResult(invocation *preparedToolInvocation, code string) ToolExecutionResult {
+	message := "file access rejected"
+	if invocation != nil && strings.EqualFold(strings.TrimSpace(invocation.toolName), "write") {
+		message = "file write access rejected"
+	}
+	result := structuredResult(map[string]any{
+		"error":   code,
+		"message": message,
+	})
+	result.Error = code
+	result.ExitCode = -1
+	return result
+}
+
 func (s *llmRunStream) executeApprovedBashSecurityInvocation(invocation *preparedToolInvocation, review bashsec.ReviewResult) error {
 	switch strings.ToLower(strings.TrimSpace(invocation.approvalDecision)) {
 	case "reject":
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
-	case "approve_prefix_run":
+	case "approve_prefix_run", "approve_root_run":
 		s.registerRuleWhitelist(review.RuleKey)
 		invocation.approvalDecision = ""
 		s.registerBashSecurityApproval(review.Fingerprint)

@@ -19,13 +19,17 @@ import (
 )
 
 func (t *RuntimeToolExecutor) invokeRead(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
-	resolved, err := filetools.ResolvePath(t.cfg.FileTools, filetools.ReadAccess, stringArg(args, "file_path"))
+	access, err := filetools.BuildAccessPlan(t.cfg.FileTools, filetools.ReadAccess, stringArg(args, "file_path"))
 	if err != nil {
-		return fileToolError("file_read_denied", err.Error()), nil
+		return fileToolError("file_read_invalid_path", err.Error()), nil
 	}
-	if filetools.IsBlockedDeviceFile(resolved.Path) {
+	if filetools.IsBlockedDeviceFile(access.Path) {
 		return fileToolError("file_read_device_blocked", "device file is blocked"), nil
 	}
+	if !access.AllowedByWhitelist && !filetools.ConsumeReadApproval(execCtx, access) {
+		return fileAccessApprovalRequired("file_read_approval_required", "read超出允许目录", access), nil
+	}
+	resolved := filetools.ResolvedPath{Raw: access.RawPath, Path: access.Path, Root: access.Root}
 	info, err := os.Stat(resolved.Path)
 	if err != nil {
 		return fileToolError("file_read_failed", err.Error()), nil
@@ -137,6 +141,13 @@ func (t *RuntimeToolExecutor) invokeRead(args map[string]any, execCtx *Execution
 }
 
 func (t *RuntimeToolExecutor) invokeWrite(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
+	access, err := filetools.BuildAccessPlan(t.cfg.FileTools, filetools.WriteAccess, stringArg(args, "file_path"))
+	if err != nil {
+		return fileToolError("file_write_invalid_plan", err.Error()), nil
+	}
+	if !access.AllowedByWhitelist && !filetools.ConsumeAccessApproval(execCtx, access) {
+		return fileAccessApprovalRequired("file_write_path_approval_required", "write超出允许目录", access), nil
+	}
 	plan, err := filetools.BuildWritePlan(t.cfg.FileTools, args)
 	if err != nil {
 		return fileToolError("file_write_invalid_plan", err.Error()), nil
@@ -300,6 +311,20 @@ func fileToolError(code string, message string) ToolExecutionResult {
 	result := structuredResultWithExit(map[string]any{
 		"error":   code,
 		"message": strings.TrimSpace(message),
+	}, -1)
+	result.Error = code
+	return result
+}
+
+func fileAccessApprovalRequired(code string, message string, plan filetools.AccessPlan) ToolExecutionResult {
+	result := structuredResultWithExit(map[string]any{
+		"error":       code,
+		"message":     strings.TrimSpace(message),
+		"filePath":    plan.Path,
+		"command":     plan.CommandText,
+		"fingerprint": plan.Fingerprint,
+		"ruleKey":     plan.RuleKey,
+		"root":        plan.Root,
 	}, -1)
 	result.Error = code
 	return result

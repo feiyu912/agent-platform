@@ -9,6 +9,7 @@ import (
 
 	"agent-platform-runner-go/internal/bashsec"
 	. "agent-platform-runner-go/internal/contracts"
+	"agent-platform-runner-go/internal/filetools"
 	"agent-platform-runner-go/internal/hitl"
 	"agent-platform-runner-go/internal/stream"
 )
@@ -230,19 +231,31 @@ func (s *llmRunStream) buildFormApprovalArgs(command string, result hitl.Interce
 
 func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) map[string]any {
 	command := mapStringArg(invocation.args, "command")
-	if plan := s.lookupFileWritePlan(invocation); plan != nil {
+	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		command = plan.CommandText
+	} else if plan := s.lookupFileWritePlan(invocation); plan != nil {
+		command = plan.CommandText
+	}
+	description := approvalDescription(invocation)
+	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+		if plan.Mode == filetools.ReadAccess {
+			description = "read超出允许目录"
+		} else {
+			description = "write超出允许目录"
+		}
 	}
 	item := map[string]any{
 		"id":                  invocation.toolID,
 		"command":             command,
-		"description":         approvalDescription(invocation),
+		"description":         description,
 		"options":             s.approvalOptionsForInvocation(invocation),
 		"allowFreeText":       true,
 		"freeTextPlaceholder": "可选：填写理由",
 	}
 	result := hitl.InterceptResult{}
-	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
+	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+		result = fileAccessInterceptResult(*plan)
+	} else if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
 		result = fileWriteInterceptResult(*plan)
 	} else if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
 		result = bashSecurityInterceptResult(invocation, review)
@@ -260,6 +273,9 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 }
 
 func (s *llmRunStream) approvalOptionsForInvocation(invocation *preparedToolInvocation) []any {
+	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+		return buildFileAccessApprovalOptions()
+	}
 	return buildApprovalOptions()
 }
 
@@ -279,6 +295,26 @@ func buildApprovalOptions() []any {
 			"label":       "拒绝",
 			"decision":    "reject",
 			"description": "终止这条命令",
+		},
+	}
+}
+
+func buildFileAccessApprovalOptions() []any {
+	return []any{
+		map[string]any{
+			"label":       "同意",
+			"decision":    "approve",
+			"description": "只本次放行这条路径",
+		},
+		map[string]any{
+			"label":       "同意（本次运行同前缀都放行）",
+			"decision":    "approve_root_run",
+			"description": "本次 run 内同一目录规则命中的文件访问自动放行，不再询问",
+		},
+		map[string]any{
+			"label":       "拒绝",
+			"decision":    "reject",
+			"description": "终止这次文件访问",
 		},
 	}
 }

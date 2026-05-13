@@ -261,11 +261,11 @@ runtimeConfig:
   - 整批取消：`params: []`，后端归一化为 `status:"error" + error.code:"user_dismissed"`
 
 - `mode=approval`
-  - 来源：Bash HITL builtin confirm
-  - `awaiting.ask`：`{"awaitingId":"...","mode":"approval","timeout":...,"runId":"...","approvals":[{"id":"tool_bash","command":"chmod 777 ~/a.sh","description":"放开脚本权限","options":[{"label":"同意","value":"approve"},{"label":"同意（本次运行同前缀都放行）","value":"approve_prefix_run"},{"label":"拒绝","value":"reject"}],"allowFreeText":true,"freeTextPlaceholder":"可选：填写理由"}]}`
+  - 来源：Bash HITL builtin confirm，以及文件工具越权路径审批。
+  - `awaiting.ask`：`{"awaitingId":"...","mode":"approval","timeout":...,"runId":"...","approvals":[{"id":"tool_bash","command":"chmod 777 ~/a.sh","description":"放开脚本权限","options":[{"label":"同意","value":"approve"},{"label":"同意（本次运行同前缀都放行）","value":"approve_prefix_run|approve_root_run"},{"label":"拒绝","value":"reject"}],"allowFreeText":true,"freeTextPlaceholder":"可选：填写理由"}]}`
   - approval 不再携带 `viewportType` / `viewportKey`
   - 用户只能批准或拒绝，不能改命令内容
-  - `/api/submit.params`：`[{"id":"tool_bash","decision":"approve|approve_prefix_run|reject","reason":"..."}]`（`id` 可省略，仅作审计字段）
+  - `/api/submit.params`：`[{"id":"tool_bash","decision":"approve|approve_prefix_run|approve_root_run|reject","reason":"..."}]`（`id` 可省略，仅作审计字段；文件路径审批优先使用 `approve_root_run`，旧 `approve_prefix_run` 仍兼容）
   - `awaiting.answer`：
     - answered：`{"awaitingId":"...","mode":"approval","status":"answered","approvals":[{"id":"tool_bash","command":"...","decision":"approve","rawDecision":"approve_prefix_run","reason":"..."}]}`
     - error：`{"awaitingId":"...","mode":"approval","status":"error","error":{"code":"user_dismissed|timeout|invalid_submit","message":"..."}}`
@@ -306,7 +306,7 @@ runtimeConfig:
 - 子 agent 的 JSONL 与主 agent 同构：每次子任务调起先写带 `taskId` 的 `_type:"query"`，并把该子 agent 的 system init 完整嵌入该 query 的 `systems`；终态 `_type:"react"` 只保留 `taskId`、`taskStatus`、`taskSubAgentKey`，其它任务元数据按 `taskId` 从 query 行关联。
 - `runId` 始终保持主 RunID；前端通过 `taskId` 把子流事件归到子面板，通过 `toolId` 把主时间线上的 `agent_invoke` 节点和聚合卡片关联起来。
 - 全部子任务结束后，编排层会按输入顺序聚合子结果，并仅向主 `mainToolID` 单次 `InjectToolResult`；主上下文只消费这份聚合后的 `tool.result` 文本。
-- 当前版本严格禁止嵌套：`agent_invoke` 只对显式配置该工具且 mode 为 `REACT/ONESHOT` 的主 agent 可用，子 agent 也只能是 `REACT/ONESHOT`，且子 agent 的可用工具集中会滤掉 `agent_invoke`；`tasks` 长度必须满足 `1 ≤ n ≤ 3`。
+- 当前版本严格禁止嵌套：`agent_invoke` 只对显式配置该工具且 mode 为 `REACT/ONESHOT` 的主 agent 可用，子 agent 也只能是 `REACT/ONESHOT`，且子 agent 的可用工具集中会滤掉 `agent_invoke`；`tasks` 长度必须满足 `1 ≤ n ≤ 5`。
 - 三流分离是硬约束：子 agent 中间的 reasoning、tool 调用、content delta 只进入 SSE/events replay，不进入主 `llmRunStream.messages`，也不进入 `raw_messages`；主上下文只消费子 agent 的最终 `tool.result` 文本。
 - `dispatcher.activeTaskID` 仍然是单值；子流的 `content.start / reasoning.start / tool.start / action.start` 如果输入 `taskId` 为空，会自动兜底为当前活跃 taskId，因此不需要引入 task 栈。
 

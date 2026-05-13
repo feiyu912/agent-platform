@@ -25,6 +25,17 @@ type ResolvedPath struct {
 	Root string
 }
 
+type AccessPlan struct {
+	RawPath            string
+	Path               string
+	Root               string
+	RuleKey            string
+	Fingerprint        string
+	CommandText        string
+	AllowedByWhitelist bool
+	Mode               AccessMode
+}
+
 type WritePlan struct {
 	FilePath    string
 	Root        string
@@ -36,9 +47,24 @@ type WritePlan struct {
 }
 
 func ResolvePath(cfg config.FileToolsConfig, mode AccessMode, rawPath string) (ResolvedPath, error) {
+	plan, err := BuildAccessPlan(cfg, mode, rawPath)
+	if err != nil {
+		return ResolvedPath{}, err
+	}
+	if !plan.AllowedByWhitelist {
+		return ResolvedPath{}, fmt.Errorf("path not allowed: %s", rawPath)
+	}
+	return ResolvedPath{
+		Raw:  plan.RawPath,
+		Path: plan.Path,
+		Root: plan.Root,
+	}, nil
+}
+
+func BuildAccessPlan(cfg config.FileToolsConfig, mode AccessMode, rawPath string) (AccessPlan, error) {
 	rawPath = strings.TrimSpace(rawPath)
 	if rawPath == "" {
-		return ResolvedPath{}, fmt.Errorf("file_path is required")
+		return AccessPlan{}, fmt.Errorf("file_path is required")
 	}
 	candidate := expandHome(rawPath)
 	if !filepath.IsAbs(candidate) {
@@ -51,7 +77,7 @@ func ResolvePath(cfg config.FileToolsConfig, mode AccessMode, rawPath string) (R
 	candidate = filepath.Clean(candidate)
 	realCandidate, err := evaluatePath(candidate)
 	if err != nil {
-		return ResolvedPath{}, err
+		return AccessPlan{}, err
 	}
 	roots := cfg.AllowedReadPaths
 	if mode == WriteAccess {
@@ -59,17 +85,27 @@ func ResolvePath(cfg config.FileToolsConfig, mode AccessMode, rawPath string) (R
 	}
 	root, ok := firstAllowedRoot(cfg.WorkingDirectory, roots, realCandidate)
 	if !ok {
-		return ResolvedPath{}, fmt.Errorf("path not allowed: %s", rawPath)
+		root = nearestExistingAncestor(realCandidate)
 	}
-	return ResolvedPath{
-		Raw:  rawPath,
-		Path: realCandidate,
-		Root: root,
+	if root == "" {
+		root = filepath.Dir(realCandidate)
+	}
+	fingerprintHash := sha256.Sum256([]byte(string(mode) + "\x00" + realCandidate))
+	rootHash := sha256.Sum256([]byte(string(mode) + "\x00" + root))
+	return AccessPlan{
+		RawPath:            rawPath,
+		Path:               realCandidate,
+		Root:               root,
+		RuleKey:            "file-" + string(mode) + "::" + hex.EncodeToString(rootHash[:8]),
+		Fingerprint:        hex.EncodeToString(fingerprintHash[:]),
+		CommandText:        string(mode) + " " + realCandidate,
+		AllowedByWhitelist: ok,
+		Mode:               mode,
 	}, nil
 }
 
 func BuildWritePlan(cfg config.FileToolsConfig, args map[string]any) (WritePlan, error) {
-	resolved, err := ResolvePath(cfg, WriteAccess, AnyStringNode(args["file_path"]))
+	access, err := BuildAccessPlan(cfg, WriteAccess, AnyStringNode(args["file_path"]))
 	if err != nil {
 		return WritePlan{}, err
 	}
@@ -82,19 +118,99 @@ func BuildWritePlan(cfg config.FileToolsConfig, args map[string]any) (WritePlan,
 		return WritePlan{}, fmt.Errorf("content exceeds max write bytes")
 	}
 	contentBytes := []byte(content)
-	sum := sha256.Sum256([]byte(resolved.Path + "\x00" + hex.EncodeToString(sha256Bytes(contentBytes))))
+	sum := sha256.Sum256([]byte(access.Path + "\x00" + hex.EncodeToString(sha256Bytes(contentBytes))))
 	fingerprint := hex.EncodeToString(sum[:])
-	rootHash := sha256.Sum256([]byte(resolved.Root))
+	rootHash := sha256.Sum256([]byte(access.Root))
 	ruleKey := "file-write::" + hex.EncodeToString(rootHash[:8])
 	return WritePlan{
-		FilePath:    resolved.Path,
-		Root:        resolved.Root,
+		FilePath:    access.Path,
+		Root:        access.Root,
 		Content:     contentBytes,
 		Description: description,
 		Fingerprint: fingerprint,
 		RuleKey:     ruleKey,
-		CommandText: fmt.Sprintf("write %s (%d bytes)", resolved.Path, len(contentBytes)),
+		CommandText: fmt.Sprintf("write %s (%d bytes)", access.Path, len(contentBytes)),
 	}, nil
+}
+
+func ConsumeReadApproval(execCtx *ExecutionContext, plan AccessPlan) bool {
+	if execCtx == nil {
+		return false
+	}
+	if execCtx.FileReadRuleApprovals != nil && execCtx.FileReadRuleApprovals[plan.RuleKey] {
+		return true
+	}
+	return consumeApproval(execCtx.FileReadApprovals, plan.Fingerprint)
+}
+
+func RegisterExactReadApproval(execCtx *ExecutionContext, fingerprint string) {
+	if execCtx == nil || strings.TrimSpace(fingerprint) == "" {
+		return
+	}
+	if execCtx.FileReadApprovals == nil {
+		execCtx.FileReadApprovals = map[string]int{}
+	}
+	execCtx.FileReadApprovals[fingerprint]++
+}
+
+func RegisterRuleReadApproval(execCtx *ExecutionContext, ruleKey string) {
+	if execCtx == nil || strings.TrimSpace(ruleKey) == "" {
+		return
+	}
+	if execCtx.FileReadRuleApprovals == nil {
+		execCtx.FileReadRuleApprovals = map[string]bool{}
+	}
+	execCtx.FileReadRuleApprovals[ruleKey] = true
+}
+
+func HasReadApproval(execCtx *ExecutionContext, plan AccessPlan) bool {
+	if execCtx == nil {
+		return false
+	}
+	if execCtx.FileReadRuleApprovals != nil && execCtx.FileReadRuleApprovals[plan.RuleKey] {
+		return true
+	}
+	return execCtx.FileReadApprovals != nil && execCtx.FileReadApprovals[plan.Fingerprint] > 0
+}
+
+func ConsumeAccessApproval(execCtx *ExecutionContext, plan AccessPlan) bool {
+	if execCtx == nil {
+		return false
+	}
+	if execCtx.FileAccessRuleApprovals != nil && execCtx.FileAccessRuleApprovals[plan.RuleKey] {
+		return true
+	}
+	return consumeApproval(execCtx.FileAccessApprovals, plan.Fingerprint)
+}
+
+func RegisterExactAccessApproval(execCtx *ExecutionContext, fingerprint string) {
+	if execCtx == nil || strings.TrimSpace(fingerprint) == "" {
+		return
+	}
+	if execCtx.FileAccessApprovals == nil {
+		execCtx.FileAccessApprovals = map[string]int{}
+	}
+	execCtx.FileAccessApprovals[fingerprint]++
+}
+
+func RegisterRuleAccessApproval(execCtx *ExecutionContext, ruleKey string) {
+	if execCtx == nil || strings.TrimSpace(ruleKey) == "" {
+		return
+	}
+	if execCtx.FileAccessRuleApprovals == nil {
+		execCtx.FileAccessRuleApprovals = map[string]bool{}
+	}
+	execCtx.FileAccessRuleApprovals[ruleKey] = true
+}
+
+func HasAccessApproval(execCtx *ExecutionContext, plan AccessPlan) bool {
+	if execCtx == nil {
+		return false
+	}
+	if execCtx.FileAccessRuleApprovals != nil && execCtx.FileAccessRuleApprovals[plan.RuleKey] {
+		return true
+	}
+	return execCtx.FileAccessApprovals != nil && execCtx.FileAccessApprovals[plan.Fingerprint] > 0
 }
 
 func ConsumeWriteApproval(execCtx *ExecutionContext, plan WritePlan) bool {
@@ -104,18 +220,22 @@ func ConsumeWriteApproval(execCtx *ExecutionContext, plan WritePlan) bool {
 	if execCtx.FileWriteRuleApprovals != nil && execCtx.FileWriteRuleApprovals[plan.RuleKey] {
 		return true
 	}
-	if strings.TrimSpace(plan.Fingerprint) == "" || len(execCtx.FileWriteApprovals) == 0 {
+	return consumeApproval(execCtx.FileWriteApprovals, plan.Fingerprint)
+}
+
+func consumeApproval(approvals map[string]int, fingerprint string) bool {
+	if strings.TrimSpace(fingerprint) == "" || len(approvals) == 0 {
 		return false
 	}
-	remaining := execCtx.FileWriteApprovals[plan.Fingerprint]
+	remaining := approvals[fingerprint]
 	if remaining <= 0 {
 		return false
 	}
 	if remaining == 1 {
-		delete(execCtx.FileWriteApprovals, plan.Fingerprint)
+		delete(approvals, fingerprint)
 		return true
 	}
-	execCtx.FileWriteApprovals[plan.Fingerprint] = remaining - 1
+	approvals[fingerprint] = remaining - 1
 	return true
 }
 
@@ -174,6 +294,35 @@ func evaluatePath(path string) (string, error) {
 		return "", fmt.Errorf("resolve path: %w", err)
 	}
 	return filepath.Clean(filepath.Join(append([]string{evaluatedParent}, missing...)...)), nil
+}
+
+func nearestExistingAncestor(path string) string {
+	current := filepath.Clean(path)
+	if current == "" {
+		return ""
+	}
+	if info, err := os.Lstat(current); err == nil && info.IsDir() {
+		if evaluated, err := filepath.EvalSymlinks(current); err == nil {
+			return filepath.Clean(evaluated)
+		}
+		return current
+	}
+	for {
+		parent := filepath.Dir(current)
+		if parent == current || parent == "." || parent == "" {
+			if evaluated, err := filepath.EvalSymlinks(current); err == nil {
+				return filepath.Clean(evaluated)
+			}
+			return current
+		}
+		if info, err := os.Lstat(parent); err == nil && info.IsDir() {
+			if evaluated, err := filepath.EvalSymlinks(parent); err == nil {
+				return filepath.Clean(evaluated)
+			}
+			return parent
+		}
+		current = parent
+	}
 }
 
 func firstAllowedRoot(workingDir string, roots []string, path string) (string, bool) {

@@ -924,10 +924,10 @@ func (c *Config) normalize() error {
 		c.FileTools.WorkingDirectory = c.Bash.WorkingDirectory
 	}
 	if len(c.FileTools.AllowedReadPaths) == 0 {
-		c.FileTools.AllowedReadPaths = append([]string(nil), c.Bash.AllowedPaths...)
+		c.FileTools.AllowedReadPaths = []string{".", "/tmp"}
 	}
 	if len(c.FileTools.AllowedWritePaths) == 0 {
-		c.FileTools.AllowedWritePaths = append([]string(nil), c.Bash.AllowedPaths...)
+		c.FileTools.AllowedWritePaths = []string{".", "/tmp"}
 	}
 	if c.FileTools.MaxReadBytes <= 0 {
 		c.FileTools.MaxReadBytes = 1 << 20

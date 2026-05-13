@@ -102,6 +102,7 @@ type preparedToolInvocation struct {
 	toolCallCounted     bool
 	precheckedHITL      *hitl.InterceptResult
 	bashSecurityReview  *bashsec.ReviewResult
+	fileAccessPlan      *filetools.AccessPlan
 	fileWritePlan       *filetools.WritePlan
 	approvalID          string
 	approvalDecision    string
