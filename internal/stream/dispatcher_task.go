@@ -26,40 +26,46 @@ func (d *StreamEventDispatcher) handleTaskStart(input TaskStart) []StreamEvent {
 		"taskName":    input.TaskName,
 		"description": input.Description,
 		"subAgentKey": input.SubAgentKey,
-		"mainToolId":  input.MainToolID,
+		"toolId":      input.MainToolID,
 	}
 	return []StreamEvent{NewEvent("task.start", payload)}
 }
 
 func (d *StreamEventDispatcher) handleTaskComplete(input TaskComplete) []StreamEvent {
+	events := d.closeOpenBlocks()
 	if d.state.activeTaskID == input.TaskID {
 		d.state.activeTaskID = ""
 	}
-	return []StreamEvent{NewEvent("task.complete", map[string]any{
+	events = append(events, NewEvent("task.complete", map[string]any{
 		"taskId": input.TaskID,
 		"status": input.Status,
-	})}
+	}))
+	return events
 }
 
 func (d *StreamEventDispatcher) handleTaskCancel(input TaskCancel) []StreamEvent {
+	events := d.closeOpenBlocks()
 	if d.state.activeTaskID == input.TaskID {
 		d.state.activeTaskID = ""
 	}
-	return []StreamEvent{NewEvent("task.cancel", map[string]any{
+	events = append(events, NewEvent("task.cancel", map[string]any{
 		"taskId": input.TaskID,
 		"status": input.Status,
-	})}
+	}))
+	return events
 }
 
 func (d *StreamEventDispatcher) handleTaskFail(input TaskFail) []StreamEvent {
+	events := d.closeOpenBlocks()
 	if d.state.activeTaskID == input.TaskID {
 		d.state.activeTaskID = ""
 	}
-	return []StreamEvent{NewEvent("task.fail", map[string]any{
+	events = append(events, NewEvent("task.fail", map[string]any{
 		"taskId": input.TaskID,
 		"status": input.Status,
 		"error":  normalizeErrorMap(input.Error, "task_failed", "task", "runtime"),
-	})}
+	}))
+	return events
 }
 
 func (d *StreamEventDispatcher) handleSourcePublish(input SourcePublish) []StreamEvent {

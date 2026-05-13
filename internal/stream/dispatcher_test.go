@@ -110,6 +110,34 @@ func TestDispatcherFallsBackToActiveTaskIDForSubAgentBlocks(t *testing.T) {
 	}
 }
 
+func TestDispatcherClosesContentBeforeTaskComplete(t *testing.T) {
+	dispatcher := NewDispatcher(StreamRequest{
+		RunID:  "run_1",
+		ChatID: "chat_1",
+	})
+	dispatcher.Dispatch(TaskStart{
+		TaskID:      "task_sub_1",
+		RunID:       "run_1",
+		TaskName:    "分析",
+		SubAgentKey: "analyzer",
+		MainToolID:  "tool_main_1",
+	})
+	dispatcher.Dispatch(ContentDelta{
+		ContentID: "task_sub_1:final",
+		TaskID:    "task_sub_1",
+		Delta:     "马到成功",
+	})
+
+	events := dispatcher.Dispatch(TaskComplete{TaskID: "task_sub_1", Status: "completed"})
+	assertEventTypes(t, events, "content.end", "content.snapshot", "task.complete")
+	if got := events[1].Data().String("taskId"); got != "task_sub_1" {
+		t.Fatalf("expected content.snapshot taskId, got %#v", events[1].ToData())
+	}
+	if got := events[1].Data().String("text"); got != "马到成功" {
+		t.Fatalf("expected content.snapshot text, got %#v", events[1].ToData())
+	}
+}
+
 func TestDispatcherIncludesTaskIDOnDebugEvents(t *testing.T) {
 	dispatcher := NewDispatcher(StreamRequest{
 		RunID:  "run_1",

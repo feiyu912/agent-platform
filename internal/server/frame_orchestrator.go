@@ -317,6 +317,11 @@ func (o *frameOrchestrator) runChildTask(index int, task preparedSubTask, princi
 		result.Error = result.Text
 		return result
 	}
+	route(routeChildStreamInput(task.taskID, stream.ContentDelta{
+		ContentID: task.taskID + ":final",
+		TaskID:    task.taskID,
+		Delta:     text,
+	}))
 	result.Text = text
 	return result
 }
@@ -337,14 +342,14 @@ func (o *frameOrchestrator) writeChildTaskQueryAndSystem(subReq api.QueryRequest
 		}
 	}
 	_ = o.chats.AppendQueryLine(o.summary.ChatID, chat.QueryLine{
-		Type:           "query",
-		ChatID:         o.summary.ChatID,
-		RunID:          o.session.RunID,
-		UpdatedAt:      time.Now().UnixMilli(),
-		TaskID:         task.taskID,
-		TaskName:       task.spec.TaskName,
-		TaskMainToolID: task.mainToolID,
-		SubAgentKey:    task.spec.SubAgentKey,
+		Type:        "query",
+		ChatID:      o.summary.ChatID,
+		RunID:       o.session.RunID,
+		UpdatedAt:   time.Now().UnixMilli(),
+		TaskID:      task.taskID,
+		TaskName:    task.spec.TaskName,
+		TaskToolID:  task.mainToolID,
+		SubAgentKey: task.spec.SubAgentKey,
 		Query: map[string]any{
 			"message":   task.spec.TaskText,
 			"agentKey":  task.spec.SubAgentKey,

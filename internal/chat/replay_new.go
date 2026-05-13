@@ -139,7 +139,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			TaskName:    stringFromAny(line["taskName"]),
 			TaskDesc:    stringFromAny(query["message"]),
 			SubAgentKey: stringFromAny(line["subAgentKey"]),
-			MainToolID:  stringFromAny(line["taskMainToolId"]),
+			MainToolID:  taskToolIDFromLine(line),
 		}
 	}
 
@@ -193,7 +193,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			taskDescription, _ := line["taskDescription"].(string)
 			taskStatus, _ := line["taskStatus"].(string)
 			taskSubAgentKey, _ := line["taskSubAgentKey"].(string)
-			taskMainToolID, _ := line["taskMainToolId"].(string)
+			taskMainToolID := taskToolIDFromLine(line)
 			if meta, ok := taskQueries[replayedTaskQueryKey(runID, taskID)]; ok {
 				if strings.TrimSpace(taskName) == "" {
 					taskName = meta.TaskName
@@ -208,7 +208,8 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					taskMainToolID = meta.MainToolID
 				}
 			}
-			if events := reconcileReplayedSubTask(rd, runID, taskID, taskName, taskDescription, taskStatus, taskSubAgentKey, taskMainToolID, int64FromAny(line["updatedAt"]), nextSeq); len(events) > 0 {
+			ts := int64FromAny(line["updatedAt"])
+			if events := beginReplayedSubTask(rd, runID, taskID, taskName, taskDescription, taskSubAgentKey, taskMainToolID, ts, nextSeq); len(events) > 0 {
 				rd.events = append(rd.events, events...)
 			}
 			msgs, _ := line["messages"].([]any)
@@ -219,7 +220,6 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			stepDebug, _ := line["debug"].(map[string]any)
 			stepPreCallData := debugPreCallData(stepDebug, stepSystem)
 			replayDebugEvents := len(stepPreCallData) > 0
-			ts := int64FromAny(line["updatedAt"])
 			if replayDebugEvents {
 				runCumulativePre := map[string]int{
 					"promptTokens":     rd.totalPromptTokens,
@@ -273,6 +273,9 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				if ev := synthesizePostCallEvent(runID, chatID, taskID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)
 				}
+			}
+			if events := finishReplayedSubTaskIfTerminal(rd, runID, taskID, taskStatus, ts, nextSeq); len(events) > 0 {
+				rd.events = append(rd.events, events...)
 			}
 		case "submit":
 			rd := ensureRun(runs, &runOrder, runID)
@@ -379,4 +382,11 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		Plan:        plan,
 		Artifact:    artifact,
 	}, nil
+}
+
+func taskToolIDFromLine(line map[string]any) string {
+	if value := stringFromAny(line["taskToolId"]); strings.TrimSpace(value) != "" {
+		return value
+	}
+	return stringFromAny(line["taskMainToolId"])
 }

@@ -57,7 +57,7 @@ func ensureRun(runs map[string]*chatRunData, order *[]string, runID string) *cha
 	return rd
 }
 
-func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, taskName string, taskDescription string, taskStatus string, taskSubAgentKey string, taskMainToolID string, ts int64, nextSeq func() int64) []stream.EventData {
+func beginReplayedSubTask(rd *chatRunData, runID string, taskID string, taskName string, taskDescription string, taskSubAgentKey string, taskMainToolID string, ts int64, nextSeq func() int64) []stream.EventData {
 	if rd == nil {
 		return nil
 	}
@@ -77,7 +77,6 @@ func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, task
 			TaskDesc:      taskDescription,
 			SubAgentKey:   taskSubAgentKey,
 			MainToolID:    taskMainToolID,
-			Status:        taskStatus,
 			LastTimestamp: ts,
 		}
 		rd.activeSubTasks[taskID] = active
@@ -91,7 +90,7 @@ func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, task
 				"taskName":    taskName,
 				"description": taskDescription,
 				"subAgentKey": taskSubAgentKey,
-				"mainToolId":  taskMainToolID,
+				"toolId":      taskMainToolID,
 			},
 		})
 	}
@@ -104,15 +103,28 @@ func reconcileReplayedSubTask(rd *chatRunData, runID string, taskID string, task
 	if strings.TrimSpace(taskMainToolID) != "" {
 		active.MainToolID = taskMainToolID
 	}
+	active.LastTimestamp = ts
+	return events
+}
+
+func finishReplayedSubTaskIfTerminal(rd *chatRunData, runID string, taskID string, taskStatus string, ts int64, nextSeq func() int64) []stream.EventData {
+	if rd == nil || strings.TrimSpace(taskID) == "" {
+		return nil
+	}
+	active := rd.activeSubTasks[taskID]
+	if active == nil {
+		return nil
+	}
 	if strings.TrimSpace(taskStatus) != "" {
 		active.Status = taskStatus
 	}
 	active.LastTimestamp = ts
 	if isTerminalSubTaskStatus(active.Status) {
-		events = append(events, synthesizeReplayedSubTaskTerminal(runID, active, nextSeq)...)
+		events := synthesizeReplayedSubTaskTerminal(runID, active, nextSeq)
 		delete(rd.activeSubTasks, taskID)
+		return events
 	}
-	return events
+	return nil
 }
 
 func flushReplayedSubTask(rd *chatRunData, nextSeq func() int64) []stream.EventData {

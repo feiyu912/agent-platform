@@ -1626,7 +1626,7 @@ func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 			"taskName":    "分析",
 			"description": "run analysis",
 			"subAgentKey": "analyzer",
-			"mainToolId":  "tool_main_1",
+			"toolId":      "tool_main_1",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -1703,7 +1703,7 @@ func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 	if taskLine["taskId"] != "task_1" || taskLine["taskStatus"] != "completed" || taskLine["taskSubAgentKey"] != "analyzer" {
 		t.Fatalf("expected slim task metadata, got %#v", taskLine)
 	}
-	for _, field := range []string{"taskName", "taskDescription", "taskMainToolId"} {
+	for _, field := range []string{"taskName", "taskDescription", "taskToolId"} {
 		if _, ok := taskLine[field]; ok {
 			t.Fatalf("did not expect %s on task react line: %#v", field, taskLine)
 		}
@@ -1801,20 +1801,20 @@ func TestStepWriterSubTaskReactFlushOrder(t *testing.T) {
 	}
 }
 
-func TestQueryLineWithTaskIDSerializesSubAgentMetadata(t *testing.T) {
+func TestQueryLineTaskToolIDFieldName(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
 	}
 
 	if err := store.AppendQueryLine("chat-task-query", QueryLine{
-		ChatID:         "chat-task-query",
-		RunID:          "run-task-query",
-		UpdatedAt:      1001,
-		TaskID:         "task_1",
-		TaskName:       "分析",
-		TaskMainToolID: "tool_main_1",
-		SubAgentKey:    "analyzer",
+		ChatID:      "chat-task-query",
+		RunID:       "run-task-query",
+		UpdatedAt:   1001,
+		TaskID:      "task_1",
+		TaskName:    "分析",
+		TaskToolID:  "tool_main_1",
+		SubAgentKey: "analyzer",
 		Query: map[string]any{
 			"message":   "run analysis",
 			"agentKey":  "analyzer",
@@ -1834,11 +1834,14 @@ func TestQueryLineWithTaskIDSerializesSubAgentMetadata(t *testing.T) {
 		t.Fatalf("expected one query line, got %#v", lines)
 	}
 	line := lines[0]
-	if line["taskId"] != "task_1" || line["taskName"] != "分析" || line["taskMainToolId"] != "tool_main_1" || line["subAgentKey"] != "analyzer" {
+	if line["taskId"] != "task_1" || line["taskName"] != "分析" || line["taskToolId"] != "tool_main_1" || line["subAgentKey"] != "analyzer" {
 		t.Fatalf("expected sub-agent query metadata, got %#v", line)
 	}
 	if _, ok := line["taskGroupId"]; ok {
 		t.Fatalf("did not expect taskGroupId on sub-agent query, got %#v", line)
+	}
+	if _, ok := line["taskMainToolId"]; ok {
+		t.Fatalf("did not expect taskMainToolId on sub-agent query, got %#v", line)
 	}
 }
 
@@ -2621,7 +2624,7 @@ func TestStepWriterSubAgentStepsAreExcludedFromRawMessages(t *testing.T) {
 			"taskName":    "分析",
 			"description": "run analysis",
 			"subAgentKey": "analyzer",
-			"mainToolId":  "tool_main_1",
+			"toolId":      "tool_main_1",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -2674,8 +2677,8 @@ func TestStepWriterSubAgentStepsAreExcludedFromRawMessages(t *testing.T) {
 	if lines[1]["taskSubAgentKey"] != "analyzer" || lines[1]["taskStatus"] != "completed" {
 		t.Fatalf("expected slim sub-agent task metadata on task step, got %#v", lines[1])
 	}
-	if _, ok := lines[1]["taskMainToolId"]; ok {
-		t.Fatalf("did not expect taskMainToolId on slim task step, got %#v", lines[1])
+	if _, ok := lines[1]["taskToolId"]; ok {
+		t.Fatalf("did not expect taskToolId on slim task step, got %#v", lines[1])
 	}
 }
 
@@ -2696,7 +2699,7 @@ func TestStepWriterTaskSnapshotsUpsertAfterComplete(t *testing.T) {
 			"taskId":      "task_1",
 			"taskName":    "讲故事",
 			"subAgentKey": "story-agent",
-			"mainToolId":  "tool_main_1",
+			"toolId":      "tool_main_1",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -2866,13 +2869,13 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 
 	contentTs := int64(2001)
 	if err := store.AppendQueryLine("chat-subagent-replay", QueryLine{
-		ChatID:         "chat-subagent-replay",
-		RunID:          "run-subagent-replay",
-		UpdatedAt:      2000,
-		TaskID:         "task_1",
-		TaskName:       "分析",
-		TaskMainToolID: "tool_main_1",
-		SubAgentKey:    "analyzer",
+		ChatID:      "chat-subagent-replay",
+		RunID:       "run-subagent-replay",
+		UpdatedAt:   2000,
+		TaskID:      "task_1",
+		TaskName:    "分析",
+		TaskToolID:  "tool_main_1",
+		SubAgentKey: "analyzer",
 		Query: map[string]any{
 			"chatId":   "chat-subagent-replay",
 			"runId":    "run-subagent-replay",
@@ -2894,11 +2897,22 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 		TaskStatus:      "completed",
 		TaskSubAgentKey: "analyzer",
 		Messages: []StoredMessage{{
-			Role:      "assistant",
-			Content:   []ContentPart{{Type: "text", Text: "child result"}},
-			ContentID: "child_1",
-			MsgID:     "msg-1",
-			Ts:        &contentTs,
+			Role:             "assistant",
+			ReasoningContent: []ContentPart{{Type: "text", Text: "thinking"}},
+			Content:          []ContentPart{{Type: "text", Text: "child result"}},
+			ReasoningID:      "reason_1",
+			ContentID:        "child_1",
+			ToolID:           "child_tool_1",
+			MsgID:            "msg-1",
+			Ts:               &contentTs,
+			ToolCalls: []StoredToolCall{{
+				ID:   "child_tool_1",
+				Type: "function",
+				Function: StoredFunction{
+					Name:      "datetime",
+					Arguments: `{"format":"iso"}`,
+				},
+			}},
 		}},
 	}); err != nil {
 		t.Fatalf("append sub-agent step line: %v", err)
@@ -2933,14 +2947,18 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 		t.Fatalf("expected synthesized task lifecycle events, got %v", eventTypes)
 	}
 
+	positions := map[string]int{}
 	var sawStart, sawComplete bool
 	for _, event := range detail.Events {
+		if _, exists := positions[event.Type]; !exists {
+			positions[event.Type] = len(positions)
+		}
 		if _, ok := event.Payload["groupId"]; ok {
 			t.Fatalf("did not expect groupId in replayed task lifecycle payload: %#v", event)
 		}
 		switch event.Type {
 		case "task.start":
-			if event.String("subAgentKey") == "analyzer" && event.String("mainToolId") == "tool_main_1" && event.String("taskName") == "分析" {
+			if event.String("subAgentKey") == "analyzer" && event.String("toolId") == "tool_main_1" && event.String("taskName") == "分析" {
 				sawStart = true
 			}
 		case "task.complete":
@@ -2952,6 +2970,83 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 	if !sawStart || !sawComplete {
 		t.Fatalf("expected synthesized start and complete payloads, got %#v", detail.Events)
 	}
+	order := eventOrder(detail.Events, "task.start", "reasoning.snapshot", "content.snapshot", "tool.snapshot", "task.complete")
+	for _, eventType := range []string{"task.start", "reasoning.snapshot", "content.snapshot", "tool.snapshot", "task.complete"} {
+		if order[eventType] < 0 {
+			t.Fatalf("expected %s in replayed events, got %#v", eventType, detail.Events)
+		}
+	}
+	if !(order["task.start"] < order["reasoning.snapshot"] &&
+		order["reasoning.snapshot"] < order["content.snapshot"] &&
+		order["content.snapshot"] < order["tool.snapshot"] &&
+		order["tool.snapshot"] < order["task.complete"]) {
+		t.Fatalf("unexpected replay event ordering: order=%#v events=%#v", order, detail.Events)
+	}
+}
+
+func TestReplayCompatTaskMainToolIDLegacyKey(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-legacy-task-tool", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := store.appendJSONLine(store.chatJSONLPath("chat-legacy-task-tool"), map[string]any{
+		"_type":          "query",
+		"chatId":         "chat-legacy-task-tool",
+		"runId":          "run-legacy-task-tool",
+		"updatedAt":      1000,
+		"taskId":         "task_1",
+		"taskName":       "分析",
+		"taskMainToolId": "tool_legacy_1",
+		"subAgentKey":    "analyzer",
+		"query": map[string]any{
+			"message": "run analysis",
+		},
+	}); err != nil {
+		t.Fatalf("append legacy sub-agent query line: %v", err)
+	}
+	if err := store.AppendStepLine("chat-legacy-task-tool", StepLine{
+		ChatID:          "chat-legacy-task-tool",
+		RunID:           "run-legacy-task-tool",
+		UpdatedAt:       1001,
+		Type:            "react",
+		TaskID:          "task_1",
+		TaskStatus:      "completed",
+		TaskSubAgentKey: "analyzer",
+		Messages: []StoredMessage{{
+			Role:      "assistant",
+			Content:   []ContentPart{{Type: "text", Text: "done"}},
+			ContentID: "child_1",
+		}},
+	}); err != nil {
+		t.Fatalf("append sub-agent step line: %v", err)
+	}
+
+	detail, err := store.LoadChat("chat-legacy-task-tool")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	for _, event := range detail.Events {
+		if event.Type == "task.start" && event.String("toolId") == "tool_legacy_1" {
+			return
+		}
+	}
+	t.Fatalf("expected legacy taskMainToolId to replay as task.start toolId, got %#v", detail.Events)
+}
+
+func eventOrder(events []stream.EventData, eventTypes ...string) map[string]int {
+	order := make(map[string]int, len(eventTypes))
+	for _, eventType := range eventTypes {
+		order[eventType] = -1
+	}
+	for index, event := range events {
+		if _, ok := order[event.Type]; ok && order[event.Type] < 0 {
+			order[event.Type] = index
+		}
+	}
+	return order
 }
 
 func TestLoadChatReplaysQuestionAwaitLifecycleLegacyEventLines(t *testing.T) {

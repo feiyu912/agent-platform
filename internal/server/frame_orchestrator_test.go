@@ -140,6 +140,18 @@ func readServerTestJSONLines(store *chat.FileStore, chatID string) ([]map[string
 	return lines, nil
 }
 
+func textFromServerTestContent(value any) string {
+	parts, _ := value.([]any)
+	var text string
+	for _, rawPart := range parts {
+		part, _ := rawPart.(map[string]any)
+		if partText, _ := part["text"].(string); partText != "" {
+			text += partText
+		}
+	}
+	return text
+}
+
 func newInvokeAgentsDelta(tasks ...contracts.SubAgentTaskSpec) contracts.DeltaInvokeSubAgents {
 	return contracts.DeltaInvokeSubAgents{
 		MainToolID: "tool_main_1",
@@ -354,6 +366,7 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 	}
 	foundReasoning := false
 	foundContent := false
+	foundFinalContent := false
 	foundPreCall := false
 	for _, input := range routed {
 		switch value := input.(type) {
@@ -369,10 +382,13 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 			if value.TaskID == "run_1_t_1" && value.ContentID == "run_1_t_1_c_1" {
 				foundContent = true
 			}
+			if value.TaskID == "run_1_t_1" && value.ContentID == "run_1_t_1:final" && value.Delta == "final child answer" {
+				foundFinalContent = true
+			}
 		}
 	}
-	if !foundPreCall || !foundReasoning || !foundContent {
-		t.Fatalf("expected child debug/reasoning/content IDs to use task prefix; preCall=%v reasoning=%v content=%v routed=%#v", foundPreCall, foundReasoning, foundContent, routed)
+	if !foundPreCall || !foundReasoning || !foundContent || !foundFinalContent {
+		t.Fatalf("expected child debug/reasoning/content/final IDs to use task prefix; preCall=%v reasoning=%v content=%v final=%v routed=%#v", foundPreCall, foundReasoning, foundContent, foundFinalContent, routed)
 	}
 }
 
@@ -429,7 +445,7 @@ func TestFrameOrchestratorWritesSubAgentQueryAndSystemLines(t *testing.T) {
 	for _, line := range lines {
 		switch line["_type"] {
 		case "query":
-			if line["taskId"] == "" || line["subAgentKey"] != "writer" || line["taskMainToolId"] != "tool_main_1" {
+			if line["taskId"] == "" || line["subAgentKey"] != "writer" || line["taskToolId"] != "tool_main_1" {
 				t.Fatalf("unexpected child query line %#v", line)
 			}
 			if _, ok := line["taskGroupId"]; ok {
@@ -456,6 +472,69 @@ func TestFrameOrchestratorWritesSubAgentQueryAndSystemLines(t *testing.T) {
 	if queryCount != 2 || embeddedSystemCount != 2 || standaloneSystemCount != 0 {
 		t.Fatalf("expected two child query lines, two embedded systems, and no standalone system lines; queries=%d embedded=%d standalone=%d lines=%#v", queryCount, embeddedSystemCount, standaloneSystemCount, lines)
 	}
+}
+
+func TestSubTaskReactStepPersistsContentMessage(t *testing.T) {
+	store, err := chat.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat_1", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	mainStream := &stubOrchestratableStream{
+		deltas: []contracts.AgentDelta{
+			newInvokeAgentsDelta(contracts.SubAgentTaskSpec{SubAgentKey: "writer", TaskText: "write a summary", TaskName: "写作"}),
+		},
+	}
+	child := &stubOrchestratableStream{finalText: "马到成功"}
+	assembler := stream.NewAssembler(stream.StreamRequest{RunID: "run_1", ChatID: "chat_1"})
+	mapper := llm.NewDeltaMapper("run_1", "chat_1", 5000, nil, frontendtools.NewDefaultRegistry())
+	writer := chat.NewStepWriter(store, "chat_1", "run_1", "react", false)
+	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{streams: []contracts.AgentStream{child}}, map[string]catalog.AgentDefinition{
+		"writer": {Key: "writer", Name: "Writer", Mode: "REACT"},
+	}, nil, nil)
+	orchestrator.chats = store
+	orchestrator.mapper = mapper
+	orchestrator.emitDelta = func(delta contracts.AgentDelta) {
+		for _, input := range mapper.Map(delta) {
+			for _, event := range assembler.Consume(input) {
+				writer.OnEvent(event.Data())
+			}
+		}
+	}
+	orchestrator.emitInputs = func(inputs ...stream.StreamInput) {
+		for _, input := range inputs {
+			for _, event := range assembler.Consume(input) {
+				writer.OnEvent(event.Data())
+			}
+		}
+	}
+
+	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
+	if err != nil || streamFailed || streamInterrupted {
+		t.Fatalf("unexpected orchestrator result err=%v failed=%v interrupted=%v", err, streamFailed, streamInterrupted)
+	}
+
+	lines, err := readServerTestJSONLines(store, "chat_1")
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	for _, line := range lines {
+		if line["_type"] == "query" || line["taskId"] != "run_1_t_1" {
+			continue
+		}
+		messages, _ := line["messages"].([]any)
+		for _, rawMessage := range messages {
+			message, _ := rawMessage.(map[string]any)
+			content := textFromServerTestContent(message["content"])
+			if message["role"] == "assistant" && content == "马到成功" {
+				return
+			}
+		}
+		t.Fatalf("expected sub task react step to include final content, got %#v", line)
+	}
+	t.Fatalf("expected sub task react step in jsonl, got %#v", lines)
 }
 
 func TestFrameOrchestratorRejectsNestedInvokeAgentsTool(t *testing.T) {
