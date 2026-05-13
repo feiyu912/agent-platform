@@ -127,6 +127,11 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 		}
 		o.taskCounter++
 		taskIndex := o.taskCounter
+		parentReqID := strings.TrimSpace(o.session.RequestID)
+		requestID := fmt.Sprintf("sub_%d", taskIndex)
+		if parentReqID != "" {
+			requestID = fmt.Sprintf("%s_sub_%d", parentReqID, taskIndex)
+		}
 		prepared = append(prepared, preparedSubTask{
 			spec: contracts.SubAgentTaskSpec{
 				SubAgentKey: subAgentKey,
@@ -135,7 +140,7 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 			},
 			agentDef:  agentDef,
 			taskID:    fmt.Sprintf("%s_t_%d", strings.TrimSpace(o.session.RunID), taskIndex),
-			requestID: fmt.Sprintf("sub_%d", taskIndex),
+			requestID: requestID,
 		})
 	}
 

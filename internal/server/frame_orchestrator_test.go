@@ -310,6 +310,7 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 		"writer":   {Key: "writer", Name: "Writer", Mode: "REACT"},
 		"reviewer": {Key: "reviewer", Name: "Reviewer", Mode: "REACT"},
 	}, &emitted, &routed)
+	orchestrator.session.RequestID = "req_ABC"
 	orchestrator.buildQuerySession = func(_ context.Context, req api.QueryRequest, _ chat.Summary, agentDef catalog.AgentDefinition, _ querySessionBuildOptions) (contracts.QuerySession, error) {
 		mu.Lock()
 		subRequests = append(subRequests, req)
@@ -359,7 +360,7 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 		}
 		seenRequestIDs[req.RequestID] = true
 	}
-	for _, want := range []string{"sub_1", "sub_2"} {
+	for _, want := range []string{"req_ABC_sub_1", "req_ABC_sub_2"} {
 		if !seenRequestIDs[want] {
 			t.Fatalf("expected sub-agent request ID %q in %#v", want, requests)
 		}
@@ -389,6 +390,62 @@ func TestFrameOrchestratorSubAgentRequestsShareRunIDWithUniqueRequestIDs(t *test
 	}
 	if !foundPreCall || !foundReasoning || !foundContent || !foundFinalContent {
 		t.Fatalf("expected child debug/reasoning/content/final IDs to use task prefix; preCall=%v reasoning=%v content=%v final=%v routed=%#v", foundPreCall, foundReasoning, foundContent, foundFinalContent, routed)
+	}
+}
+
+func TestFrameOrchestratorSubAgentRequestIDsFallbackWhenParentMissing(t *testing.T) {
+	mainStream := &stubOrchestratableStream{
+		deltas: []contracts.AgentDelta{
+			newInvokeAgentsDelta(
+				contracts.SubAgentTaskSpec{SubAgentKey: "writer", TaskText: "write a summary", TaskName: "写作"},
+				contracts.SubAgentTaskSpec{SubAgentKey: "reviewer", TaskText: "review it", TaskName: "审查"},
+			),
+		},
+	}
+
+	var mu sync.Mutex
+	var subRequests []api.QueryRequest
+	var emitted []contracts.AgentDelta
+	var routed []stream.StreamInput
+	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{streamsByAgentKey: map[string]contracts.AgentStream{
+		"writer":   &stubOrchestratableStream{finalText: "written"},
+		"reviewer": &stubOrchestratableStream{finalText: "reviewed"},
+	}}, map[string]catalog.AgentDefinition{
+		"writer":   {Key: "writer", Name: "Writer", Mode: "REACT"},
+		"reviewer": {Key: "reviewer", Name: "Reviewer", Mode: "REACT"},
+	}, &emitted, &routed)
+	orchestrator.buildQuerySession = func(_ context.Context, req api.QueryRequest, _ chat.Summary, agentDef catalog.AgentDefinition, _ querySessionBuildOptions) (contracts.QuerySession, error) {
+		mu.Lock()
+		subRequests = append(subRequests, req)
+		mu.Unlock()
+		return contracts.QuerySession{
+			RequestID: req.RequestID,
+			RunID:     req.RunID,
+			ChatID:    req.ChatID,
+			AgentKey:  agentDef.Key,
+			Mode:      agentDef.Mode,
+		}, nil
+	}
+
+	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
+	if err != nil || streamFailed || streamInterrupted {
+		t.Fatalf("unexpected orchestrator result err=%v failed=%v interrupted=%v", err, streamFailed, streamInterrupted)
+	}
+
+	mu.Lock()
+	requests := append([]api.QueryRequest(nil), subRequests...)
+	mu.Unlock()
+	if len(requests) != 2 {
+		t.Fatalf("expected two sub-agent requests, got %#v", requests)
+	}
+	seenRequestIDs := map[string]bool{}
+	for _, req := range requests {
+		seenRequestIDs[req.RequestID] = true
+	}
+	for _, want := range []string{"sub_1", "sub_2"} {
+		if !seenRequestIDs[want] {
+			t.Fatalf("expected fallback sub-agent request ID %q in %#v", want, requests)
+		}
 	}
 }
 

@@ -158,7 +158,8 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			for k, v := range query {
 				payload[k] = v
 			}
-			if taskID, _ := line["taskId"].(string); strings.TrimSpace(taskID) != "" {
+			taskID, _ := line["taskId"].(string)
+			if strings.TrimSpace(taskID) != "" {
 				payload["taskId"] = taskID
 			}
 			if _, ok := payload["chatId"]; !ok {
@@ -166,6 +167,16 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			}
 
 			rd := ensureRun(runs, &runOrder, runID)
+			if strings.TrimSpace(taskID) != "" {
+				ts := int64FromAny(line["updatedAt"])
+				taskName := stringFromAny(line["taskName"])
+				taskDescription := stringFromAny(query["message"])
+				taskSubAgentKey := stringFromAny(line["subAgentKey"])
+				taskMainToolID := taskToolIDFromLine(line)
+				if events := beginReplayedSubTask(rd, runID, taskID, taskName, taskDescription, taskSubAgentKey, taskMainToolID, ts, nextSeq); len(events) > 0 {
+					rd.events = append(rd.events, events...)
+				}
+			}
 			rd.events = append(rd.events, stream.EventData{
 				Seq:       nextSeq(),
 				Type:      "request.query",

@@ -2984,6 +2984,114 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 	}
 }
 
+func TestReplayedSubQueryTaskStartPrecedesRequestQuery(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-sub-query-order", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-sub-query-order", QueryLine{
+		ChatID:      "chat-sub-query-order",
+		RunID:       "run-sub-query-order",
+		UpdatedAt:   1000,
+		TaskID:      "task_1",
+		TaskName:    "分析",
+		TaskToolID:  "tool_main_1",
+		SubAgentKey: "analyzer",
+		Query: map[string]any{
+			"chatId":   "chat-sub-query-order",
+			"runId":    "run-sub-query-order",
+			"agentKey": "analyzer",
+			"message":  "run analysis",
+			"role":     "user",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append sub-agent query line: %v", err)
+	}
+	if err := store.AppendStepLine("chat-sub-query-order", StepLine{
+		ChatID:          "chat-sub-query-order",
+		RunID:           "run-sub-query-order",
+		UpdatedAt:       1001,
+		Type:            "react",
+		TaskID:          "task_1",
+		TaskStatus:      "completed",
+		TaskSubAgentKey: "analyzer",
+		Messages: []StoredMessage{{
+			Role:      "assistant",
+			Content:   []ContentPart{{Type: "text", Text: "done"}},
+			ContentID: "child_1",
+		}},
+	}); err != nil {
+		t.Fatalf("append sub-agent step line: %v", err)
+	}
+
+	detail, err := store.LoadChat("chat-sub-query-order")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+
+	var taskStartSeq, subQuerySeq int64
+	var taskStartCount int
+	for _, event := range detail.Events {
+		switch event.Type {
+		case "task.start":
+			if event.String("taskId") == "task_1" {
+				taskStartCount++
+				taskStartSeq = event.Seq
+			}
+		case "request.query":
+			if event.String("taskId") == "task_1" {
+				subQuerySeq = event.Seq
+			}
+		}
+	}
+	if taskStartCount != 1 {
+		t.Fatalf("expected one task.start for task_1, got %d in %#v", taskStartCount, detail.Events)
+	}
+	if taskStartSeq == 0 || subQuerySeq == 0 || !(taskStartSeq < subQuerySeq) {
+		t.Fatalf("expected task.start to precede sub request.query, start=%d query=%d events=%#v", taskStartSeq, subQuerySeq, detail.Events)
+	}
+}
+
+func TestReplayedSubQueryWithoutTaskIDUnchanged(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-root-query-no-task", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-root-query-no-task", QueryLine{
+		ChatID:    "chat-root-query-no-task",
+		RunID:     "run-root-query-no-task",
+		UpdatedAt: 1000,
+		Query: map[string]any{
+			"chatId":  "chat-root-query-no-task",
+			"runId":   "run-root-query-no-task",
+			"message": "hello",
+			"role":    "user",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append root query line: %v", err)
+	}
+
+	detail, err := store.LoadChat("chat-root-query-no-task")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	for _, event := range detail.Events {
+		if event.Type == "task.start" {
+			t.Fatalf("did not expect task.start for root query without taskId, got %#v", detail.Events)
+		}
+	}
+}
+
 func TestReplayCompatTaskMainToolIDLegacyKey(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
