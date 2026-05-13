@@ -239,13 +239,14 @@ type BashConfig struct {
 }
 
 type FileToolsConfig struct {
-	WorkingDirectory     string
-	AllowedReadPaths     []string
-	AllowedWritePaths    []string
-	MaxReadBytes         int
-	MaxWriteBytes        int
-	MaxBatchOps          int
-	RequireWriteApproval bool
+	WorkingDirectory       string
+	AllowedReadPaths       []string
+	AllowedWritePaths      []string
+	MaxReadBytes           int
+	MaxWriteBytes          int
+	MaxBatchOps            int
+	RequireWriteApproval   bool
+	RequireReadBeforeWrite bool
 }
 
 type BashHITLConfig struct {
@@ -534,13 +535,14 @@ func defaultConfig() Config {
 			MaxCommandChars:         16000,
 		},
 		FileTools: FileToolsConfig{
-			WorkingDirectory:     "",
-			AllowedReadPaths:     nil,
-			AllowedWritePaths:    nil,
-			MaxReadBytes:         1 << 20,
-			MaxWriteBytes:        1 << 20,
-			MaxBatchOps:          20,
-			RequireWriteApproval: true,
+			WorkingDirectory:       "",
+			AllowedReadPaths:       nil,
+			AllowedWritePaths:      nil,
+			MaxReadBytes:           1 << 20,
+			MaxWriteBytes:          1 << 20,
+			MaxBatchOps:            20,
+			RequireWriteApproval:   true,
+			RequireReadBeforeWrite: true,
 		},
 		BashHITL: BashHITLConfig{
 			DefaultTimeoutMs: 120000,
@@ -869,6 +871,7 @@ func (c *Config) applyEnv() {
 	c.FileTools.MaxWriteBytes = intEnv("AGENT_FILE_MAX_WRITE_BYTES", c.FileTools.MaxWriteBytes)
 	c.FileTools.MaxBatchOps = intEnv("AGENT_FILE_MAX_BATCH_OPS", c.FileTools.MaxBatchOps)
 	c.FileTools.RequireWriteApproval = boolEnv("AGENT_FILE_REQUIRE_WRITE_APPROVAL", c.FileTools.RequireWriteApproval)
+	c.FileTools.RequireReadBeforeWrite = boolEnv("AGENT_FILE_REQUIRE_READ_BEFORE_WRITE", c.FileTools.RequireReadBeforeWrite)
 	c.BashHITL.DefaultTimeoutMs = intEnv("AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS", c.BashHITL.DefaultTimeoutMs)
 	c.Run.ReaperIntervalMs = int64Env("AGENT_RUN_REAPER_INTERVAL_MS", c.Run.ReaperIntervalMs)
 	c.Run.MaxBackgroundDurationMs = int64Env("AGENT_RUN_MAX_BACKGROUND_DURATION_MS", c.Run.MaxBackgroundDurationMs)

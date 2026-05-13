@@ -10,6 +10,7 @@ import (
 
 	"agent-platform-runner-go/internal/config"
 	. "agent-platform-runner-go/internal/contracts"
+	"agent-platform-runner-go/internal/filetools"
 	. "agent-platform-runner-go/internal/models"
 )
 
@@ -318,7 +319,7 @@ func parseDataImageURL(url string) (string, string, bool) {
 		return "", "", false
 	}
 	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
-	if !isSupportedImageMime(mediaType) {
+	if !filetools.IsSupportedImageMime(mediaType) {
 		return "", "", false
 	}
 	return mediaType, data, true

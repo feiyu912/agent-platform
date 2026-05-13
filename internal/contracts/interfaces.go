@@ -129,6 +129,15 @@ type SandboxExtraMount struct {
 	Mode        string
 }
 
+type ReadFileSnapshot struct {
+	ModifiedUnixMs int64
+	SizeBytes      int64
+	SHA256         string
+	Offset         int64
+	Limit          int64
+	ReadAtUnixMs   int64
+}
+
 type ExecutionContext struct {
 	Request           api.QueryRequest
 	Session           QuerySession
@@ -151,9 +160,11 @@ type ExecutionContext struct {
 	FileWriteApprovals map[string]int
 	// FileWriteRuleApprovals stores run-scoped approvals for write operation classes under allowed roots.
 	FileWriteRuleApprovals map[string]bool
-	StartedAt              time.Time
-	ModelCalls             int
-	ToolCalls              int
+	// ReadFileState tracks file versions read during the current run for write staleness checks.
+	ReadFileState map[string]ReadFileSnapshot
+	StartedAt     time.Time
+	ModelCalls    int
+	ToolCalls     int
 
 	resolvedEnvironmentID string // set by OpenIfNeeded, used by acquire methods
 }

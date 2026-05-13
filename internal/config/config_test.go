@@ -448,18 +448,22 @@ func TestFileToolsConfigFallsBackToBashConfig(t *testing.T) {
 		if !cfg.FileTools.RequireWriteApproval {
 			t.Fatalf("expected write approval enabled by default")
 		}
+		if !cfg.FileTools.RequireReadBeforeWrite {
+			t.Fatalf("expected read-before-write enabled by default")
+		}
 	})
 }
 
 func TestFileToolsConfigEnvOverrides(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"AGENT_FILE_WORKING_DIRECTORY":      filepath.Join("tmp", "files"),
-		"AGENT_FILE_ALLOWED_READ_PATHS":     "/read/a,/read/b",
-		"AGENT_FILE_ALLOWED_WRITE_PATHS":    "/write/a",
-		"AGENT_FILE_MAX_READ_BYTES":         "1234",
-		"AGENT_FILE_MAX_WRITE_BYTES":        "5678",
-		"AGENT_FILE_MAX_BATCH_OPS":          "9",
-		"AGENT_FILE_REQUIRE_WRITE_APPROVAL": "false",
+		"AGENT_FILE_WORKING_DIRECTORY":         filepath.Join("tmp", "files"),
+		"AGENT_FILE_ALLOWED_READ_PATHS":        "/read/a,/read/b",
+		"AGENT_FILE_ALLOWED_WRITE_PATHS":       "/write/a",
+		"AGENT_FILE_MAX_READ_BYTES":            "1234",
+		"AGENT_FILE_MAX_WRITE_BYTES":           "5678",
+		"AGENT_FILE_MAX_BATCH_OPS":             "9",
+		"AGENT_FILE_REQUIRE_WRITE_APPROVAL":    "false",
+		"AGENT_FILE_REQUIRE_READ_BEFORE_WRITE": "false",
 	}, func() {
 		cfg, err := Load()
 		if err != nil {
@@ -479,6 +483,9 @@ func TestFileToolsConfigEnvOverrides(t *testing.T) {
 		}
 		if cfg.FileTools.RequireWriteApproval {
 			t.Fatalf("expected write approval disabled from env")
+		}
+		if cfg.FileTools.RequireReadBeforeWrite {
+			t.Fatalf("expected read-before-write disabled from env")
 		}
 	})
 }
@@ -842,6 +849,7 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_FILE_MAX_WRITE_BYTES",
 		"AGENT_FILE_MAX_BATCH_OPS",
 		"AGENT_FILE_REQUIRE_WRITE_APPROVAL",
+		"AGENT_FILE_REQUIRE_READ_BEFORE_WRITE",
 		"AUTH_ENABLED",
 		"AUTH_LOCAL_PUBLIC_KEY_FILE",
 		"AUTH_JWKS_URI",

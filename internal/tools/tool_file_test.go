@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"agent-platform-runner-go/internal/config"
 	"agent-platform-runner-go/internal/contracts"
@@ -22,10 +24,11 @@ func TestInvokeReadReadsAllowedFileWithLineRange(t *testing.T) {
 	executor := fileToolExecutor(root, true)
 
 	result, err := executor.invokeRead(map[string]any{
-		"file_path": "notes.txt",
-		"offset":    float64(2),
-		"limit":     float64(1),
-	})
+		"file_path":        "notes.txt",
+		"offset":           float64(2),
+		"limit":            float64(1),
+		"add_line_numbers": false,
+	}, &contracts.ExecutionContext{})
 	if err != nil {
 		t.Fatalf("invokeRead: %v", err)
 	}
@@ -48,7 +51,7 @@ func TestInvokeReadRejectsSymlinkEscape(t *testing.T) {
 	}
 	executor := fileToolExecutor(root, true)
 
-	result, err := executor.invokeRead(map[string]any{"file_path": filepath.Join("link", "secret.txt")})
+	result, err := executor.invokeRead(map[string]any{"file_path": filepath.Join("link", "secret.txt")}, &contracts.ExecutionContext{})
 	if err != nil {
 		t.Fatalf("invokeRead: %v", err)
 	}
@@ -57,22 +60,110 @@ func TestInvokeReadRejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
-func TestInvokeReadReturnsBase64ForBinary(t *testing.T) {
+func TestInvokeReadAddsLineNumbersByDefault(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, true)
+
+	result, err := executor.invokeRead(map[string]any{"file_path": "notes.txt"}, &contracts.ExecutionContext{})
+	if err != nil {
+		t.Fatalf("invokeRead: %v", err)
+	}
+	if result.Structured["lineNumbered"] != true {
+		t.Fatalf("expected lineNumbered, got %#v", result.Structured)
+	}
+	if result.Structured["content"] != "     1\tone\n     2\ttwo\n" {
+		t.Fatalf("unexpected numbered content: %#v", result.Structured["content"])
+	}
+}
+
+func TestInvokeReadRejectsBinaryExtension(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "data.bin"), []byte{0xff, 0x00, 0x01}, 0o644); err != nil {
 		t.Fatalf("write binary: %v", err)
 	}
 	executor := fileToolExecutor(root, true)
 
-	result, err := executor.invokeRead(map[string]any{"file_path": "data.bin"})
+	result, err := executor.invokeRead(map[string]any{"file_path": "data.bin"}, &contracts.ExecutionContext{})
 	if err != nil {
 		t.Fatalf("invokeRead: %v", err)
 	}
-	if result.Structured["encoding"] != "base64" {
-		t.Fatalf("expected base64 encoding, got %#v", result.Structured)
+	if result.ExitCode == 0 || result.Structured["error"] != "file_read_binary_unsupported" {
+		t.Fatalf("expected binary rejection, got %#v", result.Structured)
 	}
-	if result.Structured["contentBase64"] != base64.StdEncoding.EncodeToString([]byte{0xff, 0x00, 0x01}) {
-		t.Fatalf("unexpected base64 content: %#v", result.Structured)
+}
+
+func TestInvokeReadReturnsImagePayload(t *testing.T) {
+	root := t.TempDir()
+	png := []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+		0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+		0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+		0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+		0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+	}
+	if err := os.WriteFile(filepath.Join(root, "tiny.png"), png, 0o644); err != nil {
+		t.Fatalf("write png: %v", err)
+	}
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{}
+
+	result, err := executor.invokeRead(map[string]any{"file_path": "tiny.png"}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeRead: %v", err)
+	}
+	if result.Structured["kind"] != "image" || result.Structured["mimeType"] != "image/png" {
+		t.Fatalf("expected image payload, got %#v", result.Structured)
+	}
+	if result.Structured["contentBase64"] != base64.StdEncoding.EncodeToString(png) {
+		t.Fatalf("unexpected image base64")
+	}
+	if _, ok := execCtx.ReadFileState[filepath.Join(realPath(t, root), "tiny.png")]; !ok {
+		t.Fatalf("expected read snapshot")
+	}
+}
+
+func TestInvokeReadRejectsBlockedDevice(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("device paths are Unix-specific")
+	}
+	executor := &RuntimeToolExecutor{cfg: config.Config{FileTools: config.FileToolsConfig{
+		WorkingDirectory:       "/",
+		AllowedReadPaths:       []string{"/dev"},
+		AllowedWritePaths:      []string{"/dev"},
+		MaxReadBytes:           1024,
+		MaxWriteBytes:          1024,
+		RequireWriteApproval:   true,
+		RequireReadBeforeWrite: true,
+	}}}
+	result, err := executor.invokeRead(map[string]any{"file_path": "/dev/null"}, &contracts.ExecutionContext{})
+	if err != nil {
+		t.Fatalf("invokeRead: %v", err)
+	}
+	if result.ExitCode == 0 || result.Structured["error"] != "file_read_device_blocked" {
+		t.Fatalf("expected device rejection, got %#v", result.Structured)
+	}
+}
+
+func TestInvokeReadDedupsUnchangedFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{}
+	if _, err := executor.invokeRead(map[string]any{"file_path": "notes.txt"}, execCtx); err != nil {
+		t.Fatalf("first read: %v", err)
+	}
+	result, err := executor.invokeRead(map[string]any{"file_path": "notes.txt"}, execCtx)
+	if err != nil {
+		t.Fatalf("second read: %v", err)
+	}
+	if result.Structured["kind"] != "unchanged" {
+		t.Fatalf("expected unchanged payload, got %#v", result.Structured)
 	}
 }
 
@@ -182,15 +273,147 @@ func fileToolExecutor(root string, requireApproval bool) *RuntimeToolExecutor {
 	return &RuntimeToolExecutor{
 		cfg: config.Config{
 			FileTools: config.FileToolsConfig{
-				WorkingDirectory:     root,
-				AllowedReadPaths:     []string{"."},
-				AllowedWritePaths:    []string{"."},
-				MaxReadBytes:         1024,
-				MaxWriteBytes:        1024,
-				MaxBatchOps:          20,
-				RequireWriteApproval: requireApproval,
+				WorkingDirectory:       root,
+				AllowedReadPaths:       []string{"."},
+				AllowedWritePaths:      []string{"."},
+				MaxReadBytes:           1024,
+				MaxWriteBytes:          1024,
+				MaxBatchOps:            20,
+				RequireWriteApproval:   requireApproval,
+				RequireReadBeforeWrite: true,
 			},
 		},
+	}
+}
+
+func TestInvokeWriteRejectsExistingFileThatWasNotRead(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "owner.md"), []byte("old"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, false)
+
+	result, err := executor.invokeWrite(map[string]any{
+		"file_path":   "owner.md",
+		"content":     "new",
+		"description": "写入 owner 文档",
+	}, &contracts.ExecutionContext{})
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.ExitCode == 0 || result.Structured["error"] != "file_write_not_read" {
+		t.Fatalf("expected not-read rejection, got %#v", result.Structured)
+	}
+}
+
+func TestInvokeWriteRejectsFileModifiedSinceRead(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.md")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, false)
+	execCtx := &contracts.ExecutionContext{}
+	if _, err := executor.invokeRead(map[string]any{"file_path": "owner.md", "add_line_numbers": false}, execCtx); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	time.Sleep(time.Millisecond)
+	if err := os.WriteFile(path, []byte("external"), 0o644); err != nil {
+		t.Fatalf("external write: %v", err)
+	}
+
+	result, err := executor.invokeWrite(map[string]any{
+		"file_path":   "owner.md",
+		"content":     "new",
+		"description": "写入 owner 文档",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.ExitCode == 0 || result.Structured["error"] != "file_modified_since_read" {
+		t.Fatalf("expected modified rejection, got %#v", result.Structured)
+	}
+}
+
+func TestInvokeWriteAllowsReadThenWriteAndRefreshesSnapshot(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.md")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, false)
+	execCtx := &contracts.ExecutionContext{}
+	if _, err := executor.invokeRead(map[string]any{"file_path": "owner.md", "add_line_numbers": false}, execCtx); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	result, err := executor.invokeWrite(map[string]any{
+		"file_path":   "owner.md",
+		"content":     "new",
+		"description": "写入 owner 文档",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected write success, got %#v", result)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "new" {
+		t.Fatalf("unexpected written content %q err=%v", string(got), err)
+	}
+	resolvedPath := filepath.Join(realPath(t, root), "owner.md")
+	if snap := execCtx.ReadFileState[resolvedPath]; snap.SHA256 != fileSHA256(path) {
+		t.Fatalf("expected refreshed snapshot, got %#v", snap)
+	}
+}
+
+func TestInvokeWriteAllowsConsecutiveWritesAfterSnapshotRefresh(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.md")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, false)
+	execCtx := &contracts.ExecutionContext{}
+	if _, err := executor.invokeRead(map[string]any{"file_path": "owner.md"}, execCtx); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	for _, content := range []string{"one", "two"} {
+		result, err := executor.invokeWrite(map[string]any{
+			"file_path":   "owner.md",
+			"content":     content,
+			"description": "写入 owner 文档",
+		}, execCtx)
+		if err != nil {
+			t.Fatalf("invokeWrite: %v", err)
+		}
+		if result.Error != "" || result.ExitCode != 0 {
+			t.Fatalf("expected write success for %q, got %#v", content, result)
+		}
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "two" {
+		t.Fatalf("unexpected written content %q err=%v", string(got), err)
+	}
+}
+
+func TestInvokeWriteCanDisableReadBeforeWrite(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.md")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, false)
+	executor.cfg.FileTools.RequireReadBeforeWrite = false
+
+	result, err := executor.invokeWrite(map[string]any{
+		"file_path":   "owner.md",
+		"content":     "new",
+		"description": "写入 owner 文档",
+	}, &contracts.ExecutionContext{})
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected write success, got %#v", result)
 	}
 }
 
@@ -210,4 +433,13 @@ func TestInvokeWriteMaxBytes(t *testing.T) {
 	if result.ExitCode == 0 || result.Structured["error"] != "file_write_invalid_plan" {
 		t.Fatalf("expected max bytes failure, got %#v", result)
 	}
+}
+
+func realPath(t *testing.T, path string) string {
+	t.Helper()
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("eval symlinks %s: %v", path, err)
+	}
+	return real
 }

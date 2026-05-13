@@ -364,3 +364,4 @@ npm run sync:assets
 - program bundle 当前默认产出 `darwin-arm64` 目标，供 `zenmind-desktop` builtin 直接消费。
 - 若环境中显式设置了废弃旧变量，应用会直接启动失败。
 - `configs/` 下所有配置文件都是启动时静态配置；运行中修改必须重启 runner 才会生效。
+- 文件工具新增 run-scoped 读写闭环：`read` 可能返回 `file_unchanged`，`write` 可能返回 `file_write_not_read` / `file_modified_since_read`，`grep` 可能返回 `grep_ripgrep_missing` / `grep_no_match` / `grep_invalid_type` 等结构化错误码。

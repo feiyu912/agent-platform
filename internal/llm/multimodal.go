@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"agent-platform-runner-go/internal/api"
+	"agent-platform-runner-go/internal/filetools"
 )
 
 const (
@@ -54,7 +55,7 @@ func collectImageBlocks(chatsDir string, chatID string, references []api.Referen
 	blocks := make([]map[string]any, 0, len(references))
 	for _, ref := range references {
 		mime := strings.ToLower(strings.TrimSpace(ref.MimeType))
-		if !isSupportedImageMime(mime) {
+		if !filetools.IsSupportedImageMime(mime) {
 			continue
 		}
 		name := strings.TrimSpace(ref.Name)
@@ -91,14 +92,6 @@ func collectImageBlocks(chatsDir string, chatID string, references []api.Referen
 		})
 	}
 	return blocks
-}
-
-func isSupportedImageMime(mime string) bool {
-	switch mime {
-	case "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif":
-		return true
-	}
-	return false
 }
 
 // shrinkImage decodes raw image bytes and re-encodes as high-quality JPEG

@@ -1,0 +1,55 @@
+name: grep
+label: 文件内容搜索
+description: |
+  A powerful search tool built on ripgrep. Filter files with glob/type,
+  switch between content/files/count output modes, support context lines,
+  multiline regex, case-insensitive search and head_limit-based pagination.
+submitResultFormat: json-compact
+type: function
+inputSchema:
+  type: object
+  properties:
+    pattern:
+      type: string
+      description: Required. Regex pattern to search for, using ripgrep syntax.
+    path:
+      type: string
+      description: File or directory to search. Defaults to AGENT_FILE_WORKING_DIRECTORY.
+    glob:
+      type: string
+      description: Glob filter, such as '*.go' or '*.{ts,tsx}'.
+    type:
+      type: string
+      description: Ripgrep file type filter, such as 'go' or 'py'.
+    output_mode:
+      type: string
+      enum: ["content", "files_with_matches", "count"]
+      default: files_with_matches
+      description: Output mode. Use content for matching lines, files_with_matches for matching paths, or count for per-file counts.
+    "-i":
+      type: boolean
+      description: Case-insensitive search.
+    "-n":
+      type: boolean
+      description: Show line numbers in content mode. Defaults to true for content mode.
+    "-A":
+      type: integer
+      description: Number of lines to include after each match.
+    "-B":
+      type: integer
+      description: Number of lines to include before each match.
+    "-C":
+      type: integer
+      description: Number of context lines to include around each match.
+    multiline:
+      type: boolean
+      description: Enable multiline regex mode with rg -U --multiline-dotall.
+    head_limit:
+      type: integer
+      description: Maximum number of result entries to return after offset. Defaults to 250; 0 means unlimited.
+    offset:
+      type: integer
+      description: Number of result entries to skip before applying head_limit.
+  required:
+    - pattern
+  additionalProperties: false

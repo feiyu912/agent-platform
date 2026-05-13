@@ -64,15 +64,20 @@ func (t *RuntimeToolExecutor) WithArtifactPusher(pusher ArtifactPusher) *Runtime
 }
 
 func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
+	if execCtx != nil && execCtx.ReadFileState == nil {
+		execCtx.ReadFileState = map[string]ReadFileSnapshot{}
+	}
 	switch strings.TrimSpace(toolName) {
 	case "datetime":
 		return t.invokeDateTime(args), nil
 	case "artifact_publish":
 		return t.invokeArtifactPublish(args, execCtx)
 	case "read":
-		return t.invokeRead(args)
+		return t.invokeRead(args, execCtx)
 	case "write":
 		return t.invokeWrite(args, execCtx)
+	case "grep":
+		return t.invokeGrep(ctx, args, execCtx)
 	case "plan_add_tasks":
 		return t.invokePlanAddTasks(args, execCtx)
 	case "plan_get_tasks":
