@@ -231,7 +231,7 @@ func TestLoadIgnoresDeprecatedEnv(t *testing.T) {
 }
 
 func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
+	values := map[string]string{
 		"AGENT_CONTAINER_HUB_BASE_URL":           "http://127.0.0.1:18000",
 		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS":      "true",
 		"STREAM_INCLUDE_DEBUG_EVENTS":            "true",
@@ -240,12 +240,37 @@ func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
 		"MEMORY_CHATS_INDEX_SQLITE_FILE":         "old.db",
 		"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS": "1000",
 		"AGENT_AUTH_ENABLED":                     "false",
-	}, func() {
+	}
+	bashAndFileEnv := []string{
+		"AGENT_BASH_WORKING_DIRECTORY",
+		"AGENT_BASH_ALLOWED_PATHS",
+		"AGENT_BASH_ALLOWED_COMMANDS",
+		"AGENT_BASH_PATH_CHECKED_COMMANDS",
+		"AGENT_BASH_PATH_CHECK_BYPASS_COMMANDS",
+		"AGENT_BASH_SHELL_FEATURES_ENABLED",
+		"AGENT_BASH_SHELL_EXECUTABLE",
+		"AGENT_BASH_SHELL_ARGS",
+		"AGENT_BASH_SHELL_TIMEOUT_MS",
+		"AGENT_BASH_MAX_COMMAND_CHARS",
+		"AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS",
+		"AGENT_FILE_WORKING_DIRECTORY",
+		"AGENT_FILE_ALLOWED_READ_PATHS",
+		"AGENT_FILE_ALLOWED_WRITE_PATHS",
+		"AGENT_FILE_MAX_READ_BYTES",
+		"AGENT_FILE_MAX_WRITE_BYTES",
+		"AGENT_FILE_MAX_BATCH_OPS",
+		"AGENT_FILE_REQUIRE_WRITE_APPROVAL",
+		"AGENT_FILE_REQUIRE_READ_BEFORE_WRITE",
+	}
+	for _, key := range bashAndFileEnv {
+		values[key] = "deprecated"
+	}
+	withIsolatedEnv(t, values, func() {
 		_, err := Load()
 		if err == nil {
 			t.Fatalf("expected deprecated envs to fail")
 		}
-		for _, key := range []string{
+		for _, key := range append([]string{
 			"AGENT_CONTAINER_HUB_BASE_URL",
 			"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
 			"STREAM_INCLUDE_DEBUG_EVENTS",
@@ -254,7 +279,7 @@ func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
 			"MEMORY_CHATS_INDEX_SQLITE_FILE",
 			"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS",
 			"AGENT_AUTH_ENABLED",
-		} {
+		}, bashAndFileEnv...) {
 			if !strings.Contains(err.Error(), key) {
 				t.Fatalf("expected error to mention %s, got %v", key, err)
 			}
@@ -357,48 +382,54 @@ func TestLoadContainerHubAndBashConfigFromFiles(t *testing.T) {
 	})
 }
 
-func TestLoadEnvOverridesStructuredConfig(t *testing.T) {
+func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"CONTAINER_HUB_BASE_URL":                "http://127.0.0.1:18000",
-		"AGENT_BASH_ALLOWED_COMMANDS":           "pwd,echo",
-		"AGENT_BASH_SHELL_FEATURES_ENABLED":     "true",
-		"AGENT_BASH_SHELL_ARGS":                 "-NoProfile,-Command,{{command}}",
-		"AGENT_BASH_WORKING_DIRECTORY":          filepath.Join("var", "runner"),
-		"AGENT_BASH_PATH_CHECK_BYPASS_COMMANDS": "echo",
-		"AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS":    "45000",
-		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS":  "60000",
+		"CONTAINER_HUB_BASE_URL":               "http://127.0.0.1:18000",
+		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS": "60000",
 	}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
-		}
-		if !cfg.ContainerHub.Enabled {
-			t.Fatalf("expected container hub enabled when base url is set")
-		}
-		if cfg.ContainerHub.BaseURL != "http://127.0.0.1:18000" {
-			t.Fatalf("unexpected base url: %q", cfg.ContainerHub.BaseURL)
-		}
-		if !cfg.Bash.ShellFeaturesEnabled {
-			t.Fatalf("expected shell features enabled from env")
-		}
-		if cfg.Bash.WorkingDirectory != filepath.Join("var", "runner") {
-			t.Fatalf("unexpected working directory: %q", cfg.Bash.WorkingDirectory)
-		}
-		if len(cfg.Bash.AllowedCommands) != 2 {
-			t.Fatalf("unexpected allowed commands: %#v", cfg.Bash.AllowedCommands)
-		}
-		if len(cfg.Bash.PathCheckBypassCommands) != 1 || cfg.Bash.PathCheckBypassCommands[0] != "echo" {
-			t.Fatalf("unexpected path bypass commands: %#v", cfg.Bash.PathCheckBypassCommands)
-		}
-		if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-Command|{{command}}" {
-			t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
-		}
-		if cfg.BashHITL.DefaultTimeoutMs != 45000 {
-			t.Fatalf("unexpected bash HITL timeout: %d", cfg.BashHITL.DefaultTimeoutMs)
-		}
-		if cfg.Defaults.Budget.Hitl.TimeoutMs != 60000 {
-			t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
-		}
+		content := "" +
+			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runner")) + "\n" +
+			"allowed-commands: pwd,echo\n" +
+			"path-check-bypass-commands: echo\n" +
+			"shell-features-enabled: true\n" +
+			"shell-args:\n" +
+			"  - -NoProfile\n" +
+			"  - -Command\n" +
+			"  - \"{{command}}\"\n" +
+			"hitl-default-timeout-ms: 45000\n"
+		withProjectFileContents(t, filepath.Join("configs", "bash.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if !cfg.ContainerHub.Enabled {
+				t.Fatalf("expected container hub enabled when base url is set")
+			}
+			if cfg.ContainerHub.BaseURL != "http://127.0.0.1:18000" {
+				t.Fatalf("unexpected base url: %q", cfg.ContainerHub.BaseURL)
+			}
+			if !cfg.Bash.ShellFeaturesEnabled {
+				t.Fatalf("expected shell features enabled from yaml")
+			}
+			if cfg.Bash.WorkingDirectory != filepath.Join("var", "runner") {
+				t.Fatalf("unexpected working directory: %q", cfg.Bash.WorkingDirectory)
+			}
+			if len(cfg.Bash.AllowedCommands) != 2 {
+				t.Fatalf("unexpected allowed commands: %#v", cfg.Bash.AllowedCommands)
+			}
+			if len(cfg.Bash.PathCheckBypassCommands) != 1 || cfg.Bash.PathCheckBypassCommands[0] != "echo" {
+				t.Fatalf("unexpected path bypass commands: %#v", cfg.Bash.PathCheckBypassCommands)
+			}
+			if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-Command|{{command}}" {
+				t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
+			}
+			if cfg.BashHITL.DefaultTimeoutMs != 45000 {
+				t.Fatalf("unexpected bash HITL timeout: %d", cfg.BashHITL.DefaultTimeoutMs)
+			}
+			if cfg.Defaults.Budget.Hitl.TimeoutMs != 60000 {
+				t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
+			}
+		})
 	})
 }
 
@@ -428,65 +459,71 @@ func TestLoadBashShellArgsFromFile(t *testing.T) {
 }
 
 func TestFileToolsConfigDefaultsDoNotInheritBashPaths(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
-		"AGENT_BASH_WORKING_DIRECTORY": filepath.Join("var", "runner"),
-		"AGENT_BASH_ALLOWED_PATHS":     ".,/tmp/example",
-	}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
-		}
-		if cfg.FileTools.WorkingDirectory != filepath.Join("var", "runner") {
-			t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
-		}
-		if strings.Join(cfg.FileTools.AllowedReadPaths, ",") != ".,/tmp" {
-			t.Fatalf("unexpected read paths: %#v", cfg.FileTools.AllowedReadPaths)
-		}
-		if strings.Join(cfg.FileTools.AllowedWritePaths, ",") != ".,/tmp" {
-			t.Fatalf("unexpected write paths: %#v", cfg.FileTools.AllowedWritePaths)
-		}
-		if !cfg.FileTools.RequireWriteApproval {
-			t.Fatalf("expected write approval enabled by default")
-		}
-		if !cfg.FileTools.RequireReadBeforeWrite {
-			t.Fatalf("expected read-before-write enabled by default")
-		}
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runner")) + "\n" +
+			"allowed-paths: [\".\", \"/tmp/example\"]\n"
+		withProjectFileContents(t, filepath.Join("configs", "bash.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.FileTools.WorkingDirectory != filepath.Join("var", "runner") {
+				t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
+			}
+			if strings.Join(cfg.FileTools.AllowedReadPaths, ",") != ".,/tmp" {
+				t.Fatalf("unexpected read paths: %#v", cfg.FileTools.AllowedReadPaths)
+			}
+			if strings.Join(cfg.FileTools.AllowedWritePaths, ",") != ".,/tmp" {
+				t.Fatalf("unexpected write paths: %#v", cfg.FileTools.AllowedWritePaths)
+			}
+			if !cfg.FileTools.RequireWriteApproval {
+				t.Fatalf("expected write approval enabled by default")
+			}
+			if !cfg.FileTools.RequireReadBeforeWrite {
+				t.Fatalf("expected read-before-write enabled by default")
+			}
+		})
 	})
 }
 
-func TestFileToolsConfigEnvOverrides(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
-		"AGENT_FILE_WORKING_DIRECTORY":         filepath.Join("tmp", "files"),
-		"AGENT_FILE_ALLOWED_READ_PATHS":        "/read/a,/read/b",
-		"AGENT_FILE_ALLOWED_WRITE_PATHS":       "/write/a",
-		"AGENT_FILE_MAX_READ_BYTES":            "1234",
-		"AGENT_FILE_MAX_WRITE_BYTES":           "5678",
-		"AGENT_FILE_MAX_BATCH_OPS":             "9",
-		"AGENT_FILE_REQUIRE_WRITE_APPROVAL":    "false",
-		"AGENT_FILE_REQUIRE_READ_BEFORE_WRITE": "false",
-	}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
-		}
-		if cfg.FileTools.WorkingDirectory != filepath.Join("tmp", "files") {
-			t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
-		}
-		if strings.Join(cfg.FileTools.AllowedReadPaths, ",") != "/read/a,/read/b" {
-			t.Fatalf("unexpected read paths: %#v", cfg.FileTools.AllowedReadPaths)
-		}
-		if strings.Join(cfg.FileTools.AllowedWritePaths, ",") != "/write/a" {
-			t.Fatalf("unexpected write paths: %#v", cfg.FileTools.AllowedWritePaths)
-		}
-		if cfg.FileTools.MaxReadBytes != 1234 || cfg.FileTools.MaxWriteBytes != 5678 || cfg.FileTools.MaxBatchOps != 9 {
-			t.Fatalf("unexpected file limits: %#v", cfg.FileTools)
-		}
-		if cfg.FileTools.RequireWriteApproval {
-			t.Fatalf("expected write approval disabled from env")
-		}
-		if cfg.FileTools.RequireReadBeforeWrite {
-			t.Fatalf("expected read-before-write disabled from env")
-		}
+func TestFileToolsConfigYAMLOverrides(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"working-directory: " + filepath.ToSlash(filepath.Join("tmp", "files")) + "\n" +
+			"allowed-read-paths:\n" +
+			"  - /read/a\n" +
+			"  - /read/b\n" +
+			"allowed-write-paths: /write/a\n" +
+			"max-read-bytes: 1234\n" +
+			"max-write-bytes: 5678\n" +
+			"max-batch-ops: 9\n" +
+			"require-write-approval: false\n" +
+			"require-read-before-write: false\n"
+		withProjectFileContents(t, filepath.Join("configs", "file-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.FileTools.WorkingDirectory != filepath.Join("tmp", "files") {
+				t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
+			}
+			if strings.Join(cfg.FileTools.AllowedReadPaths, ",") != "/read/a,/read/b" {
+				t.Fatalf("unexpected read paths: %#v", cfg.FileTools.AllowedReadPaths)
+			}
+			if strings.Join(cfg.FileTools.AllowedWritePaths, ",") != "/write/a" {
+				t.Fatalf("unexpected write paths: %#v", cfg.FileTools.AllowedWritePaths)
+			}
+			if cfg.FileTools.MaxReadBytes != 1234 || cfg.FileTools.MaxWriteBytes != 5678 || cfg.FileTools.MaxBatchOps != 9 {
+				t.Fatalf("unexpected file limits: %#v", cfg.FileTools)
+			}
+			if cfg.FileTools.RequireWriteApproval {
+				t.Fatalf("expected write approval disabled from yaml")
+			}
+			if cfg.FileTools.RequireReadBeforeWrite {
+				t.Fatalf("expected read-before-write disabled from yaml")
+			}
+		})
 	})
 }
 

@@ -12,10 +12,9 @@ import (
 	"agent-platform-runner-go/internal/filetools"
 )
 
-func TestInvokeGrepFilesWithMatchesGlobAndNameSort(t *testing.T) {
+func TestInvokeGrepFilesWithMatchesGlob(t *testing.T) {
 	requireRipgrep(t)
 	root := t.TempDir()
-	t.Setenv("AGENT_FILE_GREP_SORT", "name")
 	mustWriteFile(t, filepath.Join(root, "a.go"), "package main\nfunc Alpha() {}\n")
 	mustWriteFile(t, filepath.Join(root, "b.txt"), "Alpha in text\n")
 	mustWriteFile(t, filepath.Join(root, "c.go"), "package main\nfunc Beta() {}\n")

@@ -573,6 +573,7 @@ func defaultConfig() Config {
 func (c *Config) applyStructuredConfig() error {
 	c.applyContainerHubFile(ProjectFile("configs/container-hub.yml"))
 	c.applyBashFile(ProjectFile("configs/bash.yml"))
+	c.applyFileToolsFile(ProjectFile("configs/file-tools.yml"))
 	c.applyCORSFile(ProjectFile("configs/cors.yml"))
 	c.applyPromptsFile(ProjectFile("configs/prompts.yml"))
 	if err := c.applyChannelsFile(ProjectFile("configs/channels.yml")); err != nil {
@@ -618,6 +619,26 @@ func (c *Config) applyBashFile(path string) {
 	c.Bash.ShellArgs = csvOrList(anyValue(values["shell-args"], c.Bash.ShellArgs), c.Bash.ShellArgs)
 	c.Bash.ShellTimeoutMs = intValue(anyValue(values["shell-timeout-ms"], c.Bash.ShellTimeoutMs), c.Bash.ShellTimeoutMs)
 	c.Bash.MaxCommandChars = intValue(anyValue(values["max-command-chars"], c.Bash.MaxCommandChars), c.Bash.MaxCommandChars)
+	c.BashHITL.DefaultTimeoutMs = intValue(anyValue(values["hitl-default-timeout-ms"], c.BashHITL.DefaultTimeoutMs), c.BashHITL.DefaultTimeoutMs)
+}
+
+func (c *Config) applyFileToolsFile(path string) {
+	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return
+	}
+	values, _ := tree.(map[string]any)
+	if len(values) == 0 {
+		return
+	}
+	c.FileTools.WorkingDirectory = stringValue(anyValue(values["working-directory"], c.FileTools.WorkingDirectory), c.FileTools.WorkingDirectory)
+	c.FileTools.AllowedReadPaths = csvOrList(anyValue(values["allowed-read-paths"], c.FileTools.AllowedReadPaths), c.FileTools.AllowedReadPaths)
+	c.FileTools.AllowedWritePaths = csvOrList(anyValue(values["allowed-write-paths"], c.FileTools.AllowedWritePaths), c.FileTools.AllowedWritePaths)
+	c.FileTools.MaxReadBytes = intValue(anyValue(values["max-read-bytes"], c.FileTools.MaxReadBytes), c.FileTools.MaxReadBytes)
+	c.FileTools.MaxWriteBytes = intValue(anyValue(values["max-write-bytes"], c.FileTools.MaxWriteBytes), c.FileTools.MaxWriteBytes)
+	c.FileTools.MaxBatchOps = intValue(anyValue(values["max-batch-ops"], c.FileTools.MaxBatchOps), c.FileTools.MaxBatchOps)
+	c.FileTools.RequireWriteApproval = boolValue(anyValue(values["require-write-approval"], c.FileTools.RequireWriteApproval), c.FileTools.RequireWriteApproval)
+	c.FileTools.RequireReadBeforeWrite = boolValue(anyValue(values["require-read-before-write"], c.FileTools.RequireReadBeforeWrite), c.FileTools.RequireReadBeforeWrite)
 }
 
 func (c *Config) applyCORSFile(path string) {
@@ -854,25 +875,6 @@ func (c *Config) applyEnv() {
 	c.ContainerHub.AgentIdleTimeoutMs = int64Env("CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS", c.ContainerHub.AgentIdleTimeoutMs)
 	c.ContainerHub.DestroyQueueDelayMs = int64Env("CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS", c.ContainerHub.DestroyQueueDelayMs)
 
-	c.Bash.WorkingDirectory = pathEnv("AGENT_BASH_WORKING_DIRECTORY", c.Bash.WorkingDirectory)
-	c.Bash.AllowedPaths = csvEnv("AGENT_BASH_ALLOWED_PATHS", c.Bash.AllowedPaths)
-	c.Bash.AllowedCommands = csvEnv("AGENT_BASH_ALLOWED_COMMANDS", c.Bash.AllowedCommands)
-	c.Bash.PathCheckedCommands = csvEnv("AGENT_BASH_PATH_CHECKED_COMMANDS", c.Bash.PathCheckedCommands)
-	c.Bash.PathCheckBypassCommands = csvEnv("AGENT_BASH_PATH_CHECK_BYPASS_COMMANDS", c.Bash.PathCheckBypassCommands)
-	c.Bash.ShellFeaturesEnabled = boolEnv("AGENT_BASH_SHELL_FEATURES_ENABLED", c.Bash.ShellFeaturesEnabled)
-	c.Bash.ShellExecutable = stringEnv("AGENT_BASH_SHELL_EXECUTABLE", c.Bash.ShellExecutable)
-	c.Bash.ShellArgs = csvEnv("AGENT_BASH_SHELL_ARGS", c.Bash.ShellArgs)
-	c.Bash.ShellTimeoutMs = intEnv("AGENT_BASH_SHELL_TIMEOUT_MS", c.Bash.ShellTimeoutMs)
-	c.Bash.MaxCommandChars = intEnv("AGENT_BASH_MAX_COMMAND_CHARS", c.Bash.MaxCommandChars)
-	c.FileTools.WorkingDirectory = pathEnv("AGENT_FILE_WORKING_DIRECTORY", c.FileTools.WorkingDirectory)
-	c.FileTools.AllowedReadPaths = csvEnv("AGENT_FILE_ALLOWED_READ_PATHS", c.FileTools.AllowedReadPaths)
-	c.FileTools.AllowedWritePaths = csvEnv("AGENT_FILE_ALLOWED_WRITE_PATHS", c.FileTools.AllowedWritePaths)
-	c.FileTools.MaxReadBytes = intEnv("AGENT_FILE_MAX_READ_BYTES", c.FileTools.MaxReadBytes)
-	c.FileTools.MaxWriteBytes = intEnv("AGENT_FILE_MAX_WRITE_BYTES", c.FileTools.MaxWriteBytes)
-	c.FileTools.MaxBatchOps = intEnv("AGENT_FILE_MAX_BATCH_OPS", c.FileTools.MaxBatchOps)
-	c.FileTools.RequireWriteApproval = boolEnv("AGENT_FILE_REQUIRE_WRITE_APPROVAL", c.FileTools.RequireWriteApproval)
-	c.FileTools.RequireReadBeforeWrite = boolEnv("AGENT_FILE_REQUIRE_READ_BEFORE_WRITE", c.FileTools.RequireReadBeforeWrite)
-	c.BashHITL.DefaultTimeoutMs = intEnv("AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS", c.BashHITL.DefaultTimeoutMs)
 	c.Run.ReaperIntervalMs = int64Env("AGENT_RUN_REAPER_INTERVAL_MS", c.Run.ReaperIntervalMs)
 	c.Run.MaxBackgroundDurationMs = int64Env("AGENT_RUN_MAX_BACKGROUND_DURATION_MS", c.Run.MaxBackgroundDurationMs)
 	c.Run.CompletedRetentionMs = int64Env("AGENT_RUN_COMPLETED_RETENTION_MS", c.Run.CompletedRetentionMs)
@@ -1410,6 +1412,25 @@ var deprecatedEnvVars = []string{
 	"AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS",
 	"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
 	"STREAM_INCLUDE_DEBUG_EVENTS",
+	"AGENT_BASH_WORKING_DIRECTORY",
+	"AGENT_BASH_ALLOWED_PATHS",
+	"AGENT_BASH_ALLOWED_COMMANDS",
+	"AGENT_BASH_PATH_CHECKED_COMMANDS",
+	"AGENT_BASH_PATH_CHECK_BYPASS_COMMANDS",
+	"AGENT_BASH_SHELL_FEATURES_ENABLED",
+	"AGENT_BASH_SHELL_EXECUTABLE",
+	"AGENT_BASH_SHELL_ARGS",
+	"AGENT_BASH_SHELL_TIMEOUT_MS",
+	"AGENT_BASH_MAX_COMMAND_CHARS",
+	"AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS",
+	"AGENT_FILE_WORKING_DIRECTORY",
+	"AGENT_FILE_ALLOWED_READ_PATHS",
+	"AGENT_FILE_ALLOWED_WRITE_PATHS",
+	"AGENT_FILE_MAX_READ_BYTES",
+	"AGENT_FILE_MAX_WRITE_BYTES",
+	"AGENT_FILE_MAX_BATCH_OPS",
+	"AGENT_FILE_REQUIRE_WRITE_APPROVAL",
+	"AGENT_FILE_REQUIRE_READ_BEFORE_WRITE",
 	"RUNTIME_DIR",
 	"AGENT_CONFIG_DIR",
 	"AGENT_AGENTS_EXTERNAL_DIR",

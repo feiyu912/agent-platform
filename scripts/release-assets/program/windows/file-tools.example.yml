@@ -1,0 +1,19 @@
+# Windows file tools preset. Runtime config is loaded from configs/file-tools.yml at startup.
+
+working-directory: .
+
+# read / grep allowlist. Out-of-allowlist paths fall back to HITL approval
+# with approve / approve_root_run / reject.
+allowed-read-paths:
+  - .
+  - C:\
+
+# Keep write access narrower by default.
+allowed-write-paths:
+  - .
+
+max-read-bytes: 1048576
+max-write-bytes: 1048576
+max-batch-ops: 20
+require-write-approval: true
+require-read-before-write: true

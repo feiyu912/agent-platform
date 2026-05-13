@@ -5,7 +5,7 @@
 - 代码默认值：`internal/config/config.go`
 - 外部输入：环境变量与 `configs/*.yml`
 
-`.env.example` 现在只保留推荐给普通部署者的最终用户配置入口。本页则保留完整的高级、排障、兼容和低频环境变量说明；变量仍然受运行时支持，并不代表它们都应该暴露给最终用户。
+`.env.example` 现在只保留推荐给普通部署者的最终用户配置入口。本页则保留完整的高级、排障、兼容和低频配置说明；Bash 与 FileTools 权限已迁移到 YAML，旧 `AGENT_BASH_*` / `AGENT_FILE_*` 环境变量会导致启动失败。
 
 ## 标签说明
 
@@ -128,34 +128,38 @@ Container Hub 默认基础挂载为：
 
 ### Bash 工具
 
-| 环境变量 | 默认值 | 标签 | 说明 |
-|---|---|---|---|
-| `AGENT_BASH_WORKING_DIRECTORY` | `.` | `Advanced / operator` | `bash` 默认工作目录 |
-| `AGENT_BASH_ALLOWED_PATHS` | `.,/tmp` | `Advanced / operator` | 允许访问的路径白名单 |
-| `AGENT_BASH_ALLOWED_COMMANDS` | `ls,pwd,cat,head,tail,top,free,df,git,rg,find` | `Advanced / operator` | 允许执行的命令白名单 |
-| `AGENT_BASH_PATH_CHECKED_COMMANDS` | `ls,cat,head,tail,git,rg,find` | `Advanced / operator` | 开启路径校验的命令 |
-| `AGENT_BASH_PATH_CHECK_BYPASS_COMMANDS` | 空 | `Internal / compatibility` | 跳过路径校验的命令 |
-| `AGENT_BASH_SHELL_FEATURES_ENABLED` | `true` | `Advanced / operator` | shell 高级语法开关 |
-| `AGENT_BASH_SHELL_EXECUTABLE` | `bash` | `Advanced / operator` | shell 可执行文件 |
-| `AGENT_BASH_SHELL_TIMEOUT_MS` | `10000` | `Advanced / operator` | shell 模式超时 |
-| `AGENT_BASH_MAX_COMMAND_CHARS` | `16000` | `Advanced / operator` | 最大命令长度 |
-| `AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS` | `120000` | `Advanced / operator` | bash HITL 默认超时 |
+Bash 工具只从 `configs/bash.yml` 读取权限和执行参数；参考模板是 `configs/bash.example.yml`。
 
-`bash HITL` 不再有单独的 `.env` 开关。是否拦截 bash 命令完全由当前 agent 挂载的 skills 决定：规则来自 skill 目录下的 `.bash-hooks/`，未挂载任何 bash hooks 时不会触发拦截。`AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS` 仍用于控制审批等待超时，但不再对应任何全局 `registries/bash-hitl` 目录。
+| YAML 字段 | 默认值 | 标签 | 说明 |
+|---|---|---|---|
+| `working-directory` | `.` | `Advanced / operator` | `bash` 默认工作目录 |
+| `allowed-paths` | `.,/tmp` | `Advanced / operator` | 允许访问的路径白名单 |
+| `allowed-commands` | `ls,pwd,cat,head,tail,top,free,df,git,rg,find,...` | `Advanced / operator` | 允许执行的命令白名单 |
+| `path-checked-commands` | `ls,cat,head,tail,git,rg,find` | `Advanced / operator` | 开启路径校验的命令 |
+| `path-check-bypass-commands` | 空 | `Internal / compatibility` | 跳过路径校验的命令 |
+| `shell-features-enabled` | `true` | `Advanced / operator` | shell 高级语法开关 |
+| `shell-executable` | 平台默认 | `Advanced / operator` | shell 可执行文件 |
+| `shell-args` | 平台默认 | `Advanced / operator` | shell 参数模板 |
+| `shell-timeout-ms` | `10000` | `Advanced / operator` | shell 模式超时 |
+| `max-command-chars` | `16000` | `Advanced / operator` | 最大命令长度 |
+| `hitl-default-timeout-ms` | `120000` | `Advanced / operator` | bash HITL 默认超时 |
+
+`bash HITL` 不再有单独的 `.env` 开关。是否拦截 bash 命令完全由当前 agent 挂载的 skills 决定：规则来自 skill 目录下的 `.bash-hooks/`，未挂载任何 bash hooks 时不会触发拦截。`hitl-default-timeout-ms` 控制审批等待超时，但不再对应任何全局 `registries/bash-hitl` 目录。
 
 ### Read / Write 文件工具
 
-`read` / `write` 是 Claude Code 风格的窄文件工具：`read` 只读取单个文件，不需要审批；`write` 只创建或覆盖单个文件，默认需要人工审批。它们用于替代 heredoc、重定向等容易触发 bash 安全拦截的文件读写场景，不改变 bash 安全策略。
+`read` / `grep` / `write` 是 Claude Code 风格的窄文件工具，配置只从 `configs/file-tools.yml` 读取；参考模板是 `configs/file-tools.example.yml`。它们用于替代 heredoc、重定向等容易触发 bash 安全拦截的文件读写场景，不改变 bash 安全策略。
 
-| 环境变量 | 默认值 | 标签 | 说明 |
+| YAML 字段 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `AGENT_FILE_WORKING_DIRECTORY` | 继承 `AGENT_BASH_WORKING_DIRECTORY` | `Advanced / operator` | `read` / `write` 解析相对路径时使用的工作目录 |
-| `AGENT_FILE_ALLOWED_READ_PATHS` | `.,/tmp` | `Advanced / operator` | `read` / `grep` 允许访问的路径白名单；不再继承 bash allowed paths |
-| `AGENT_FILE_ALLOWED_WRITE_PATHS` | `.,/tmp` | `Advanced / operator` | `write` 允许写入的路径白名单；不再继承 bash allowed paths |
-| `AGENT_FILE_MAX_READ_BYTES` | `1048576` | `Advanced / operator` | 单次 `read` 最多返回的文件字节数 |
-| `AGENT_FILE_MAX_WRITE_BYTES` | `1048576` | `Advanced / operator` | 单次 `write` 最多写入的字节数 |
-| `AGENT_FILE_MAX_BATCH_OPS` | `20` | `Internal / compatibility` | 预留批量文件工具上限；当前 `read` / `write` 都是单文件工具 |
-| `AGENT_FILE_REQUIRE_WRITE_APPROVAL` | `true` | `Advanced / operator` | 是否要求 `write` 先走人工审批 |
+| `working-directory` | 继承 Bash `working-directory` | `Advanced / operator` | `read` / `grep` / `write` 解析相对路径时使用的工作目录 |
+| `allowed-read-paths` | `.,/tmp` | `Advanced / operator` | `read` / `grep` 允许访问的路径白名单；不继承 bash allowed paths |
+| `allowed-write-paths` | `.,/tmp` | `Advanced / operator` | `write` 允许写入的路径白名单；不继承 bash allowed paths |
+| `max-read-bytes` | `1048576` | `Advanced / operator` | 单次 `read` 最多返回的文本文件字节数 |
+| `max-write-bytes` | `1048576` | `Advanced / operator` | 单次 `write` 最多写入的字节数 |
+| `max-batch-ops` | `20` | `Internal / compatibility` | 预留批量文件工具上限；当前文件工具仍按单次调用执行 |
+| `require-write-approval` | `true` | `Advanced / operator` | 是否要求 `write` 先走人工审批 |
+| `require-read-before-write` | `true` | `Advanced / operator` | 已有文件写入前是否必须先在同一 run 内 read |
 
 文件工具白名单命中时直接执行；越权路径会走 `mode=approval`，用户可单次批准或用 `approve_root_run` 在当前 run 内批准同一目录规则。
 
@@ -342,12 +346,14 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 - `configs/channels.yml`
 - `configs/container-hub.yml`
 - `configs/cors.yml`
+- `configs/file-tools.yml`
 - `configs/local-public-key.pem`
 - `configs/prompts.yml`
 
 说明：
 
 - `configs/` 下所有文件都是启动时静态配置，运行中修改必须重启 runner 才会生效
+- `bash.yml` 与 `file-tools.yml` 是 Bash/FileTools 权限的唯一外部事实源
 - `cors.yml` 会直接驱动 `/api/**` 的 CORS 行为
 - `local-public-key.pem` 会在启用 `AUTH_ENABLED=true` 且使用本地公钥模式时参与 JWT 验签
 - 当前 Go 版仍不支持 `CONFIGS_DIR`，配置目录固定为项目根下 `configs/`
@@ -357,13 +363,14 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 当前优先级规则为：
 
 ```text
-代码默认值 < configs/*.yml < 环境变量
+代码默认值 < configs/*.yml < 仍受支持的环境变量
 ```
 
 其中：
 
-- 若 `configs/bash.yml` 或 `configs/container-hub.yml` 不存在，则仍可完全依赖默认值和环境变量
-- 环境变量始终优先于 yml
+- Bash 与 FileTools 不再读取 `AGENT_BASH_*` / `AGENT_FILE_*` 环境变量；它们的唯一外部事实源分别是 `configs/bash.yml` 与 `configs/file-tools.yml`
+- 若对应 YAML 不存在，则使用代码默认值；修改 YAML 后必须重启
+- 其它仍受支持的环境变量继续覆盖对应代码默认值或 YAML 值
 
 ## 当前运行时支持的环境变量族
 
@@ -374,8 +381,6 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 - `CONTAINER_HUB_*`
 - `AGENT_DEFAULT_*`
 - `AGENT_SCHEDULE_*`
-- `AGENT_BASH_*`
-- `AGENT_BASH_HITL_*`
 - `AGENT_MEMORY_*`
 - `CHAT_STORAGE_*`
 - `LOGGING_AGENT_*`
@@ -388,6 +393,8 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 
 - `CONFIGS_DIR`
 - `RUNTIME_DIR`
+- `AGENT_BASH_*`
+- `AGENT_FILE_*`
 - 旧 `AGENT_AUTH_*`
 - 旧 `AGENT_CONTAINER_HUB_*`
 - 旧 `AGENT_STREAM_*`

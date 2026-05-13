@@ -2,6 +2,8 @@
 # commands run through Windows PowerShell by default.
 working-directory: .
 allowed-paths: ., C:\
+# File tools do not inherit allowed-paths. Configure configs/file-tools.yml
+# allowed-read-paths / allowed-write-paths when read/grep/write need wider access.
 allowed-commands: '*'
 path-checked-commands: '*'
 path-check-bypass-commands: '*'

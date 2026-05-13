@@ -8,13 +8,13 @@ inputSchema:
   properties:
     file_path:
       type: string
-      description: Required. Absolute path, or a path relative to AGENT_FILE_WORKING_DIRECTORY, for the file to read.
+      description: Required. Absolute path, or a path relative to the working-directory in configs/file-tools.yml, for the file to read.
     offset:
       type: integer
       description: One-based line number to start reading from. Defaults to the beginning of the file.
     limit:
       type: integer
-      description: Maximum number of lines to return. When omitted, content is limited only by AGENT_FILE_MAX_READ_BYTES.
+      description: Maximum number of lines to return. When omitted, content is limited by max-read-bytes in configs/file-tools.yml.
     add_line_numbers:
       type: boolean
       default: true

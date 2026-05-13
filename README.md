@@ -127,7 +127,7 @@ RUN_SOCKET_TESTS=1 make test-integration
 
 ## 3. 配置说明
 
-所有本地配置从 `.env.example` 复制到 `.env`。`.env` 不提交；`.env.example` 只保留推荐给普通部署者的最终用户配置入口，默认值的单一事实源仍以代码和 `configs/*.example.yml` 模板为准。更完整的高级、排障和兼容性环境变量参考见 [docs/configuration-reference.md](./docs/configuration-reference.md)。
+所有本地环境配置从 `.env.example` 复制到 `.env`。`.env` 不提交；`.env.example` 只保留推荐给普通部署者的最终用户环境变量入口。Bash 与文件工具权限使用 `configs/bash.yml` / `configs/file-tools.yml`，默认值的单一事实源仍以代码和 `configs/*.example.yml` 模板为准。更完整的高级、排障和兼容性配置参考见 [docs/configuration-reference.md](./docs/configuration-reference.md)。
 
 ### 根 `.env.example`
 
@@ -173,6 +173,7 @@ Provider `apiKey` 支持两种写法：
 - `configs/bash.example.yml`
 - `configs/container-hub.example.yml`
 - `configs/cors.example.yml`
+- `configs/file-tools.example.yml`
 - `configs/local-public-key.example.pem`
 - `configs/channels.example.yml`
 
@@ -182,6 +183,7 @@ Provider `apiKey` 支持两种写法：
 - `configs/channels.yml`
 - `configs/container-hub.yml`
 - `configs/cors.yml`
+- `configs/file-tools.yml`
 - `configs/local-public-key.pem`
 
 `configs/` 不是可配置目录，固定使用 runner 根目录下的 `./configs`；容器内固定挂载到 `/opt/configs`。
@@ -197,8 +199,8 @@ Provider `apiKey` 支持两种写法：
 
 配置优先级：
 
-- 无外部 yml: 代码默认值 `<` 环境变量
-- 有 `configs/*.yml`: 代码默认值 `<` yml `<` 环境变量
+- Bash / FileTools: 代码默认值 `<` `configs/bash.yml` / `configs/file-tools.yml`
+- 其它配置: 代码默认值 `<` yml `<` 仍受支持的环境变量
 
 ### 当前明确拒绝的旧变量
 
@@ -207,6 +209,8 @@ Provider `apiKey` 支持两种写法：
 - 旧 `AGENT_CONTAINER_HUB_*`（改用 `CONTAINER_HUB_*`；`Enabled` 由 `CONTAINER_HUB_BASE_URL` 是否非空派生）
 - 旧 `AGENT_AUTH_*`（改用 `AUTH_*`）
 - 旧 `AGENT_STREAM_*`（改用 `STREAM_*`）
+- 旧 `AGENT_BASH_*`（改用 `configs/bash.yml`）
+- 旧 `AGENT_FILE_*`（改用 `configs/file-tools.yml`）
 - 旧单 gateway env：`GATEWAY_WS_URL`、`AGENT_GATEWAY_WS_URL`、`GATEWAY_JWT_TOKEN`、`GATEWAY_BASE_URL`、`AGENT_GATEWAY_WS_*`
 - 旧 `RUNTIME_DIR`
 - 旧 `AGENT_CONFIG_DIR`

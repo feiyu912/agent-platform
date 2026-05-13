@@ -313,6 +313,7 @@ runtimeConfig:
 ## 7. 开发要点
 
 - 配置事实源以 `internal/config/config.go` 和 `configs/*.example.yml` 为准，`README.md` 只解释，不重复维护默认值。
+- Bash 与文件工具权限分别以 `configs/bash.example.yml`、`configs/file-tools.example.yml` 为配置模板；旧 `AGENT_BASH_*` / `AGENT_FILE_*` env 会被启动阶段拒绝。
 - 根目录不放 `application.yml`；当前 Go 版默认值直接固化在代码里。
 - `.env`、真实 `configs/*.yml`、真实 `configs/*.pem` 必须忽略提交。
 - 参考仓库中的文件命名和文档结构可以复用，但内容必须以 Go 版当前实现为准，不能复制 Java 版未落地能力。
@@ -364,4 +365,5 @@ npm run sync:assets
 - program bundle 当前默认产出 `darwin-arm64` 目标，供 `zenmind-desktop` builtin 直接消费。
 - 若环境中显式设置了废弃旧变量，应用会直接启动失败。
 - `configs/` 下所有配置文件都是启动时静态配置；运行中修改必须重启 runner 才会生效。
+- 文件工具权限独立配置在 `configs/file-tools.yml`；`read` / `grep` 使用 `allowed-read-paths`，`write` 使用 `allowed-write-paths`，越权路径通过 HITL approval 兜底。
 - 文件工具新增 run-scoped 读写闭环：`read` 可能返回 `file_unchanged`，`write` 可能返回 `file_write_not_read` / `file_modified_since_read`，`grep` 可能返回 `grep_ripgrep_missing` / `grep_no_match` / `grep_invalid_type` 等结构化错误码。

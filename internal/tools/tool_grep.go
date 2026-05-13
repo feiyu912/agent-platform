@@ -180,10 +180,6 @@ func pageGrepResults(lines []string, offset int, headLimit int) ([]string, bool)
 }
 
 func sortGrepFiles(lines []string) {
-	if os.Getenv("AGENT_FILE_GREP_SORT") == "name" {
-		sort.Strings(lines)
-		return
-	}
 	sort.SliceStable(lines, func(i, j int) bool {
 		left, leftErr := os.Stat(lines[i])
 		right, rightErr := os.Stat(lines[j])
