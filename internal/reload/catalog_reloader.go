@@ -150,15 +150,7 @@ func StartBackgroundReloaders(ctx context.Context, cfg config.Config, reloader c
 		return
 	}
 
-	entries := []watchEntry{
-		{cfg.Paths.AgentsDir, "agents"},
-		{cfg.Paths.TeamsDir, "teams"},
-		{cfg.Paths.SkillsMarketDir, "skills"},
-		{filepath.Join(cfg.Paths.RegistriesDir, "models"), "models"},
-		{filepath.Join(cfg.Paths.RegistriesDir, "providers"), "providers"},
-		{filepath.Join(cfg.Paths.RegistriesDir, "mcp-servers"), "mcp-servers"},
-		{filepath.Join(cfg.Paths.RegistriesDir, "viewport-servers"), "viewport-servers"},
-	}
+	entries := backgroundWatchEntries(cfg)
 
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -250,6 +242,18 @@ func StartBackgroundReloaders(ctx context.Context, cfg config.Config, reloader c
 			}
 		}
 	}()
+}
+
+func backgroundWatchEntries(cfg config.Config) []watchEntry {
+	return []watchEntry{
+		{cfg.Paths.AgentsDir, "agents"},
+		{cfg.Paths.TeamsDir, "teams"},
+		{cfg.Paths.SkillsMarketDir, "skills"},
+		{filepath.Join(cfg.Paths.RegistriesDir, "models"), "models"},
+		{filepath.Join(cfg.Paths.RegistriesDir, "providers"), "providers"},
+		{filepath.Join(cfg.Paths.RegistriesDir, "mcp-servers"), "mcp-servers"},
+		{filepath.Join(cfg.Paths.RegistriesDir, "viewport-servers"), "viewport-servers"},
+	}
 }
 
 // addRecursive adds a directory and all its immediate subdirectories to the watcher.

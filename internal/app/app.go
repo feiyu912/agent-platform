@@ -44,7 +44,6 @@ type App struct {
 	scheduler          schedulerStopper
 	gateways           *gateway.Registry
 	wsHub              *ws.Hub
-	channelsReloader   *reload.ChannelsReloader
 	scheduleExecutions *schedule.ExecutionStore
 }
 
@@ -289,8 +288,7 @@ func New(rootCtx context.Context) (*App, error) {
 	}
 	log.Printf("server dependencies wired in %s", startupElapsed(serverStartedAt))
 
-	// Gateway Registry 支持多条反向 WS 连接。只要 WebSocket.Enabled 就创建 Registry，
-	// 哪怕当前 cfg.Gateways 为空（channels.yml 不存在或为空），watcher 也会启动并监听后续变更。
+	// Gateway Registry 支持多条反向 WS 连接；configs/channels.yml 只在启动时读取。
 	var gwRegistry *gateway.Registry
 	if cfg.WebSocket.Enabled {
 		if hub, ok := notifications.(*ws.Hub); ok {
@@ -315,17 +313,6 @@ func New(rootCtx context.Context) (*App, error) {
 		}
 	}
 
-	// channels reloader watches channels.yml for runtime hot-reload of gateway entries.
-	var channelsReloader *reload.ChannelsReloader
-	if gwRegistry != nil {
-		channelsPath := config.ProjectFile("configs/channels.yml")
-		channelsReloader = reload.NewChannelsReloader(channelsPath, cfg, gwRegistry)
-		channelsReloader.Start(backgroundCtx)
-		log.Printf("channels watcher started: %s", channelsPath)
-	} else {
-		log.Printf("channels watcher not started (WebSocket disabled)")
-	}
-
 	if scheduler != nil {
 		if err := scheduler.Start(backgroundCtx); err != nil {
 			backgroundCancel()
@@ -348,7 +335,6 @@ func New(rootCtx context.Context) (*App, error) {
 		scheduler:          scheduler,
 		gateways:           gwRegistry,
 		wsHub:              wsHub,
-		channelsReloader:   channelsReloader,
 		scheduleExecutions: scheduleExecutionStore,
 	}, nil
 }
@@ -356,9 +342,6 @@ func New(rootCtx context.Context) (*App, error) {
 func (a *App) Close() error {
 	if a == nil {
 		return nil
-	}
-	if a.channelsReloader != nil {
-		a.channelsReloader.Stop()
 	}
 	if a.backgroundCancel != nil {
 		a.backgroundCancel()

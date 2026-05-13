@@ -185,7 +185,7 @@ Provider `apiKey` 支持两种写法：
 
 `configs/` 不是可配置目录，固定使用 runner 根目录下的 `./configs`；容器内固定挂载到 `/opt/configs`。
 
-**热加载**：`configs/channels.yml` 支持运行时热加载，文件变更后约 300ms 内会自动触发 reconcile，增量更新 gateway 连接（新增/变更/移除均生效），无需重启进程。
+**静态配置**：`configs/` 下所有文件都只在进程启动时读取一次；修改 `configs/*.yml` 或 `configs/*.pem` 后必须重启 runner 才会生效。
 
 本地 JWT 公钥规则：
 

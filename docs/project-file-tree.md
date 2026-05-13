@@ -296,11 +296,10 @@
 
 ## `internal/reload/`
 
-目录作用：Catalog 与 Channel 热重载。
+目录作用：运行态目录热重载。
 
-- `internal/reload/catalog_reloader.go` (300 行): Catalog 与 Channel 热重载：catalog reloader
-- `internal/reload/catalog_reloader_test.go` (71 行): 测试与回归验证：catalog reloader
-- `internal/reload/channels_reloader.go` (131 行): Catalog 与 Channel 热重载：channels reloader
+- `internal/reload/catalog_reloader.go` (304 行): 运行态目录热重载：catalog reloader
+- `internal/reload/catalog_reloader_test.go` (107 行): 测试与回归验证：catalog reloader
 
 ## `internal/resources/`
 

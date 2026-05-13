@@ -279,7 +279,7 @@ agent definition 侧另有 `memoryConfig`：
 - `configs/channels.yml` 缺失时，不会从 legacy gateway env 合成连接
 - `channels.yml` 中的 gateway entry 会在启动时合成为 `config.Gateways`
 - `configs/channels.example.yml` 提供了 bridge 与 gateway 两种 channel 形态示例
-- `channels.yml` 支持运行时热加载：文件变更后约 300ms 内会自动触发 reconcile，增量更新 gateway 连接（新增/变更/移除均生效），无需重启进程
+- `channels.yml` 只在进程启动时读取；文件变更后必须重启 runner 才会生效
 
 ## 不建议公开暴露的变量
 
@@ -328,19 +328,24 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 当前仓库保留以下模板文件：
 
 - `configs/bash.example.yml`
+- `configs/channels.example.yml`
 - `configs/container-hub.example.yml`
 - `configs/cors.example.yml`
 - `configs/local-public-key.example.pem`
+- `configs/prompts.example.yml`
 
 当前真正会被 Go runner 读取的文件：
 
 - `configs/bash.yml`
+- `configs/channels.yml`
 - `configs/container-hub.yml`
 - `configs/cors.yml`
 - `configs/local-public-key.pem`
+- `configs/prompts.yml`
 
 说明：
 
+- `configs/` 下所有文件都是启动时静态配置，运行中修改必须重启 runner 才会生效
 - `cors.yml` 会直接驱动 `/api/**` 的 CORS 行为
 - `local-public-key.pem` 会在启用 `AUTH_ENABLED=true` 且使用本地公钥模式时参与 JWT 验签
 - 当前 Go 版仍不支持 `CONFIGS_DIR`，配置目录固定为项目根下 `configs/`

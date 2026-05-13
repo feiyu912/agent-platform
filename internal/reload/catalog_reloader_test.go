@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +49,40 @@ func TestStartBackgroundReloadersIgnoresDSStoreChanges(t *testing.T) {
 		t.Fatalf("write runtime file: %v", err)
 	}
 	assertReloadReason(t, reasons, "agents", 2*time.Second)
+}
+
+func TestBackgroundWatchEntriesExcludeConfigs(t *testing.T) {
+	cfg := config.Config{
+		Paths: config.PathsConfig{
+			AgentsDir:       filepath.Join("runtime", "agents"),
+			TeamsDir:        filepath.Join("runtime", "teams"),
+			SkillsMarketDir: filepath.Join("runtime", "skills-market"),
+			RegistriesDir:   filepath.Join("runtime", "registries"),
+		},
+	}
+
+	entries := backgroundWatchEntries(cfg)
+	gotReasons := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		gotReasons = append(gotReasons, entry.reason)
+		clean := filepath.ToSlash(filepath.Clean(entry.path))
+		if strings.HasPrefix(clean, "configs/") || clean == "configs" || strings.Contains(clean, "/configs/") {
+			t.Fatalf("background watcher must not include configs path: %#v", entry)
+		}
+	}
+
+	wantReasons := []string{
+		"agents",
+		"teams",
+		"skills",
+		"models",
+		"providers",
+		"mcp-servers",
+		"viewport-servers",
+	}
+	if !reflect.DeepEqual(gotReasons, wantReasons) {
+		t.Fatalf("watch reasons = %#v, want %#v", gotReasons, wantReasons)
+	}
 }
 
 func assertNoReloadReason(t *testing.T, reasons <-chan string, timeout time.Duration) {

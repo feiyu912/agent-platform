@@ -361,4 +361,4 @@ npm run sync:assets
 - `remember` 已升级为完整 memory 系统；embedding 语义检索需配置 `MEMORY_EMBEDDING_PROVIDER_KEY`，未配置时降级为 FTS + importance 排序。详见 [docs/memory-system-design.md](docs/memory-system-design.md)。
 - program bundle 当前默认产出 `darwin-arm64` 目标，供 `zenmind-desktop` builtin 直接消费。
 - 若环境中显式设置了废弃旧变量，应用会直接启动失败。
-- `channels.yml` 支持运行时热加载：文件变更后约 300ms 内会自动触发 reconcile，增量更新 gateway 连接（新增/变更/移除均生效），无需重启进程。
+- `configs/` 下所有配置文件都是启动时静态配置；运行中修改必须重启 runner 才会生效。
