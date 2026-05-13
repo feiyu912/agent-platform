@@ -130,6 +130,7 @@ type hitlDecisionState struct {
 
 type hitlNoticeEntry struct {
 	toolID      string
+	toolName    string
 	command     string
 	decision    string
 	ruleKey     string

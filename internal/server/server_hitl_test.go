@@ -1893,7 +1893,7 @@ func TestValidateSubmitParamsAllowsOrderedItemsWithoutIDs(t *testing.T) {
 			itemCount: 3,
 			params: mustEncodeSubmitParams(t, []map[string]any{
 				{"decision": "approve"},
-				{"decision": "approve_prefix_run"},
+				{"decision": "approve_rule_run"},
 				{"decision": "reject"},
 			}),
 		},

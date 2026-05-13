@@ -77,6 +77,11 @@ func validateSubmitItem(mode string, index int, item map[string]any) error {
 		if decision == "" {
 			return fmt.Errorf("%s: approval items require decision", itemLabel)
 		}
+		switch decision {
+		case "approve", "approve_rule_run", "reject":
+		default:
+			return fmt.Errorf("%s: unsupported approval decision %q", itemLabel, decision)
+		}
 		if _, hasPayload := item["payload"]; hasPayload {
 			return fmt.Errorf("%s: approval items do not allow payload", itemLabel)
 		}

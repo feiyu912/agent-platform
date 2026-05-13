@@ -262,12 +262,12 @@ runtimeConfig:
 
 - `mode=approval`
   - 来源：Bash HITL builtin confirm，以及文件工具越权路径审批。
-  - `awaiting.ask`：`{"awaitingId":"...","mode":"approval","timeout":...,"runId":"...","approvals":[{"id":"tool_bash","command":"chmod 777 ~/a.sh","description":"放开脚本权限","options":[{"label":"同意","value":"approve"},{"label":"同意（本次运行同前缀都放行）","value":"approve_prefix_run|approve_root_run"},{"label":"拒绝","value":"reject"}],"allowFreeText":true,"freeTextPlaceholder":"可选：填写理由"}]}`
+  - `awaiting.ask`：`{"awaitingId":"...","mode":"approval","timeout":...,"runId":"...","approvals":[{"id":"tool_bash","command":"chmod 777 ~/a.sh","description":"放开脚本权限","options":[{"label":"同意","decision":"approve"},{"label":"同意（本次运行同规则都放行）","decision":"approve_rule_run"},{"label":"拒绝","decision":"reject"}],"allowFreeText":true,"freeTextPlaceholder":"可选：填写理由"}]}`
   - approval 不再携带 `viewportType` / `viewportKey`
   - 用户只能批准或拒绝，不能改命令内容
-  - `/api/submit.params`：`[{"id":"tool_bash","decision":"approve|approve_prefix_run|approve_root_run|reject","reason":"..."}]`（`id` 可省略，仅作审计字段；文件路径审批优先使用 `approve_root_run`，旧 `approve_prefix_run` 仍兼容）
+  - `/api/submit.params`：`[{"id":"tool_bash","decision":"approve|approve_rule_run|reject","reason":"..."}]`（`id` 可省略，仅作审计字段）
   - `awaiting.answer`：
-    - answered：`{"awaitingId":"...","mode":"approval","status":"answered","approvals":[{"id":"tool_bash","command":"...","decision":"approve","rawDecision":"approve_prefix_run","reason":"..."}]}`
+    - answered：`{"awaitingId":"...","mode":"approval","status":"answered","approvals":[{"id":"tool_bash","command":"...","decision":"approve","rawDecision":"approve_rule_run","reason":"..."}]}`
     - error：`{"awaitingId":"...","mode":"approval","status":"error","error":{"code":"user_dismissed|timeout|invalid_submit","message":"..."}}`
   - 整批取消：`params: []`，归一化为 `status:"error" + error.code:"user_dismissed"`
 

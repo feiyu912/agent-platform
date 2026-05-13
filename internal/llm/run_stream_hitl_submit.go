@@ -150,6 +150,9 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 		return nil
 	}
 	invocation.approvalDecision = selectedDecision
+	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+		return s.executeApprovedFileAccessInvocation(invocation, *plan)
+	}
 	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
 		return s.executeApprovedFileWriteInvocation(invocation, *plan)
 	}
@@ -287,8 +290,8 @@ func buildApprovalOptions() []any {
 			"description": "只本次放行这条命令",
 		},
 		map[string]any{
-			"label":       "同意（本次运行同前缀都放行）",
-			"decision":    "approve_prefix_run",
+			"label":       "同意（本次运行同规则都放行）",
+			"decision":    "approve_rule_run",
 			"description": "本次 run 内所有同一拦截规则命中的命令自动放行，不再询问",
 		},
 		map[string]any{
@@ -307,9 +310,9 @@ func buildFileAccessApprovalOptions() []any {
 			"description": "只本次放行这条路径",
 		},
 		map[string]any{
-			"label":       "同意（本次运行同前缀都放行）",
-			"decision":    "approve_root_run",
-			"description": "本次 run 内同一目录规则命中的文件访问自动放行，不再询问",
+			"label":       "同意（本次运行同规则都放行）",
+			"decision":    "approve_rule_run",
+			"description": "本次 run 内同一拦截规则命中的文件访问自动放行，不再询问",
 		},
 		map[string]any{
 			"label":       "拒绝",

@@ -11,7 +11,7 @@ import (
 
 func resolveApprovedCommand(value string, answer string) string {
 	switch {
-	case strings.EqualFold(value, "approve"), strings.EqualFold(value, "approve_prefix_run"), strings.EqualFold(value, "approve_root_run"), strings.EqualFold(value, "reject"):
+	case strings.EqualFold(value, "approve"), strings.EqualFold(value, "approve_rule_run"), strings.EqualFold(value, "reject"):
 		return ""
 	case value != "":
 		return value

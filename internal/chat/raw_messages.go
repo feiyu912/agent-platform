@@ -139,11 +139,15 @@ func rawMessagesFromJSONLLines(lines []map[string]any) []map[string]any {
 				messages = append(messages, msg)
 			}
 			if approval, ok := line["approval"].(map[string]any); ok {
-				if summary := stringValue(approval["summary"]); summary != "" {
+				notice := stringValue(approval["llmNotice"])
+				if notice == "" {
+					notice = stringValue(approval["summary"])
+				}
+				if notice != "" {
 					pendingApprovalSummaries = append(pendingApprovalSummaries, map[string]any{
 						"runId":   runID,
 						"role":    "user",
-						"content": summary,
+						"content": notice,
 						"ts":      line["updatedAt"],
 					})
 				}

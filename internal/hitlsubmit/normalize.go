@@ -53,14 +53,9 @@ func NormalizeApproval(args map[string]any, params any) (map[string]any, error) 
 			return nil, fmt.Errorf("items[%d]: decision is required", index)
 		}
 		switch decision {
-		case "approve", "approve_prefix_run", "approve_root_run":
-		case "reject":
+		case "approve", "approve_rule_run", "reject":
 		default:
-			log.Printf("[hitlsubmit][warn] unknown approval decision index=%d decision=%s; normalizing to reject",
-				index,
-				decision,
-			)
-			decision = "reject"
+			return nil, fmt.Errorf("items[%d]: unsupported approval decision %q", index, decision)
 		}
 		entry := map[string]any{
 			"id":       definitionID,

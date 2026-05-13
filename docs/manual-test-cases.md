@@ -120,7 +120,7 @@ approval:
 ```bash
 curl -X POST "$BASE_URL/api/submit" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","awaitingId":"await_tool_bash","params":[{"id":"tool_bash","decision":"approve_prefix_run","reason":"同类命令本轮一并放行"}]}'
+  -d '{"runId":"replace-me","awaitingId":"await_tool_bash","params":[{"id":"tool_bash","decision":"approve_rule_run","reason":"同规则本轮一并放行"}]}'
 ```
 
 form:

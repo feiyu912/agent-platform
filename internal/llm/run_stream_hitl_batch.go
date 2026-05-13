@@ -31,7 +31,7 @@ func (s *llmRunStream) executeApprovedBashInvocation(invocation *preparedToolInv
 	case "reject":
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
-	case "approve_prefix_run", "approve_root_run":
+	case "approve_rule_run":
 		s.registerRuleWhitelist(result.Rule.RuleKey)
 		invocation.approvalDecision = ""
 		return s.executeOriginalBash(invocation)
@@ -85,7 +85,7 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 		}
 		if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
 			if s.isRuleWhitelisted(review.RuleKey) {
-				s.applyHITLDecision(invocation, bashSecurityInterceptResult(invocation, review), "", "approve_prefix_run", "", true)
+				s.applyHITLDecision(invocation, bashSecurityInterceptResult(invocation, review), "", "approve_rule_run", "", true)
 				continue
 			}
 			if s.shouldAutoApproveBashSecurity(review) || s.hasBashSecurityApproval(review.Fingerprint) {
@@ -106,7 +106,7 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 			continue
 		}
 		if s.isRuleWhitelisted(result.Rule.RuleKey) {
-			s.applyHITLDecision(invocation, result, "", "approve_prefix_run", "", true)
+			s.applyHITLDecision(invocation, result, "", "approve_rule_run", "", true)
 			continue
 		}
 		if s.shouldAutoApproveHITL(result) {
@@ -379,14 +379,14 @@ func (s *llmRunStream) applyHITLDecision(invocation *preparedToolInvocation, res
 		Executed:   executed,
 		Mode:       hitlDecisionMode(result),
 	}
-	if normalizedDecision == "approve_prefix_run" || normalizedDecision == "approve_root_run" {
+	if normalizedDecision == "approve_rule_run" {
 		s.registerRuleWhitelist(result.Rule.RuleKey)
 	}
 }
 
 func hitlDecisionScope(decision string) string {
 	normalized := strings.ToLower(strings.TrimSpace(decision))
-	if normalized == "approve_prefix_run" || normalized == "approve_root_run" {
+	if normalized == "approve_rule_run" {
 		return "run_rule"
 	}
 	return ""

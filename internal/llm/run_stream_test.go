@@ -1348,17 +1348,17 @@ func TestBashSecuritySoftBlockEmitsApprovalWithoutChecker(t *testing.T) {
 	}
 	options, _ := approval["options"].([]any)
 	if len(options) != 3 {
-		t.Fatalf("expected bash security approval to include prefix option, got %#v", options)
+		t.Fatalf("expected bash security approval to include rule option, got %#v", options)
 	}
-	foundPrefix := false
+	foundRule := false
 	for _, option := range options {
 		item, _ := option.(map[string]any)
-		if item["decision"] == "approve_prefix_run" {
-			foundPrefix = true
+		if item["decision"] == "approve_rule_run" {
+			foundRule = true
 		}
 	}
-	if !foundPrefix {
-		t.Fatalf("expected prefix approval option, got %#v", options)
+	if !foundRule {
+		t.Fatalf("expected rule approval option, got %#v", options)
 	}
 }
 
@@ -1452,7 +1452,7 @@ func TestBashSecuritySoftBlockPrefixApprovalWhitelistsRule(t *testing.T) {
 	ack := runControl.ResolveSubmit(api.SubmitRequest{
 		RunID:      "run_1",
 		AwaitingID: stream.hitlAwaitingID,
-		Params:     encodedSubmitParams(t, []map[string]any{{"id": "tool_1", "decision": "approve_prefix_run"}}),
+		Params:     encodedSubmitParams(t, []map[string]any{{"id": "tool_1", "decision": "approve_rule_run"}}),
 	})
 	if !ack.Accepted {
 		t.Fatalf("expected submit to be accepted, got %#v", ack)
@@ -1702,15 +1702,15 @@ func TestFileReadAccessApprovalEmitsAwaitingAsk(t *testing.T) {
 		t.Fatalf("unexpected read approval item: %#v", item)
 	}
 	options, _ := item["options"].([]any)
-	if !approvalOptionsContainDecision(options, "approve_root_run") {
-		t.Fatalf("expected approve_root_run option, got %#v", options)
+	if !approvalOptionsContainDecision(options, "approve_rule_run") {
+		t.Fatalf("expected approve_rule_run option, got %#v", options)
 	}
 }
 
 func TestFileReadAccessApprovalDecisions(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
-	for _, decision := range []string{"approve", "approve_root_run", "approve_prefix_run"} {
+	for _, decision := range []string{"approve", "approve_rule_run"} {
 		t.Run(decision, func(t *testing.T) {
 			executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
 			stream := &llmRunStream{
@@ -1822,7 +1822,7 @@ func TestWritePathApprovalPrecedesWriteApproval(t *testing.T) {
 		activeToolCall: &preparedToolInvocation{
 			toolID:           "tool_1",
 			toolName:         "write",
-			approvalDecision: "approve_root_run",
+			approvalDecision: "approve_rule_run",
 			args: map[string]any{
 				"file_path":   filepath.Join(outside, "owner.md"),
 				"content":     "hello",
@@ -2892,8 +2892,8 @@ func TestPrepareQueuedBashApprovalBatch_SkipsWhitelistedRuleWithinRun(t *testing
 	if stream.prepareQueuedBashApprovalBatch() {
 		t.Fatalf("expected whitelisted rule to skip approval batch, got %#v", stream.pending)
 	}
-	if decision := stream.queuedToolCalls[0].approvalDecision; decision != "approve_prefix_run" {
-		t.Fatalf("expected invocation to inherit approve_prefix_run, got %#v", stream.queuedToolCalls[0])
+	if decision := stream.queuedToolCalls[0].approvalDecision; decision != "approve_rule_run" {
+		t.Fatalf("expected invocation to inherit approve_rule_run, got %#v", stream.queuedToolCalls[0])
 	}
 	if stream.queuedToolCalls[0].hitlDecision == nil || stream.queuedToolCalls[0].hitlDecision.Scope != "run_rule" {
 		t.Fatalf("expected whitelisted invocation to record run_rule HITL metadata, got %#v", stream.queuedToolCalls[0])

@@ -104,6 +104,7 @@ type StepLine struct {
 
 type StepApproval struct {
 	Summary   string                 `json:"summary"`
+	LLMNotice string                 `json:"llmNotice,omitempty"`
 	Decisions []StepApprovalDecision `json:"decisions,omitempty"`
 }
 

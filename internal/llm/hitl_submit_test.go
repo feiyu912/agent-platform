@@ -15,13 +15,13 @@ func mustEncodeHITLSubmitParams(t *testing.T, value any) api.SubmitParams {
 	return params
 }
 
-func TestNormalizeHITLApprovalSubmitSupportsApprovePrefixRun(t *testing.T) {
+func TestNormalizeHITLApprovalSubmitSupportsApproveRuleRunForCommand(t *testing.T) {
 	normalized, err := normalizeHITLApprovalSubmit(map[string]any{
 		"approvals": []any{
 			map[string]any{"id": "tool_1", "command": "chmod 777 ~/a.sh"},
 		},
 	}, mustEncodeHITLSubmitParams(t, []map[string]any{
-		{"id": "tool_1", "decision": "approve_prefix_run", "reason": "同类命令本轮一并放行"},
+		{"id": "tool_1", "decision": "approve_rule_run", "reason": "同规则本轮一并放行"},
 	}))
 	if err != nil {
 		t.Fatalf("normalizeHITLApprovalSubmit returned error: %v", err)
@@ -34,21 +34,21 @@ func TestNormalizeHITLApprovalSubmitSupportsApprovePrefixRun(t *testing.T) {
 	if normalized["status"] != "answered" {
 		t.Fatalf("expected answered status, got %#v", normalized)
 	}
-	if approvals[0]["decision"] != "approve_prefix_run" {
-		t.Fatalf("expected approve_prefix_run decision to be preserved, got %#v", approvals[0])
+	if approvals[0]["decision"] != "approve_rule_run" {
+		t.Fatalf("expected approve_rule_run decision to be preserved, got %#v", approvals[0])
 	}
-	if approvals[0]["reason"] != "同类命令本轮一并放行" {
+	if approvals[0]["reason"] != "同规则本轮一并放行" {
 		t.Fatalf("expected reason to be preserved, got %#v", approvals[0])
 	}
 }
 
-func TestNormalizeHITLApprovalSubmitSupportsApproveRootRun(t *testing.T) {
+func TestNormalizeHITLApprovalSubmitSupportsApproveRuleRunForFile(t *testing.T) {
 	normalized, err := normalizeHITLApprovalSubmit(map[string]any{
 		"approvals": []any{
 			map[string]any{"id": "tool_1", "command": "read /tmp/owner.md"},
 		},
 	}, mustEncodeHITLSubmitParams(t, []map[string]any{
-		{"id": "tool_1", "decision": "approve_root_run", "reason": "同目录本轮一并放行"},
+		{"id": "tool_1", "decision": "approve_rule_run", "reason": "同规则本轮一并放行"},
 	}))
 	if err != nil {
 		t.Fatalf("normalizeHITLApprovalSubmit returned error: %v", err)
@@ -58,10 +58,10 @@ func TestNormalizeHITLApprovalSubmitSupportsApproveRootRun(t *testing.T) {
 	if !ok || len(approvals) != 1 {
 		t.Fatalf("expected one normalized approval, got %#v", normalized)
 	}
-	if approvals[0]["decision"] != "approve_root_run" {
-		t.Fatalf("expected approve_root_run decision to be preserved, got %#v", approvals[0])
+	if approvals[0]["decision"] != "approve_rule_run" {
+		t.Fatalf("expected approve_rule_run decision to be preserved, got %#v", approvals[0])
 	}
-	if approvals[0]["reason"] != "同目录本轮一并放行" {
+	if approvals[0]["reason"] != "同规则本轮一并放行" {
 		t.Fatalf("expected reason to be preserved, got %#v", approvals[0])
 	}
 }
@@ -79,29 +79,15 @@ func TestNormalizeHITLApprovalSubmitRejectsEmptyDecision(t *testing.T) {
 	}
 }
 
-func TestNormalizeHITLApprovalSubmitNormalizesUnknownDecisionToReject(t *testing.T) {
-	normalized, err := normalizeHITLApprovalSubmit(map[string]any{
+func TestNormalizeHITLApprovalSubmitRejectsUnknownDecision(t *testing.T) {
+	_, err := normalizeHITLApprovalSubmit(map[string]any{
 		"approvals": []any{
 			map[string]any{"id": "tool_1", "command": "chmod 777 ~/a.sh"},
 		},
 	}, mustEncodeHITLSubmitParams(t, []map[string]any{
 		{"id": "tool_1", "decision": "approve_always", "reason": "历史回放"},
 	}))
-	if err != nil {
-		t.Fatalf("normalizeHITLApprovalSubmit returned error: %v", err)
-	}
-
-	approvals, ok := normalized["approvals"].([]map[string]any)
-	if !ok || len(approvals) != 1 {
-		t.Fatalf("expected one normalized approval, got %#v", normalized)
-	}
-	if normalized["status"] != "answered" {
-		t.Fatalf("expected answered status, got %#v", normalized)
-	}
-	if approvals[0]["decision"] != "reject" {
-		t.Fatalf("expected unknown decision to normalize to reject, got %#v", approvals[0])
-	}
-	if approvals[0]["reason"] != "历史回放" {
-		t.Fatalf("expected reason to be preserved, got %#v", approvals[0])
+	if err == nil || err.Error() != `items[0]: unsupported approval decision "approve_always"` {
+		t.Fatalf("expected unsupported decision error, got %v", err)
 	}
 }

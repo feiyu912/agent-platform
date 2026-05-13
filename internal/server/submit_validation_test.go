@@ -14,6 +14,7 @@ func TestValidateDeferredSubmitParamsAcceptsDismissAndValidShapes(t *testing.T) 
 		{name: "question dismiss", mode: "question", params: []map[string]any{}},
 		{name: "question answer", mode: "question", params: []map[string]any{{"answer": "Approve"}}},
 		{name: "approval decision", mode: "approval", params: []map[string]any{{"decision": "approve"}}},
+		{name: "approval rule decision", mode: "approval", params: []map[string]any{{"decision": "approve_rule_run"}}},
 		{name: "form approve", mode: "form", params: []map[string]any{{"decision": "approve", "form": map[string]any{"days": 2}}}},
 		{name: "form reject", mode: "form", params: []map[string]any{{"decision": "reject"}}},
 		{name: "form reject with reason", mode: "form", params: []map[string]any{{"decision": "reject", "reason": "不同意"}}},
@@ -27,6 +28,14 @@ func TestValidateDeferredSubmitParamsAcceptsDismissAndValidShapes(t *testing.T) 
 				t.Fatalf("validateDeferredSubmitParams returned error: %v", err)
 			}
 		})
+	}
+}
+
+func TestValidateDeferredSubmitParamsRejectsInvalidApprovalDecision(t *testing.T) {
+	legacyDecision := "approve_" + "prefix_run"
+	err := validateDeferredSubmitParams("approval", mustEncodeSubmitParams(t, []map[string]any{{"decision": legacyDecision}}))
+	if err == nil || !strings.Contains(err.Error(), `items[0]: unsupported approval decision "`+legacyDecision+`"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

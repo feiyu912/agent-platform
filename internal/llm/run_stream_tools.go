@@ -313,7 +313,7 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 			return s.executeApprovedBashSecurityInvocation(invocation, review)
 		}
 		if s.isRuleWhitelisted(review.RuleKey) {
-			s.applyHITLDecision(invocation, bashSecurityInterceptResult(invocation, review), "", "approve_prefix_run", "", true)
+			s.applyHITLDecision(invocation, bashSecurityInterceptResult(invocation, review), "", "approve_rule_run", "", true)
 			s.registerBashSecurityApproval(review.Fingerprint)
 			return s.executeOriginalBash(invocation)
 		}
@@ -334,7 +334,7 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 				return s.executeApprovedBashInvocation(invocation, result)
 			}
 			if s.isRuleWhitelisted(result.Rule.RuleKey) {
-				s.applyHITLDecision(invocation, result, "", "approve_prefix_run", "", true)
+				s.applyHITLDecision(invocation, result, "", "approve_rule_run", "", true)
 				return s.executeApprovedBashInvocation(invocation, result)
 			}
 			if s.shouldAutoApproveHITL(result) {
@@ -349,7 +349,7 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 		if result := s.checker.Check(command, s.execCtx.HITLLevel); result.Intercepted {
 			s.skipPostToolHook = true
 			if strings.EqualFold(result.Rule.ViewportType, "builtin") && s.isRuleWhitelisted(result.Rule.RuleKey) {
-				s.applyHITLDecision(invocation, result, "", "approve_prefix_run", "", true)
+				s.applyHITLDecision(invocation, result, "", "approve_rule_run", "", true)
 				return s.executeApprovedBashInvocation(invocation, result)
 			}
 			if s.shouldAutoApproveHITL(result) {
@@ -542,7 +542,7 @@ func (s *llmRunStream) executeApprovedFileAccessInvocation(invocation *preparedT
 		}
 		s.appendOriginalToolResult(invocation, fileAccessDeniedToolResult(invocation, "file_write_denied"))
 		return nil
-	case "approve_root_run", "approve_prefix_run":
+	case "approve_rule_run":
 		if plan.Mode == filetools.ReadAccess {
 			filetools.RegisterRuleReadApproval(s.execCtx, plan.RuleKey)
 		} else {
@@ -575,7 +575,7 @@ func (s *llmRunStream) executeApprovedFileWriteInvocation(invocation *preparedTo
 	case "reject":
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
-	case "approve_prefix_run", "approve_root_run":
+	case "approve_rule_run":
 		filetools.RegisterRuleWriteApproval(s.execCtx, plan.RuleKey)
 		invocation.approvalDecision = ""
 		return s.executeOriginalBash(invocation)
@@ -607,7 +607,7 @@ func (s *llmRunStream) executeApprovedBashSecurityInvocation(invocation *prepare
 	case "reject":
 		s.appendOriginalToolResult(invocation, hitlRejectedToolResult(invocation))
 		return nil
-	case "approve_prefix_run", "approve_root_run":
+	case "approve_rule_run":
 		s.registerRuleWhitelist(review.RuleKey)
 		invocation.approvalDecision = ""
 		s.registerBashSecurityApproval(review.Fingerprint)
@@ -635,15 +635,15 @@ func (s *llmRunStream) appendOriginalToolResult(invocation *preparedToolInvocati
 		Name:       invocation.toolName,
 		Content:    s.toolResultContent(invocation.toolName, result),
 	})
-	if entry, ok := buildHITLNoticeEntry(invocation); ok {
+	if entry, ok := s.buildHITLNoticeEntry(invocation); ok {
 		s.pendingHITLNotices = append(s.pendingHITLNotices, entry)
 	}
 	if len(s.queuedToolCalls) == 0 && len(s.pendingHITLNotices) > 0 {
-		summary, approval := buildHITLBatchSummaryAndApproval(s.pendingHITLNotices)
-		if summary != "" {
+		notice, approval := buildHITLBatchSummaryAndApproval(s.pendingHITLNotices)
+		if notice != "" {
 			s.messages = append(s.messages, openAIMessage{
 				Role:    "user",
-				Content: summary,
+				Content: notice,
 			})
 		}
 		if s.onApprovalSummary != nil && approval != nil {

@@ -4,7 +4,7 @@
 working-directory: .
 
 # read 与 grep 允许的路径白名单（前缀匹配）。
-# 越权路径不会硬拒，而是触发 HITL approval（approve / approve_root_run / reject）。
+# 越权路径不会硬拒，而是触发 HITL approval（approve / approve_rule_run / reject）。
 allowed-read-paths:
   - .
   - /tmp
