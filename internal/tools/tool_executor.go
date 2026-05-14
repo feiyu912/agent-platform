@@ -72,6 +72,8 @@ func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args 
 		return t.invokeDateTime(args), nil
 	case "artifact_publish":
 		return t.invokeArtifactPublish(args, execCtx)
+	case "desktop_action":
+		return t.invokeDesktopAction(ctx, args, execCtx)
 	case "read":
 		return t.invokeRead(args, execCtx)
 	case "write":

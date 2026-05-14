@@ -1,0 +1,87 @@
+name: desktop_action
+label: Desktop 动作
+description: Call the local ZenMind Desktop Action Bridge to read, validate, preview, or execute allowlisted Desktop actions.
+submitResultFormat: json-compact
+type: function
+inputSchema:
+  type: object
+  properties:
+    action:
+      type: string
+      description: Required. Allowlisted Desktop action name to call through the local Desktop Action Bridge.
+      enum:
+        - desktop.page.getContext
+        - desktop.page.getFormState
+        - desktop.page.validateForm
+        - desktop.page.previewPatch
+        - desktop.page.applyPatch
+        - desktop.navigate.toRoute
+        - desktop.controlCenter.listServices
+        - desktop.controlCenter.getServiceStatus
+        - desktop.controlCenter.getServiceDetail
+        - desktop.controlCenter.getServiceLogsMeta
+        - desktop.controlCenter.readServiceLog
+        - desktop.controlCenter.openLogViewer
+        - desktop.controlCenter.installService
+        - desktop.controlCenter.initializeService
+        - desktop.controlCenter.startService
+        - desktop.controlCenter.stopService
+        - desktop.controlCenter.restartService
+        - desktop.market.getSettings
+        - desktop.market.validateSettings
+        - desktop.market.previewSettingsPatch
+        - desktop.market.applySettingsPatch
+        - desktop.market.listItems
+        - desktop.market.refresh
+        - desktop.market.getItemDetail
+        - desktop.market.installItem
+        - desktop.market.updateItem
+        - desktop.market.uninstallItem
+        - desktop.market.importSkill
+        - desktop.help.getCurrentTopic
+        - desktop.help.searchTopics
+        - desktop.help.openTopic
+        - desktop.help.explainCurrentPage
+        - desktop.help.suggestNextAction
+        - desktop.help.navigateToRelatedPage
+        - desktop.agents.listAgents
+        - desktop.agents.getAgentDetail
+        - desktop.agents.validateAgentConfig
+        - desktop.agents.previewAgentConfigPatch
+        - desktop.agents.applyAgentConfigPatch
+        - desktop.agents.createAgentDraft
+        - desktop.agents.createAgent
+        - desktop.agents.updateAgent
+        - desktop.agents.cloneAgent
+        - desktop.agents.disableAgent
+        - desktop.agents.reloadAgents
+        - desktop.automations.listSchedules
+        - desktop.automations.getScheduleDetail
+        - desktop.automations.validateSchedule
+        - desktop.automations.previewSchedule
+        - desktop.automations.createSchedule
+        - desktop.automations.updateSchedule
+        - desktop.automations.pauseSchedule
+        - desktop.automations.resumeSchedule
+        - desktop.automations.deleteSchedule
+        - desktop.automations.explainNextRun
+        - desktop.memory.getSettings
+        - desktop.memory.getSummary
+        - desktop.memory.listRecentItems
+        - desktop.memory.searchItems
+        - desktop.memory.previewItem
+        - desktop.memory.enableAutoLearn
+        - desktop.memory.disableAutoLearn
+    args:
+      type: object
+      description: JSON arguments for the selected action. Use only fields documented by the Desktop action catalog.
+      additionalProperties: true
+    requestId:
+      type: string
+      description: Optional stable request id for audit/debug correlation. Leave blank to let Desktop generate one.
+    confirmationSummary:
+      type: string
+      description: Optional Chinese summary shown by Desktop before mutating actions are executed.
+  required:
+    - action
+  additionalProperties: false
