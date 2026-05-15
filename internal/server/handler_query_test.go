@@ -108,6 +108,42 @@ func TestResolveSkillRuntimeSettingsReturnsAgentEnvWithoutSkills(t *testing.T) {
 	}
 }
 
+func TestInjectDesktopCdpRuntimeEnvAddsAgentAndSurfaceSelectors(t *testing.T) {
+	env := map[string]string{
+		"CDP_HOST": "127.0.0.1",
+		"CDP_PORT": "11789",
+	}
+
+	got := injectDesktopCdpRuntimeEnv(env, "agent-a", "surface-a")
+	if got["ZENMIND_CDP_AGENT_KEY"] != "agent-a" {
+		t.Fatalf("ZENMIND_CDP_AGENT_KEY = %q", got["ZENMIND_CDP_AGENT_KEY"])
+	}
+	if got["ZENMIND_CDP_SURFACE_ID"] != "surface-a" {
+		t.Fatalf("ZENMIND_CDP_SURFACE_ID = %q", got["ZENMIND_CDP_SURFACE_ID"])
+	}
+}
+
+func TestInjectDesktopCdpRuntimeEnvLeavesNonCdpEnvUntouched(t *testing.T) {
+	env := map[string]string{"HTTP_PROXY": "http://127.0.0.1:8001"}
+
+	got := injectDesktopCdpRuntimeEnv(env, "agent-a", "surface-a")
+	if !reflect.DeepEqual(got, env) {
+		t.Fatalf("env = %#v, want %#v", got, env)
+	}
+}
+
+func TestInjectDesktopCdpRuntimeEnvLeavesStandardChromeCdpUntouched(t *testing.T) {
+	env := map[string]string{
+		"CDP_HOST": "localhost",
+		"CDP_PORT": "9222",
+	}
+
+	got := injectDesktopCdpRuntimeEnv(env, "agent-a", "surface-a")
+	if !reflect.DeepEqual(got, env) {
+		t.Fatalf("env = %#v, want %#v", got, env)
+	}
+}
+
 type queryMemoryRegistry struct {
 	testCatalogRegistry
 	def catalog.AgentDefinition

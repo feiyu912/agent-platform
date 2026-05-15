@@ -95,6 +95,7 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		s.deps.Config.Paths.SkillsMarketDir,
 		agentDef.Skills,
 	)
+	runtimeEnvOverrides = injectDesktopCdpRuntimeEnv(runtimeEnvOverrides, req.AgentKey, desktopCdpSurfaceIDFromParams(req.Params))
 	log.Printf("[server][skill-runtime] agent=%s skills=%v hookDirs=%v runtimeEnvKeys=%v",
 		agentDef.Key,
 		agentDef.Skills,
@@ -175,6 +176,46 @@ func (s *Server) buildSessionToolOverrides(agentDef catalog.AgentDefinition) map
 	}
 	overrides["bash"] = override
 	return overrides
+}
+
+func injectDesktopCdpRuntimeEnv(env map[string]string, agentKey string, surfaceID string) map[string]string {
+	if !hasDesktopCdpRuntimeEnv(env) {
+		return env
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	if strings.TrimSpace(env["ZENMIND_CDP_AGENT_KEY"]) == "" {
+		if normalizedAgentKey := strings.TrimSpace(agentKey); normalizedAgentKey != "" {
+			env["ZENMIND_CDP_AGENT_KEY"] = normalizedAgentKey
+		}
+	}
+	if strings.TrimSpace(env["ZENMIND_CDP_SURFACE_ID"]) == "" {
+		if normalizedSurfaceID := strings.TrimSpace(surfaceID); normalizedSurfaceID != "" {
+			env["ZENMIND_CDP_SURFACE_ID"] = normalizedSurfaceID
+		}
+	}
+	return env
+}
+
+func hasDesktopCdpRuntimeEnv(env map[string]string) bool {
+	if strings.TrimSpace(env["ZENMIND_DESKTOP_CDP_GATEWAY_URL"]) != "" {
+		return true
+	}
+	return strings.TrimSpace(env["CDP_PORT"]) == "11789"
+}
+
+func desktopCdpSurfaceIDFromParams(params map[string]any) string {
+	desktop, ok := params["desktop"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, key := range []string{"surfaceId", "cdpSurfaceId"} {
+		if value := strings.TrimSpace(stringValue(desktop[key])); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func buildSessionToolNames(base []string, allowInvokeAgents bool) []string {
