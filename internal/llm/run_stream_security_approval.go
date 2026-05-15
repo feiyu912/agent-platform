@@ -55,6 +55,9 @@ func (s *llmRunStream) emitFileWriteApprovalDeltas(invocation *preparedToolInvoc
 
 func (s *llmRunStream) emitFileAccessApprovalDeltas(invocation *preparedToolInvocation, plan filetools.AccessPlan) error {
 	result := fileAccessInterceptResult(plan)
+	if _, writePlan, ok := s.combinedFileWriteApprovalPlans(invocation); ok {
+		result = fileWriteInterceptResult(*writePlan)
+	}
 	s.hitlPendingCall = invocation
 	s.hitlMatch = &result
 	s.hitlAwaitingID = buildHITLAwaitingID(invocation.toolID)

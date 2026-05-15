@@ -244,13 +244,22 @@ func (s *llmRunStream) buildFormApprovalArgs(command string, result hitl.Interce
 
 func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) map[string]any {
 	command := mapStringArg(invocation.args, "command")
-	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+	_, combinedWritePlan, combinedWriteApproval := s.combinedFileWriteApprovalPlans(invocation)
+	if combinedWriteApproval {
+		command = combinedWritePlan.CommandText
+	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		command = plan.CommandText
 	} else if plan := s.lookupFileWritePlan(invocation); plan != nil {
 		command = plan.CommandText
 	}
 	description := approvalDescription(invocation)
-	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+	if combinedWriteApproval {
+		description = strings.TrimSpace(description)
+		if description == "" {
+			description = "写入文件"
+		}
+		description += "（路径超出允许目录）"
+	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		if plan.Mode == filetools.ReadAccess {
 			description = "read超出允许目录"
 		} else {
@@ -266,7 +275,9 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 		"freeTextPlaceholder": "可选：填写理由",
 	}
 	result := hitl.InterceptResult{}
-	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
+	if combinedWriteApproval {
+		result = fileWriteInterceptResult(*combinedWritePlan)
+	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		result = fileAccessInterceptResult(*plan)
 	} else if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
 		result = fileWriteInterceptResult(*plan)
@@ -286,6 +297,9 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 }
 
 func (s *llmRunStream) approvalOptionsForInvocation(invocation *preparedToolInvocation) []any {
+	if _, _, ok := s.combinedFileWriteApprovalPlans(invocation); ok {
+		return buildApprovalOptions()
+	}
 	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		return buildFileAccessApprovalOptions()
 	}

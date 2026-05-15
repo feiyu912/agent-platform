@@ -499,6 +499,21 @@ func (s *llmRunStream) lookupFileAccessPlan(invocation *preparedToolInvocation) 
 	return plan
 }
 
+func (s *llmRunStream) combinedFileWriteApprovalPlans(invocation *preparedToolInvocation) (*filetools.AccessPlan, *filetools.WritePlan, bool) {
+	accessPlan := s.lookupFileAccessPlan(invocation)
+	if accessPlan == nil || accessPlan.Mode != filetools.WriteAccess || !s.fileAccessPlanNeedsApproval(*accessPlan) {
+		return nil, nil, false
+	}
+	if !s.engine.cfg.FileTools.RequireWriteApproval {
+		return nil, nil, false
+	}
+	writePlan := s.lookupFileWritePlan(invocation)
+	if writePlan == nil || filetools.HasWriteApproval(s.execCtx, *writePlan) {
+		return nil, nil, false
+	}
+	return accessPlan, writePlan, true
+}
+
 func (s *llmRunStream) fileAccessPlanNeedsApproval(plan filetools.AccessPlan) bool {
 	if plan.AllowedByWhitelist {
 		return false
@@ -543,6 +558,12 @@ func (s *llmRunStream) executeApprovedFileAccessInvocation(invocation *preparedT
 		s.appendOriginalToolResult(invocation, fileAccessDeniedToolResult(invocation, "file_write_denied"))
 		return nil
 	case "approve_rule_run":
+		if accessPlan, writePlan, ok := s.combinedFileWriteApprovalPlans(invocation); ok {
+			filetools.RegisterRuleAccessApproval(s.execCtx, accessPlan.RuleKey)
+			filetools.RegisterRuleWriteApproval(s.execCtx, writePlan.RuleKey)
+			invocation.approvalDecision = ""
+			return s.executeOriginalBash(invocation)
+		}
 		if plan.Mode == filetools.ReadAccess {
 			filetools.RegisterRuleReadApproval(s.execCtx, plan.RuleKey)
 		} else {
@@ -551,6 +572,12 @@ func (s *llmRunStream) executeApprovedFileAccessInvocation(invocation *preparedT
 		invocation.approvalDecision = ""
 		return s.executeAfterFileAccessApproval(invocation)
 	case "approve":
+		if accessPlan, writePlan, ok := s.combinedFileWriteApprovalPlans(invocation); ok {
+			filetools.RegisterExactAccessApproval(s.execCtx, accessPlan.Fingerprint)
+			filetools.RegisterExactWriteApproval(s.execCtx, writePlan.Fingerprint)
+			invocation.approvalDecision = ""
+			return s.executeOriginalBash(invocation)
+		}
 		if plan.Mode == filetools.ReadAccess {
 			filetools.RegisterExactReadApproval(s.execCtx, plan.Fingerprint)
 		} else {

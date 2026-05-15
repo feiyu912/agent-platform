@@ -14,6 +14,9 @@ import (
 )
 
 func (s *llmRunStream) approvalHITLResult(invocation *preparedToolInvocation) hitl.InterceptResult {
+	if _, plan, ok := s.combinedFileWriteApprovalPlans(invocation); ok {
+		return fileWriteInterceptResult(*plan)
+	}
 	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		return fileAccessInterceptResult(*plan)
 	}
@@ -283,10 +286,13 @@ func (s *llmRunStream) buildHITLNoticeEntry(invocation *preparedToolInvocation) 
 		return hitlNoticeEntry{}, false
 	}
 	command := ""
-	if plan := s.lookupFileAccessPlan(invocation); plan != nil {
+	writePlan := s.lookupFileWritePlan(invocation)
+	if writePlan != nil && strings.TrimSpace(invocation.hitlDecision.RuleKey) == writePlan.RuleKey {
+		command = writePlan.CommandText
+	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil {
 		command = plan.CommandText
-	} else if plan := s.lookupFileWritePlan(invocation); plan != nil {
-		command = plan.CommandText
+	} else if writePlan != nil {
+		command = writePlan.CommandText
 	}
 	if strings.TrimSpace(command) == "" {
 		command = mapStringArg(invocation.args, "command")

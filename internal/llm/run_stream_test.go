@@ -1845,7 +1845,7 @@ func TestFileReadAccessApprovalNoticeUsesPlanCommand(t *testing.T) {
 	}
 }
 
-func TestWritePathApprovalPrecedesWriteApproval(t *testing.T) {
+func TestWriteOutsideAllowedPathsCombinesPathAndContentApproval(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{writeToolDefinition()}}
@@ -1867,9 +1867,8 @@ func TestWritePathApprovalPrecedesWriteApproval(t *testing.T) {
 		},
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
-			toolID:           "tool_1",
-			toolName:         "write",
-			approvalDecision: "approve_rule_run",
+			toolID:   "tool_1",
+			toolName: "write",
 			args: map[string]any{
 				"file_path":   filepath.Join(outside, "owner.md"),
 				"content":     "hello",
@@ -1881,21 +1880,211 @@ func TestWritePathApprovalPrecedesWriteApproval(t *testing.T) {
 		t.Fatalf("invoke active write: %v", err)
 	}
 	if len(executor.invocations) != 0 {
-		t.Fatalf("expected write not to execute before write approval, got %#v", executor.invocations)
-	}
-	if len(stream.execCtx.FileAccessRuleApprovals) != 1 {
-		t.Fatalf("expected write path rule approval, got %#v", stream.execCtx.FileAccessRuleApprovals)
+		t.Fatalf("expected write not to execute before combined approval, got %#v", executor.invocations)
 	}
 	if len(stream.pending) != 1 {
-		t.Fatalf("expected write approval pending, got %#v", stream.pending)
+		t.Fatalf("expected one combined approval pending, got %#v", stream.pending)
 	}
 	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
 	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
 		t.Fatalf("expected write approval ask, got %#v", stream.pending)
 	}
 	item, _ := ask.Approvals[0].(map[string]any)
-	if !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") || item["description"] != "写入 owner 文档" {
-		t.Fatalf("unexpected write approval item: %#v", item)
+	if !strings.Contains(fmt.Sprint(item["command"]), "write ") || !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") {
+		t.Fatalf("expected combined approval command to include write size, got %#v", item)
+	}
+	if !strings.Contains(fmt.Sprint(item["description"]), "写入 owner 文档") || !strings.Contains(fmt.Sprint(item["description"]), "路径超出允许目录") {
+		t.Fatalf("expected combined approval description, got %#v", item)
+	}
+	options, _ := item["options"].([]any)
+	if !approvalOptionsContainDecision(options, "approve_rule_run") {
+		t.Fatalf("expected approve_rule_run option, got %#v", options)
+	}
+}
+
+func TestWriteOutsideAllowedPathsCombinedSubmitExecutesOriginalToolCall(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	runControl := contracts.NewRunControl(context.Background(), "run_1")
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{writeToolDefinition()}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RequestID: "req_1", ChatID: "chat_1", RunID: "run_1"},
+		runControl: runControl,
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     root,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "write",
+			args: map[string]any{
+				"file_path":   filepath.Join(outside, "owner.md"),
+				"content":     "hello",
+				"description": "写入 owner 文档",
+			},
+		},
+	}
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active write: %v", err)
+	}
+	if stream.hitlPendingCall == nil || stream.hitlPendingCall.toolID != "tool_1" {
+		t.Fatalf("expected original write call to wait for approval, got %#v", stream.hitlPendingCall)
+	}
+	ask := stream.pending[0].(contracts.DeltaAwaitAsk)
+	stream.pending = nil
+	ack := runControl.ResolveSubmit(api.SubmitRequest{
+		RequestID:  "req_1",
+		ChatID:     "chat_1",
+		RunID:      "run_1",
+		AwaitingID: ask.AwaitingID,
+		Params:     encodedSubmitParams(t, []map[string]any{{"id": "tool_1", "decision": "approve_rule_run"}}),
+	})
+	if !ack.Accepted {
+		t.Fatalf("submit not accepted: %#v", ack)
+	}
+	if err := stream.awaitHITLSubmitAndExecute(); err != nil {
+		t.Fatalf("awaitHITLSubmitAndExecute returned error: %v", err)
+	}
+	if len(executor.invocations) != 1 || executor.invocations[0].name != "write" {
+		t.Fatalf("expected original write to execute once, got %#v", executor.invocations)
+	}
+	for _, delta := range stream.pending {
+		if nextAsk, ok := delta.(contracts.DeltaAwaitAsk); ok {
+			t.Fatalf("did not expect second approval ask, got %#v", nextAsk)
+		}
+	}
+	if len(stream.execCtx.FileAccessRuleApprovals) != 1 || len(stream.execCtx.FileWriteRuleApprovals) != 1 {
+		t.Fatalf("expected both rule approvals, access=%#v write=%#v", stream.execCtx.FileAccessRuleApprovals, stream.execCtx.FileWriteRuleApprovals)
+	}
+}
+
+func TestWriteOutsideAllowedPathsCombinedApprovalDecisions(t *testing.T) {
+	for _, decision := range []string{"approve", "approve_rule_run"} {
+		t.Run(decision, func(t *testing.T) {
+			root := t.TempDir()
+			outside := t.TempDir()
+			cfg := config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:       root,
+					AllowedReadPaths:       []string{"."},
+					AllowedWritePaths:      []string{"."},
+					MaxReadBytes:           1024,
+					MaxWriteBytes:          1024,
+					RequireWriteApproval:   true,
+					RequireReadBeforeWrite: false,
+				},
+			}
+			executor, err := runtimetools.NewRuntimeToolExecutor(cfg, nil, nil, nil, nil)
+			if err != nil {
+				t.Fatalf("new executor: %v", err)
+			}
+			target := filepath.Join(outside, "owner.md")
+			stream := &llmRunStream{
+				ctx:     context.Background(),
+				session: contracts.QuerySession{RunID: "run_1"},
+				engine:  &LLMAgentEngine{cfg: cfg, tools: executor},
+				execCtx: &contracts.ExecutionContext{},
+				activeToolCall: &preparedToolInvocation{
+					toolID:           "tool_1",
+					toolName:         "write",
+					approvalDecision: decision,
+					args: map[string]any{
+						"file_path":   target,
+						"content":     "hello",
+						"description": "写入 owner 文档",
+					},
+				},
+			}
+
+			if err := stream.invokeActiveToolCall(); err != nil {
+				t.Fatalf("invoke active write: %v", err)
+			}
+			data, err := os.ReadFile(target)
+			if err != nil {
+				t.Fatalf("read written file: %v", err)
+			}
+			if string(data) != "hello" {
+				t.Fatalf("unexpected written content: %q", string(data))
+			}
+			if decision == "approve" {
+				if len(stream.execCtx.FileAccessApprovals) != 0 || len(stream.execCtx.FileWriteApprovals) != 0 {
+					t.Fatalf("expected exact approvals to be consumed, access=%#v write=%#v", stream.execCtx.FileAccessApprovals, stream.execCtx.FileWriteApprovals)
+				}
+			} else {
+				if len(stream.execCtx.FileAccessRuleApprovals) != 1 || len(stream.execCtx.FileWriteRuleApprovals) != 1 {
+					t.Fatalf("expected both rule approvals, access=%#v write=%#v", stream.execCtx.FileAccessRuleApprovals, stream.execCtx.FileWriteRuleApprovals)
+				}
+			}
+			if len(stream.pending) != 1 {
+				t.Fatalf("expected tool result pending, got %#v", stream.pending)
+			}
+			result, ok := stream.pending[0].(contracts.DeltaToolResult)
+			if !ok || result.ToolID != "tool_1" || result.Result.Error != "" || result.Result.ExitCode != 0 {
+				t.Fatalf("expected successful original write result, got %#v", stream.pending)
+			}
+		})
+	}
+}
+
+func TestWriteOutsideAllowedPathsCombinedRejectDoesNotExecute(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	target := filepath.Join(outside, "owner.md")
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{writeToolDefinition()}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     root,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:           "tool_1",
+			toolName:         "write",
+			approvalDecision: "reject",
+			args: map[string]any{
+				"file_path":   target,
+				"content":     "hello",
+				"description": "写入 owner 文档",
+			},
+		},
+	}
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active write: %v", err)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected rejected write not to execute, got %#v", executor.invocations)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("expected target file not to exist, stat err=%v", err)
+	}
+	if len(stream.pending) != 1 {
+		t.Fatalf("expected tool result pending, got %#v", stream.pending)
+	}
+	result, ok := stream.pending[0].(contracts.DeltaToolResult)
+	if !ok || result.Result.Error != "file_write_denied" {
+		t.Fatalf("expected file_write_denied tool result, got %#v", stream.pending)
 	}
 }
 
