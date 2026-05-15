@@ -105,6 +105,9 @@ func TestRunLevelSandboxSessionIDReusesRunIDAcrossRequestIDs(t *testing.T) {
 	if second.SandboxSession.SessionID != "run-run_shared" {
 		t.Fatalf("unexpected second bound session ID: %#v", second.SandboxSession)
 	}
+	if _, err := os.Stat(filepath.Join(paths.ChatsDir, "chat_1")); err != nil {
+		t.Fatalf("expected sandbox workspace chat directory to be created: %v", err)
+	}
 }
 
 func TestRunLevelSandboxSessionIDFallsBackToRunIDWithoutRequestID(t *testing.T) {

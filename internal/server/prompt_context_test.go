@@ -100,6 +100,10 @@ func TestResolveLocalPathsIncludesAgentAndRegistryPaths(t *testing.T) {
 
 	cfg := testPromptContextConfig(t)
 	agentDir := filepath.Join(cfg.Paths.AgentsDir, "demo-agent")
+	chatDir := filepath.Join(cfg.Paths.ChatsDir, "chat-1")
+	if err := os.MkdirAll(chatDir, 0o755); err != nil {
+		t.Fatalf("create chat attachments dir: %v", err)
+	}
 
 	paths := resolveLocalPaths(cfg.Paths, "chat-1", agentDir)
 	if paths.AgentDir != agentDir {
@@ -134,6 +138,19 @@ func TestResolveLocalPathsIncludesAgentAndRegistryPaths(t *testing.T) {
 	}
 	if paths.ChatAttachmentsDir != filepath.Join(cfg.Paths.ChatsDir, "chat-1") {
 		t.Fatalf("chat attachments dir = %q", paths.ChatAttachmentsDir)
+	}
+	if paths.WorkingDirectory == "" {
+		t.Fatal("expected working directory to be populated")
+	}
+}
+
+func TestResolveLocalPathsOmitsMissingChatAttachmentsDir(t *testing.T) {
+	t.Parallel()
+
+	cfg := testPromptContextConfig(t)
+	paths := resolveLocalPaths(cfg.Paths, "chat-missing", "")
+	if paths.ChatAttachmentsDir != "" {
+		t.Fatalf("chat attachments dir = %q, want empty", paths.ChatAttachmentsDir)
 	}
 	if paths.WorkingDirectory == "" {
 		t.Fatal("expected working directory to be populated")

@@ -61,6 +61,9 @@ func TestArchiverMovesChatToArchiveAndPreservesAttachments(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
+	if err := os.MkdirAll(active.ChatDir("chat-archiver"), 0o755); err != nil {
+		t.Fatalf("create chat attachments dir: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(active.ChatDir("chat-archiver"), "artifact.txt"), []byte("artifact"), 0o644); err != nil {
 		t.Fatalf("write artifact: %v", err)
 	}

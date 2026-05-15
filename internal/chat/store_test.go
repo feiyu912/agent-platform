@@ -13,6 +13,31 @@ import (
 	"agent-platform-runner-go/internal/stream"
 )
 
+func TestEnsureChatDoesNotCreateChatDirectory(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewFileStore(root)
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	summary, created, err := store.EnsureChat("chat-no-dir", "agent", "", "hello")
+	if err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if !created {
+		t.Fatal("expected chat to be created")
+	}
+	if summary.ChatID != "chat-no-dir" {
+		t.Fatalf("chat id = %q", summary.ChatID)
+	}
+	if _, err := os.Stat(store.ChatDir("chat-no-dir")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no chat directory, stat err=%v", err)
+	}
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("expected chat root to exist: %v", err)
+	}
+}
+
 func TestFileStoreSetPendingAwaitingPersistsIntoSummaryAndListChats(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

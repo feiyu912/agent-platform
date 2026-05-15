@@ -136,6 +136,9 @@ func TestUploadIDSeedsFromExistingRootUploadFiles(t *testing.T) {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	chatDir := fixture.chats.ChatDir("chat_legacy_upload_ids")
+	if err := os.MkdirAll(chatDir, 0o755); err != nil {
+		t.Fatalf("create legacy chat dir: %v", err)
+	}
 	for name, content := range map[string]string{
 		"legacy-one.txt":     "one",
 		"legacy-two.txt":     "two",

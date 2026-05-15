@@ -3,7 +3,6 @@ package chat
 import (
 	"database/sql"
 	"errors"
-	"os"
 	"strings"
 	"time"
 )
@@ -46,8 +45,6 @@ func (s *FileStore) EnsureChat(chatID string, agentKey string, teamID string, fi
 	if err != nil {
 		return Summary{}, false, err
 	}
-	// Create directory for uploads/attachments
-	_ = os.MkdirAll(s.ChatDir(chatID), 0o755)
 	return summary, true, nil
 }
 

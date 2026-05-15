@@ -160,6 +160,45 @@ func TestPrepareQueryUpdatesExistingChatAgentKey(t *testing.T) {
 	}
 }
 
+func TestPrepareQueryNonSandboxAgentDoesNotCreateChatDirectory(t *testing.T) {
+	chats, err := chat.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new chat store: %v", err)
+	}
+
+	server := &Server{deps: Dependencies{
+		Config: config.Config{
+			ContainerHub: config.ContainerHubConfig{Enabled: false},
+		},
+		Chats: chats,
+		Registry: queryMemoryRegistry{
+			def: catalog.AgentDefinition{
+				Key:      "agent-a",
+				Name:     "Agent A",
+				ModelKey: "mock-model",
+			},
+		},
+	}}
+
+	req := httptest.NewRequest("POST", "/api/query", bytes.NewBufferString(`{"agentKey":"agent-a","chatId":"chat-no-dir","message":"hello"}`))
+	prepared, err := server.prepareQuery(req)
+	if err != nil {
+		t.Fatalf("prepareQuery: %v", err)
+	}
+	if prepared.session.AgentHasRuntimeSandbox {
+		t.Fatal("expected non-sandbox session")
+	}
+	if _, err := os.Stat(chats.ChatDir("chat-no-dir")); !os.IsNotExist(err) {
+		t.Fatalf("expected no chat directory, stat err=%v", err)
+	}
+	if prepared.session.RuntimeContext.LocalPaths.ChatAttachmentsDir != "" {
+		t.Fatalf("chat attachments dir = %q, want empty", prepared.session.RuntimeContext.LocalPaths.ChatAttachmentsDir)
+	}
+	if prepared.session.RuntimeContext.LocalPaths.WorkingDirectory == "" {
+		t.Fatal("expected working directory fallback to be available")
+	}
+}
+
 func TestPrepareQueryBuildsLayeredMemoryContexts(t *testing.T) {
 	chats, err := chat.NewFileStore(t.TempDir())
 	if err != nil {

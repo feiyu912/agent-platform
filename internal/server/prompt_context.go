@@ -185,7 +185,7 @@ func buildSkillCatalogPrompt(def catalog.AgentDefinition, marketDir string, appe
 func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string) contracts.LocalPaths {
 	runtimeHome := filepath.Dir(filepath.Clean(paths.AgentsDir))
 	workingDirectory, _ := os.Getwd()
-	attachmentsDir := cleanOrEmpty(filepath.Join(paths.ChatsDir, strings.TrimSpace(chatID)))
+	attachmentsDir := existingChatAttachmentsDir(paths, chatID)
 	agentDir = cleanOrEmpty(agentDir)
 	agentSkillsDir := ""
 	if agentDir != "" {
@@ -214,6 +214,19 @@ func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string)
 		ViewportsDir:       cleanOrEmpty(filepath.Join(paths.RegistriesDir, "viewports")),
 		ChatAttachmentsDir: attachmentsDir,
 	}
+}
+
+func existingChatAttachmentsDir(paths config.PathsConfig, chatID string) string {
+	chatID = strings.TrimSpace(chatID)
+	if chatID == "" {
+		return ""
+	}
+	dir := filepath.Join(paths.ChatsDir, chatID)
+	stat, err := os.Stat(dir)
+	if err != nil || !stat.IsDir() {
+		return ""
+	}
+	return cleanOrEmpty(dir)
 }
 
 func resolveSandboxPaths(cfg config.Config, def catalog.AgentDefinition, chatID string) contracts.SandboxPaths {
