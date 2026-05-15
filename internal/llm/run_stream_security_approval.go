@@ -15,7 +15,7 @@ func (s *llmRunStream) emitBashSecurityApprovalDeltas(invocation *preparedToolIn
 	s.hitlMatch = &result
 	s.hitlAwaitingID = buildHITLAwaitingID(invocation.toolID)
 
-	args := s.buildConfirmApprovalArgs(invocation)
+	args := s.buildConfirmApprovalArgs(invocation, result)
 	s.hitlAwaitArgs = CloneMap(args)
 	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args, 0))
 
@@ -37,7 +37,7 @@ func (s *llmRunStream) emitFileWriteApprovalDeltas(invocation *preparedToolInvoc
 	s.hitlMatch = &result
 	s.hitlAwaitingID = buildHITLAwaitingID(invocation.toolID)
 
-	args := s.buildConfirmApprovalArgs(invocation)
+	args := s.buildConfirmApprovalArgs(invocation, result)
 	s.hitlAwaitArgs = CloneMap(args)
 	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args, 0))
 
@@ -59,7 +59,7 @@ func (s *llmRunStream) emitFileAccessApprovalDeltas(invocation *preparedToolInvo
 	s.hitlMatch = &result
 	s.hitlAwaitingID = buildHITLAwaitingID(invocation.toolID)
 
-	args := s.buildConfirmApprovalArgs(invocation)
+	args := s.buildConfirmApprovalArgs(invocation, result)
 	s.hitlAwaitArgs = CloneMap(args)
 	s.pending = append(s.pending, s.buildHITLAwaitDelta(s.hitlAwaitingID, args, 0))
 
@@ -119,7 +119,7 @@ func bashSecurityInterceptResult(invocation *preparedToolInvocation, review bash
 			Level:        level,
 			Title:        "Bash security approval",
 			ViewportType: "builtin",
-			ViewportKey:  "confirm_dialog",
+			ViewportKey:  "approval",
 		},
 		OriginalCommand: command,
 		MatchedCommand:  command,
@@ -135,7 +135,7 @@ func fileWriteInterceptResult(plan filetools.WritePlan) hitl.InterceptResult {
 			Level:        2,
 			Title:        "File write approval",
 			ViewportType: "builtin",
-			ViewportKey:  "confirm_dialog",
+			ViewportKey:  "approval",
 		},
 		OriginalCommand: plan.CommandText,
 		MatchedCommand:  plan.CommandText,
@@ -155,7 +155,7 @@ func fileAccessInterceptResult(plan filetools.AccessPlan) hitl.InterceptResult {
 			Level:        1,
 			Title:        title,
 			ViewportType: "builtin",
-			ViewportKey:  "confirm_dialog",
+			ViewportKey:  "approval",
 		},
 		OriginalCommand: plan.CommandText,
 		MatchedCommand:  plan.CommandText,

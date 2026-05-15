@@ -76,11 +76,13 @@ func (h *AskUserQuestionHandler) BuildInitialAwaitAsk(toolID string, runID strin
 		return nil
 	}
 	return &stream.AwaitAsk{
-		AwaitingID: toolID,
-		Mode:       "question",
-		Timeout:    timeoutMs,
-		RunID:      runID,
-		Questions:  questions,
+		AwaitingID:   toolID,
+		ViewportType: "builtin",
+		ViewportKey:  "question",
+		Mode:         "question",
+		Timeout:      timeoutMs,
+		RunID:        runID,
+		Questions:    questions,
 	}
 }
 

@@ -188,12 +188,22 @@ func (s *llmRunStream) buildHITLArgs(invocation *preparedToolInvocation, result 
 	if strings.EqualFold(result.Rule.ViewportType, "html") {
 		return s.buildFormApprovalArgs(command, result)
 	}
-	return s.buildConfirmApprovalArgs(invocation)
+	return s.buildConfirmApprovalArgs(invocation, result)
 }
 
-func (s *llmRunStream) buildConfirmApprovalArgs(invocation *preparedToolInvocation) map[string]any {
+func (s *llmRunStream) buildConfirmApprovalArgs(invocation *preparedToolInvocation, result hitl.InterceptResult) map[string]any {
+	viewportType := strings.TrimSpace(result.Rule.ViewportType)
+	if viewportType == "" {
+		viewportType = "builtin"
+	}
+	viewportKey := strings.TrimSpace(result.Rule.ViewportKey)
+	if viewportKey == "" {
+		viewportKey = "approval"
+	}
 	return map[string]any{
-		"mode": "approval",
+		"mode":         "approval",
+		"viewportType": viewportType,
+		"viewportKey":  viewportKey,
 		"approvals": []any{
 			s.buildApprovalAskItem(invocation),
 		},
@@ -524,9 +534,27 @@ func (s *llmRunStream) buildHITLAwaitDelta(awaitingID string, args map[string]an
 		Timeout:    timeout,
 		RunID:      s.session.RunID,
 	}
-	if await.Mode == "form" {
-		await.ViewportType = strings.TrimSpace(AnyStringNode(args["viewportType"]))
-		await.ViewportKey = strings.TrimSpace(AnyStringNode(args["viewportKey"]))
+	await.ViewportType = strings.TrimSpace(AnyStringNode(args["viewportType"]))
+	await.ViewportKey = strings.TrimSpace(AnyStringNode(args["viewportKey"]))
+	switch await.Mode {
+	case "question":
+		if await.ViewportType == "" {
+			await.ViewportType = "builtin"
+		}
+		if await.ViewportKey == "" {
+			await.ViewportKey = "question"
+		}
+	case "approval":
+		if await.ViewportType == "" {
+			await.ViewportType = "builtin"
+		}
+		if await.ViewportKey == "" {
+			await.ViewportKey = "approval"
+		}
+	case "form":
+		if await.ViewportType == "" {
+			await.ViewportType = "html"
+		}
 	}
 	if questions := cloneAnySlice(args["questions"]); len(questions) > 0 {
 		await.Questions = questions

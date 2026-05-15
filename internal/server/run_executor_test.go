@@ -16,18 +16,30 @@ import (
 type recordingNotificationSink struct {
 	mu         sync.Mutex
 	eventTypes []string
+	payloads   []map[string]any
 }
 
-func (s *recordingNotificationSink) Broadcast(eventType string, _ map[string]any) {
+func (s *recordingNotificationSink) Broadcast(eventType string, payload map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.eventTypes = append(s.eventTypes, eventType)
+	cloned := map[string]any{}
+	for key, value := range payload {
+		cloned[key] = value
+	}
+	s.payloads = append(s.payloads, cloned)
 }
 
 func (s *recordingNotificationSink) EventTypes() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.eventTypes...)
+}
+
+func (s *recordingNotificationSink) Payloads() []map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]map[string]any(nil), s.payloads...)
 }
 
 func TestPersistRunCompletionInvokesOnPersisted(t *testing.T) {
@@ -163,6 +175,42 @@ func TestBroadcastRunCompletionEmitsUnreadBeforeChatUpdated(t *testing.T) {
 	order = append(order, notifications.EventTypes()...)
 	if want := []string{"chat.unread", "chat.updated"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("unexpected broadcast order: got %v want %v", order, want)
+	}
+}
+
+func TestHandleAwaitingLifecycleBroadcastsViewportMetadata(t *testing.T) {
+	notifications := &recordingNotificationSink{}
+	tracker := &awaitingTracker{}
+	handleAwaitingLifecycle(RunExecutorParams{
+		Session: QuerySession{
+			ChatID:   "chat-1",
+			RunID:    "run-1",
+			AgentKey: "agent-a",
+		},
+		Notifications: notifications,
+	}, stream.EventData{
+		Type:      "awaiting.ask",
+		Timestamp: 1234,
+		Payload: map[string]any{
+			"awaitingId":   "await-1",
+			"runId":        "run-1",
+			"mode":         "form",
+			"timeout":      120000,
+			"viewportType": "html",
+			"viewportKey":  "leave_form",
+		},
+	}, tracker)
+
+	if eventTypes := notifications.EventTypes(); !reflect.DeepEqual(eventTypes, []string{"awaiting.ask"}) {
+		t.Fatalf("unexpected event types: %#v", eventTypes)
+	}
+	payloads := notifications.Payloads()
+	if len(payloads) != 1 {
+		t.Fatalf("expected one notification payload, got %#v", payloads)
+	}
+	payload := payloads[0]
+	if payload["viewportType"] != "html" || payload["viewportKey"] != "leave_form" {
+		t.Fatalf("expected viewport metadata in awaiting.ask notification, got %#v", payload)
 	}
 }
 

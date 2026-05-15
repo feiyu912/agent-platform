@@ -42,8 +42,8 @@ func TestAskUserQuestionHandlerBuildInitialAwaitAsk(t *testing.T) {
 	if awaitAsk.Mode != "question" || awaitAsk.AwaitingID != "tool_1" {
 		t.Fatalf("unexpected await ask %#v", awaitAsk)
 	}
-	if awaitAsk.ViewportKey != "" || awaitAsk.ViewportType != "" {
-		t.Fatalf("did not expect viewport metadata, got %#v", awaitAsk)
+	if awaitAsk.ViewportType != "builtin" || awaitAsk.ViewportKey != "question" {
+		t.Fatalf("expected builtin question viewport metadata, got %#v", awaitAsk)
 	}
 	questions := awaitAsk.Questions
 	if len(questions) != 2 {

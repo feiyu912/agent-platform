@@ -975,8 +975,8 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 				},
 			}),
 			expectedCommand: "git push origin main",
-			expectedView:    "",
-			expectedKey:     "",
+			expectedView:    "builtin",
+			expectedKey:     "confirm_dialog",
 		},
 		{
 			name: "leave html viewport override",
@@ -1696,6 +1696,9 @@ func TestFileReadAccessApprovalEmitsAwaitingAsk(t *testing.T) {
 	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
 	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
 		t.Fatalf("expected approval ask, got %#v", stream.pending)
+	}
+	if ask.ViewportType != "builtin" || ask.ViewportKey != "approval" {
+		t.Fatalf("expected builtin approval viewport, got %#v", ask)
 	}
 	item, _ := ask.Approvals[0].(map[string]any)
 	if item["description"] != "read超出允许目录" || !strings.Contains(fmt.Sprint(item["command"]), "read ") {

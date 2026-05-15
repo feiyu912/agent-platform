@@ -239,12 +239,34 @@ func TestDispatcherEmitsApprovalModeAwaitAskWithQuestions(t *testing.T) {
 	})
 	assertEventTypes(t, viewportEvents, "awaiting.ask")
 	payload := viewportEvents[0].ToData()
-	if _, exists := payload["viewportType"]; exists {
-		t.Fatalf("did not expect viewport metadata on approval ask, got %#v", payload)
+	if payload["viewportType"] != "builtin" || payload["viewportKey"] != "approval" {
+		t.Fatalf("expected builtin approval viewport metadata, got %#v", payload)
 	}
 	approvals, _ := payload["approvals"].([]any)
 	if len(approvals) != 1 {
 		t.Fatalf("expected approvals in approval awaiting.ask, got %#v", payload)
+	}
+}
+
+func TestDispatcherDefaultsQuestionAwaitAskViewport(t *testing.T) {
+	dispatcher := NewDispatcher(StreamRequest{
+		RunID:  "run_1",
+		ChatID: "chat_1",
+	})
+
+	events := dispatcher.Dispatch(AwaitAsk{
+		AwaitingID: "tool_1",
+		Mode:       "question",
+		Timeout:    120000,
+		RunID:      "run_1",
+		Questions: []any{
+			map[string]any{"id": "q1", "question": "Need confirmation", "type": "text"},
+		},
+	})
+	assertEventTypes(t, events, "awaiting.ask")
+	payload := events[0].ToData()
+	if payload["viewportType"] != "builtin" || payload["viewportKey"] != "question" {
+		t.Fatalf("expected builtin question viewport metadata, got %#v", payload)
 	}
 }
 
@@ -320,6 +342,9 @@ func TestDispatcherEmitsApprovalModeAwaitAskWithPayloadOnlyForForm(t *testing.T)
 	})
 	assertEventTypes(t, events, "awaiting.ask")
 	payload := events[0].ToData()
+	if payload["viewportType"] != "html" || payload["viewportKey"] != "leave_form" {
+		t.Fatalf("expected html form viewport metadata, got %#v", payload)
+	}
 	forms, _ := payload["forms"].([]any)
 	if len(forms) != 1 {
 		t.Fatalf("expected forms in form awaiting.ask, got %#v", payload)

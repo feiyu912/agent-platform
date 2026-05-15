@@ -213,13 +213,12 @@ func (d *StreamEventDispatcher) newAwaitAskEvent(input AwaitAsk) StreamEvent {
 		"timeout":    input.Timeout,
 		"runId":      input.RunID,
 	}
-	if strings.EqualFold(strings.TrimSpace(input.Mode), "form") {
-		if strings.TrimSpace(input.ViewportType) != "" {
-			payload["viewportType"] = input.ViewportType
-		}
-		if strings.TrimSpace(input.ViewportKey) != "" {
-			payload["viewportKey"] = input.ViewportKey
-		}
+	viewportType, viewportKey := awaitAskViewport(input)
+	if viewportType != "" {
+		payload["viewportType"] = viewportType
+	}
+	if viewportKey != "" {
+		payload["viewportKey"] = viewportKey
 	}
 	if len(input.Questions) > 0 {
 		payload["questions"] = input.Questions
@@ -231,4 +230,31 @@ func (d *StreamEventDispatcher) newAwaitAskEvent(input AwaitAsk) StreamEvent {
 		payload["forms"] = input.Forms
 	}
 	return NewEvent("awaiting.ask", payload)
+}
+
+func awaitAskViewport(input AwaitAsk) (string, string) {
+	viewportType := strings.TrimSpace(input.ViewportType)
+	viewportKey := strings.TrimSpace(input.ViewportKey)
+	mode := strings.ToLower(strings.TrimSpace(input.Mode))
+	switch mode {
+	case "question":
+		if viewportType == "" {
+			viewportType = "builtin"
+		}
+		if viewportKey == "" {
+			viewportKey = "question"
+		}
+	case "approval":
+		if viewportType == "" {
+			viewportType = "builtin"
+		}
+		if viewportKey == "" {
+			viewportKey = "approval"
+		}
+	case "form":
+		if viewportType == "" {
+			viewportType = "html"
+		}
+	}
+	return viewportType, viewportKey
 }

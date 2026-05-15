@@ -252,8 +252,8 @@ runtimeConfig:
 
 - `mode=question`
   - 来源：`ask_user_question`
-  - `awaiting.ask`：`{"awaitingId":"...","mode":"question","timeout":...,"runId":"...","questions":[...]}`
-  - question 不再携带 `viewportType` / `viewportKey`
+  - `awaiting.ask`：`{"awaitingId":"...","mode":"question","viewportType":"builtin","viewportKey":"question","timeout":...,"runId":"...","questions":[...]}`
+  - question 始终显式携带最终 `viewportType` / `viewportKey`；未指定时兜底为 `builtin/question`
   - `/api/submit.params`：`[{"id":"q1","answer":"..."},{"id":"q2","answers":[...]}]`（`id` 可省略，仅作审计字段）
   - `awaiting.answer`：
     - answered：`{"awaitingId":"...","mode":"question","status":"answered","answers":[...]}`
@@ -262,8 +262,8 @@ runtimeConfig:
 
 - `mode=approval`
   - 来源：Bash HITL builtin confirm，以及文件工具越权路径审批。
-  - `awaiting.ask`：`{"awaitingId":"...","mode":"approval","timeout":...,"runId":"...","approvals":[{"id":"tool_bash","command":"chmod 777 ~/a.sh","description":"放开脚本权限","options":[{"label":"同意","decision":"approve"},{"label":"同意（本次运行同规则都放行）","decision":"approve_rule_run"},{"label":"拒绝","decision":"reject"}],"allowFreeText":true,"freeTextPlaceholder":"可选：填写理由"}]}`
-  - approval 不再携带 `viewportType` / `viewportKey`
+  - `awaiting.ask`：`{"awaitingId":"...","mode":"approval","viewportType":"builtin","viewportKey":"approval","timeout":...,"runId":"...","approvals":[{"id":"tool_bash","command":"chmod 777 ~/a.sh","description":"放开脚本权限","options":[{"label":"同意","decision":"approve"},{"label":"同意（本次运行同规则都放行）","decision":"approve_rule_run"},{"label":"拒绝","decision":"reject"}],"allowFreeText":true,"freeTextPlaceholder":"可选：填写理由"}]}`
+  - approval 始终显式携带最终 `viewportType` / `viewportKey`；未指定时兜底为 `builtin/approval`
   - 用户只能批准或拒绝，不能改命令内容
   - `/api/submit.params`：`[{"id":"tool_bash","decision":"approve|approve_rule_run|reject","reason":"..."}]`（`id` 可省略，仅作审计字段）
   - `awaiting.answer`：
@@ -274,7 +274,7 @@ runtimeConfig:
 - `mode=form`
   - 来源：Bash HITL html form
   - `awaiting.ask`：`{"awaitingId":"...","mode":"form","viewportType":"html","viewportKey":"leave_form","timeout":...,"runId":"...","forms":[{"id":"form-1","html?":"...","form":{...}}]}`
-  - form 是唯一保留 `viewportType:"html"` + `viewportKey` 的形态
+  - form 显式携带最终 `viewportType:"html"` + `viewportKey`；已有 HTML key 不会被 builtin 默认值覆盖
   - `/api/submit.params`：
     - approve：`[{"id":"form-1","decision":"approve","form":{...}}]`（`id` 可省略；`form` 必填，允许修改后回传）
     - reject：`[{"id":"form-1","decision":"reject","reason?":"...","form?":{...}}]`（`id` 可省略；`reason` 和修改后的 `form` 可选；cancel 合并为 reject）

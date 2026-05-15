@@ -305,7 +305,7 @@ func handleAwaitingLifecycle(params RunExecutorParams, data stream.EventData, tr
 		tracker.pendingAwaitingID = awaitingID
 		tracker.pendingMode = mode
 		if params.Notifications != nil {
-			params.Notifications.Broadcast("awaiting.ask", map[string]any{
+			payload := map[string]any{
 				"chatId":     params.Session.ChatID,
 				"runId":      runID,
 				"agentKey":   params.Session.AgentKey,
@@ -313,7 +313,14 @@ func handleAwaitingLifecycle(params RunExecutorParams, data stream.EventData, tr
 				"mode":       mode,
 				"timeout":    contracts.AnyIntNode(data.Value("timeout")),
 				"createdAt":  data.Timestamp,
-			})
+			}
+			if viewportType := strings.TrimSpace(data.String("viewportType")); viewportType != "" {
+				payload["viewportType"] = viewportType
+			}
+			if viewportKey := strings.TrimSpace(data.String("viewportKey")); viewportKey != "" {
+				payload["viewportKey"] = viewportKey
+			}
+			params.Notifications.Broadcast("awaiting.ask", payload)
 		}
 	case "awaiting.answer":
 		awaitingID := strings.TrimSpace(data.String("awaitingId"))
