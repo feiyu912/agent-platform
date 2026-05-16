@@ -163,6 +163,11 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 		Params: map[string]any{
 			"desktop": map[string]any{
 				"source": "copilot",
+				"route":  "/settings?section=navigation",
+				"pageKey": "native:/settings?section=navigation",
+				"pageKind": "native",
+				"snapshotVersion": 3,
+				"snapshotAt": "2026-05-16T12:00:00Z",
 				"pageContext": map[string]any{
 					"title": "Bing",
 					"url":   "https://www.bing.com/",
@@ -174,8 +179,14 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 	for _, expected := range []string{
 		"Runtime Context: ZenMind Desktop",
 		"desktop_action",
-		"desktop.embeddedWeb.getPageContext",
-		"desktop.embeddedWeb.readPageData",
+		"pageContext is only a snapshot",
+		"desktop.page.readCurrent",
+		"desktop.page.extractStructured",
+		"desktop.page.fillForm",
+		"route: /settings?section=navigation",
+		"pageKey: native:/settings?section=navigation",
+		"pageKind: native",
+		"snapshotVersion: 3",
 		"currentPageTitle: Bing",
 		"currentPageUrl: https://www.bing.com/",
 	} {

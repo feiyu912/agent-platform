@@ -16,6 +16,11 @@ const defaultDesktopActionBridgeURL = "http://127.0.0.1:11788/actions/call"
 
 var desktopActionAllowlist = map[string]bool{
 	"desktop.page.getContext":                  true,
+	"desktop.page.readCurrent":                 true,
+	"desktop.page.extractStructured":           true,
+	"desktop.page.interact":                    true,
+	"desktop.page.fillForm":                    true,
+	"desktop.page.submitForm":                  true,
 	"desktop.page.getFormState":                true,
 	"desktop.page.validateForm":                true,
 	"desktop.page.previewPatch":                true,

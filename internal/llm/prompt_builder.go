@@ -146,12 +146,21 @@ func buildDesktopSection(params map[string]any) string {
 	lines := []string{
 		"Runtime Context: ZenMind Desktop",
 		"Desktop Action Bridge is available through the desktop_action tool.",
-		"Use desktop_action with action=desktop.embeddedWeb.getPageContext or action=desktop.embeddedWeb.readPageData before saying you cannot access the current embedded webview, sidebar website, browser surface, or plugin iframe.",
-		"Use desktop.embeddedWeb.extractStructured for tables, lists, forms, and links; use desktop.embeddedWeb.interactElement for click, fill, scroll, focus, or select.",
+		"pageContext is only a snapshot captured when the Desktop page changed. It may already be stale.",
+		"Use desktop_action with action=desktop.page.readCurrent or action=desktop.page.extractStructured when the task depends on the current live Desktop page state.",
+		"Use desktop.page.interact for live page interactions, desktop.page.fillForm to populate form fields without submitting, and desktop.page.submitForm when the form is ready to submit.",
+		"Use desktop.embeddedWeb.* only as a compatibility fallback when the unified desktop.page.* actions are not sufficient.",
 	}
 	if node, ok := desktop.(map[string]any); ok {
 		appendDesktopField(&lines, node, "source")
-		appendDesktopField(&lines, node, "action")
+		appendDesktopField(&lines, node, "route")
+		appendDesktopField(&lines, node, "pageKey")
+		appendDesktopField(&lines, node, "pageKind")
+		appendDesktopField(&lines, node, "surfaceId")
+		appendDesktopField(&lines, node, "webContentsId")
+		appendDesktopField(&lines, node, "frameMatchUrl")
+		appendDesktopField(&lines, node, "snapshotVersion")
+		appendDesktopField(&lines, node, "snapshotAt")
 		appendDesktopField(&lines, node, "permissionMode")
 		if pageContext, ok := node["pageContext"].(map[string]any); ok {
 			if title := strings.TrimSpace(stringValue(pageContext["title"])); title != "" {
@@ -166,11 +175,22 @@ func buildDesktopSection(params map[string]any) string {
 }
 
 func appendDesktopField(lines *[]string, node map[string]any, key string) {
-	value := strings.TrimSpace(stringValue(node[key]))
-	if value == "" {
-		return
+	switch value := node[key].(type) {
+	case string:
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		*lines = append(*lines, key+": "+sanitizeYAMLScalar(trimmed))
+	case int, int8, int16, int32, int64:
+		*lines = append(*lines, key+": "+fmt.Sprint(value))
+	case uint, uint8, uint16, uint32, uint64:
+		*lines = append(*lines, key+": "+fmt.Sprint(value))
+	case float32, float64:
+		*lines = append(*lines, key+": "+fmt.Sprint(value))
+	case bool:
+		*lines = append(*lines, key+": "+fmt.Sprint(value))
 	}
-	*lines = append(*lines, key+": "+sanitizeYAMLScalar(value))
 }
 
 func buildSystemEnvironmentSection(session QuerySession) string {
