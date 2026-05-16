@@ -569,12 +569,12 @@ func defaultConfig() Config {
 }
 
 func (c *Config) applyStructuredConfig() error {
-	c.applyContainerHubFile(ProjectFile("configs/container-hub.yml"))
-	c.applyBashFile(ProjectFile("configs/bash.yml"))
-	c.applyFileToolsFile(ProjectFile("configs/file-tools.yml"))
-	c.applyCORSFile(ProjectFile("configs/cors.yml"))
-	c.applyPromptsFile(ProjectFile("configs/prompts.yml"))
-	if err := c.applyChannelsFile(ProjectFile("configs/channels.yml")); err != nil {
+	c.applyContainerHubFile(ConfigFile("configs/container-hub.yml"))
+	c.applyBashFile(ConfigFile("configs/bash.yml"))
+	c.applyFileToolsFile(ConfigFile("configs/file-tools.yml"))
+	c.applyCORSFile(ConfigFile("configs/cors.yml"))
+	c.applyPromptsFile(ConfigFile("configs/prompts.yml"))
+	if err := c.applyChannelsFile(ConfigFile("configs/channels.yml")); err != nil {
 		return err
 	}
 	return nil
@@ -1135,9 +1135,9 @@ func resolveAuthLocalPublicKeyFile(value string) string {
 		return ""
 	}
 	if strings.Contains(filepath.ToSlash(clean), "/") {
-		return ProjectFile(clean)
+		return ConfigFile(clean)
 	}
-	return ProjectFile(filepath.Join("configs", clean))
+	return ConfigFile(filepath.Join("configs", clean))
 }
 
 func stringEnv(key string, fallback string) string {

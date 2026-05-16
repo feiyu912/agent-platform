@@ -147,6 +147,37 @@ func TestLoadAuthLocalPublicKeyPathPreservesAbsolutePath(t *testing.T) {
 	})
 }
 
+func TestLoadUsesServiceConfigDirForStructuredFilesAndAuthKey(t *testing.T) {
+	configDir := t.TempDir()
+	configsDir := filepath.Join(configDir, "configs")
+	if err := os.MkdirAll(configsDir, 0o755); err != nil {
+		t.Fatalf("create configs dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(configsDir, "prompts.yml"),
+		[]byte("skill:\n  catalog-header: service config header\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write prompts config: %v", err)
+	}
+
+	withIsolatedEnv(t, map[string]string{
+		"SERVICE_CONFIG_DIR": configDir,
+	}, func() {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if cfg.Prompts.Skill.CatalogHeader != "service config header" {
+			t.Fatalf("expected prompts from service config dir, got %q", cfg.Prompts.Skill.CatalogHeader)
+		}
+		wantKeyPath := filepath.Join(configDir, "configs", "local-public-key.pem")
+		if cfg.Auth.LocalPublicKeyFile != wantKeyPath {
+			t.Fatalf("expected auth public key path %q, got %q", wantKeyPath, cfg.Auth.LocalPublicKeyFile)
+		}
+	})
+}
+
 func TestLoadServerPortFromEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"SERVER_PORT": "11949",
@@ -840,6 +871,7 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 	keys := append([]string{}, deprecatedEnvVars...)
 	keys = append(keys,
 		"HOST_PORT",
+		"SERVICE_CONFIG_DIR",
 		"SERVER_PORT",
 		"REGISTRIES_DIR",
 		"OWNER_DIR",

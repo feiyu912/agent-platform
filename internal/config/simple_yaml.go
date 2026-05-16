@@ -16,6 +16,20 @@ func ProjectFile(relative string) string {
 	return filepath.Join(projectRoot(), filepath.Clean(relative))
 }
 
+func ConfigFile(relative string) string {
+	return filepath.Join(configRoot(), filepath.Clean(relative))
+}
+
+func configRoot() string {
+	if configured := strings.TrimSpace(os.Getenv("SERVICE_CONFIG_DIR")); configured != "" {
+		if abs, err := filepath.Abs(configured); err == nil {
+			return abs
+		}
+		return filepath.Clean(configured)
+	}
+	return projectRoot()
+}
+
 func projectRoot() string {
 	projectRootOnce.Do(func() {
 		cwd, err := os.Getwd()
