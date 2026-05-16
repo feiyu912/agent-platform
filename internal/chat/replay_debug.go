@@ -54,6 +54,9 @@ func cumulativeUsagePayload(cumulative map[string]int) map[string]any {
 		"totalTokens":      cumulative["totalTokens"],
 	}
 	addUsageDetailsToMap(out, cumulative["cachedTokens"], cumulative["reasoningTokens"], cumulative["promptCacheHitTokens"], cumulative["promptCacheMissTokens"])
+	if count := cumulative["llmChatCompletionCount"]; count > 0 {
+		out["llmChatCompletionCount"] = count
+	}
 	return out
 }
 
@@ -138,6 +141,9 @@ func usagePayloadFromMap(usage map[string]any) map[string]any {
 		toIntFromKeys(usage, "promptCacheHitTokens", "prompt_cache_hit_tokens"),
 		toIntFromKeys(usage, "promptCacheMissTokens", "prompt_cache_miss_tokens"),
 	)
+	if count := toIntFromKeys(usage, "llmChatCompletionCount", "llm_chat_completion_count"); count > 0 {
+		out["llmChatCompletionCount"] = count
+	}
 	return out
 }
 

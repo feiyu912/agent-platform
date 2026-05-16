@@ -374,6 +374,7 @@ type proxyEventRecorder struct {
 	assistantText strings.Builder
 	startedAt     int64
 	finishReason  string
+	runUsage      chat.UsageData
 	contents      map[string]*proxyContentBucket
 	reasonings    map[string]*proxyContentBucket
 	tools         map[string]*proxyToolBucket
@@ -539,12 +540,15 @@ func (r *proxyEventRecorder) OnEvent(event stream.EventData) {
 		r.stepWriter.OnEvent(event)
 	case "run.complete":
 		r.finishReason = "complete"
+		applyTerminalEventUsage(&r.runUsage, event)
 		r.stepWriter.OnEvent(event)
 	case "run.cancel":
 		r.finishReason = "cancel"
+		applyTerminalEventUsage(&r.runUsage, event)
 		r.stepWriter.OnEvent(event)
 	case "run.error":
 		r.finishReason = "error"
+		applyTerminalEventUsage(&r.runUsage, event)
 		r.stepWriter.OnEvent(event)
 	case "tool.result",
 		"task.start", "task.complete", "task.cancel", "task.fail",
@@ -578,6 +582,7 @@ func (r *proxyEventRecorder) Finish() {
 		FinishReason:    finishReason,
 		StartedAtMillis: r.startedAt,
 		UpdatedAtMillis: time.Now().UnixMilli(),
+		Usage:           r.runUsage,
 	}); err != nil {
 		log.Printf("[proxy][ws] OnRunCompleted failed: %v", err)
 	}

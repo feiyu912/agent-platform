@@ -155,25 +155,28 @@ func (s *llmRunStream) prepareNextTurn() error {
 	if err != nil {
 		return err
 	}
+	s.runLLMChatCompletionCount++
+	s.lastCallLLMChatCompletionCount = 1
 	s.pending = append(s.pending, DeltaDebugPreCall{
-		ChatID:                   s.session.ChatID,
-		ProviderKey:              s.provider.Key,
-		ProviderEndpoint:         preparedRequest.Endpoint,
-		ModelKey:                 s.model.Key,
-		ModelID:                  s.model.ModelID,
-		RequestBody:              preparedRequest.RequestBody,
-		InjectedPrompt:           buildInjectedPromptPayload(s.session, s.req, s.promptBuildOptions, s.messages),
-		SystemRef:                s.currentSystemRef(),
-		ContextWindow:            s.effectiveContextWindow(),
-		CurrentContextSize:       s.currentContextSize(),
-		EstimatedNextCallSize:    s.estimatedNextCallSize(),
-		RunPromptTokens:          s.runPromptTokens,
-		RunCompletionTokens:      s.runCompletionTokens,
-		RunTotalTokens:           s.runTotalTokens,
-		RunCachedTokens:          s.runCachedTokens,
-		RunReasoningTokens:       s.runReasoningTokens,
-		RunPromptCacheHitTokens:  s.runPromptCacheHitTokens,
-		RunPromptCacheMissTokens: s.runPromptCacheMissTokens,
+		ChatID:                    s.session.ChatID,
+		ProviderKey:               s.provider.Key,
+		ProviderEndpoint:          preparedRequest.Endpoint,
+		ModelKey:                  s.model.Key,
+		ModelID:                   s.model.ModelID,
+		RequestBody:               preparedRequest.RequestBody,
+		InjectedPrompt:            buildInjectedPromptPayload(s.session, s.req, s.promptBuildOptions, s.messages),
+		SystemRef:                 s.currentSystemRef(),
+		ContextWindow:             s.effectiveContextWindow(),
+		CurrentContextSize:        s.currentContextSize(),
+		EstimatedNextCallSize:     s.estimatedNextCallSize(),
+		RunPromptTokens:           s.runPromptTokens,
+		RunCompletionTokens:       s.runCompletionTokens,
+		RunTotalTokens:            s.runTotalTokens,
+		RunCachedTokens:           s.runCachedTokens,
+		RunReasoningTokens:        s.runReasoningTokens,
+		RunPromptCacheHitTokens:   s.runPromptCacheHitTokens,
+		RunPromptCacheMissTokens:  s.runPromptCacheMissTokens,
+		RunLLMChatCompletionCount: s.runLLMChatCompletionCount,
 	})
 	turn, err := s.protocol.OpenStream(s.ctx, protocolStreamParams{
 		runID:          s.session.RunID,

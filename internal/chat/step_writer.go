@@ -432,6 +432,9 @@ func (w *StepWriter) captureRootDebugData(eventType string, inner map[string]any
 		w.pendingEstimated = toIntFromKeys(cw, "estimatedSize", "estimated_size")
 	}
 	if usage, ok := inner["usage"].(map[string]any); ok {
+		if eventType == "debug.preCall" {
+			w.pendingUsage = usagePayloadFromMap(map[string]any{"llmChatCompletionCount": 1})
+		}
 		if llm, ok := usage["llmReturnUsage"].(map[string]any); ok {
 			w.pendingUsage = usagePayloadFromMap(llm)
 		}
@@ -453,6 +456,9 @@ func (w *StepWriter) captureTaskDebugData(buffer *taskStepBuffer, eventType stri
 		buffer.pendingEstimated = toIntFromKeys(cw, "estimatedSize", "estimated_size")
 	}
 	if usage, ok := inner["usage"].(map[string]any); ok {
+		if eventType == "debug.preCall" {
+			buffer.pendingUsage = usagePayloadFromMap(map[string]any{"llmChatCompletionCount": 1})
+		}
 		if llm, ok := usage["llmReturnUsage"].(map[string]any); ok {
 			buffer.pendingUsage = usagePayloadFromMap(llm)
 		}

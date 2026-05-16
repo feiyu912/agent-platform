@@ -15,13 +15,14 @@ func TestRunEventProcessorDecoratesTerminalUsage(t *testing.T) {
 			runUsage := chat.UsageData{}
 			processor := &runEventProcessor{
 				chatUsage: chat.UsageData{
-					PromptTokens:          100,
-					CompletionTokens:      50,
-					TotalTokens:           150,
-					CachedTokens:          20,
-					ReasoningTokens:       10,
-					PromptCacheHitTokens:  20,
-					PromptCacheMissTokens: 80,
+					PromptTokens:           100,
+					CompletionTokens:       50,
+					TotalTokens:            150,
+					CachedTokens:           20,
+					ReasoningTokens:        10,
+					PromptCacheHitTokens:   20,
+					PromptCacheMissTokens:  80,
+					LlmChatCompletionCount: 4,
 				},
 				runUsage: &runUsage,
 			}
@@ -39,8 +40,9 @@ func TestRunEventProcessorDecoratesTerminalUsage(t *testing.T) {
 						"completionTokensDetails": map[string]any{
 							"reasoningTokens": 2,
 						},
-						"promptCacheHitTokens":  5,
-						"promptCacheMissTokens": 2,
+						"promptCacheHitTokens":   5,
+						"promptCacheMissTokens":  2,
+						"llmChatCompletionCount": 1,
 					},
 					"chatUsage": map[string]any{
 						"promptTokens":     100,
@@ -69,6 +71,9 @@ func TestRunEventProcessorDecoratesTerminalUsage(t *testing.T) {
 				AnyIntNode(run["promptCacheHitTokens"]) != 5 || AnyIntNode(run["promptCacheMissTokens"]) != 2 {
 				t.Fatalf("unexpected run detailed usage %#v", usage)
 			}
+			if AnyIntNode(run["llmChatCompletionCount"]) != 1 {
+				t.Fatalf("unexpected run llm chat completion count %#v", usage)
+			}
 			chatUsage, _ := usage["chat"].(map[string]any)
 			if AnyIntNode(chatUsage["promptTokens"]) != 107 || AnyIntNode(chatUsage["completionTokens"]) != 53 || AnyIntNode(chatUsage["totalTokens"]) != 160 {
 				t.Fatalf("unexpected chat usage %#v", usage)
@@ -79,7 +84,34 @@ func TestRunEventProcessorDecoratesTerminalUsage(t *testing.T) {
 				AnyIntNode(chatUsage["promptCacheHitTokens"]) != 25 || AnyIntNode(chatUsage["promptCacheMissTokens"]) != 82 {
 				t.Fatalf("unexpected chat detailed usage %#v", usage)
 			}
+			if AnyIntNode(chatUsage["llmChatCompletionCount"]) != 5 {
+				t.Fatalf("unexpected chat llm chat completion count %#v", usage)
+			}
 		})
+	}
+}
+
+func TestRunEventProcessorKeepsTerminalUsageWhenOnlyLLMChatCompletionCountKnown(t *testing.T) {
+	runUsage := chat.UsageData{}
+	processor := &runEventProcessor{
+		runUsage: &runUsage,
+	}
+	data := &stream.EventData{
+		Type: "run.error",
+		Payload: map[string]any{
+			"runId": "run-usage",
+			"usage": map[string]any{
+				"llmChatCompletionCount": 1,
+			},
+		},
+	}
+
+	processor.decorate(data)
+
+	usage, _ := data.Payload["usage"].(map[string]any)
+	run, _ := usage["run"].(map[string]any)
+	if AnyIntNode(run["llmChatCompletionCount"]) != 1 {
+		t.Fatalf("expected terminal usage with llmChatCompletionCount, got %#v", data.Payload)
 	}
 }
 

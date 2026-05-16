@@ -97,7 +97,11 @@ func (p *runEventProcessor) decorate(data *stream.EventData) {
 	case "run.complete", "run.error", "run.cancel":
 		if p.runUsage != nil {
 			if usage, ok := data.Payload["usage"].(map[string]any); ok {
-				applyUsageMapToData(p.runUsage, usage)
+				if run, ok := usage["run"].(map[string]any); ok {
+					applyUsageMapToData(p.runUsage, run)
+				} else {
+					applyUsageMapToData(p.runUsage, usage)
+				}
 			}
 		}
 		p.decorateTerminalUsage(data)
@@ -109,7 +113,7 @@ func (p *runEventProcessor) decorateTerminalUsage(data *stream.EventData) {
 		return
 	}
 	delete(data.Payload, "chatUsage")
-	if p.runUsage == nil || p.runUsage.TotalTokens == 0 {
+	if p.runUsage == nil || (p.runUsage.TotalTokens == 0 && p.runUsage.LlmChatCompletionCount == 0) {
 		delete(data.Payload, "usage")
 		return
 	}
@@ -130,6 +134,22 @@ func applyUsageMapToData(target *chat.UsageData, usage map[string]any) {
 	target.ReasoningTokens = usageDetailInt(usage, "completionTokensDetails", "reasoningTokens")
 	target.PromptCacheHitTokens = contracts.AnyIntNode(usage["promptCacheHitTokens"])
 	target.PromptCacheMissTokens = contracts.AnyIntNode(usage["promptCacheMissTokens"])
+	target.LlmChatCompletionCount = contracts.AnyIntNode(usage["llmChatCompletionCount"])
+}
+
+func applyTerminalEventUsage(target *chat.UsageData, event stream.EventData) {
+	if target == nil {
+		return
+	}
+	usage, ok := event.Payload["usage"].(map[string]any)
+	if !ok {
+		return
+	}
+	if run, ok := usage["run"].(map[string]any); ok {
+		applyUsageMapToData(target, run)
+		return
+	}
+	applyUsageMapToData(target, usage)
 }
 
 func usageDetailInt(usage map[string]any, detailKey string, valueKey string) int {
@@ -139,13 +159,14 @@ func usageDetailInt(usage map[string]any, detailKey string, valueKey string) int
 
 func addUsageData(base chat.UsageData, delta chat.UsageData) chat.UsageData {
 	return chat.UsageData{
-		PromptTokens:          base.PromptTokens + delta.PromptTokens,
-		CompletionTokens:      base.CompletionTokens + delta.CompletionTokens,
-		TotalTokens:           base.TotalTokens + delta.TotalTokens,
-		CachedTokens:          base.CachedTokens + delta.CachedTokens,
-		ReasoningTokens:       base.ReasoningTokens + delta.ReasoningTokens,
-		PromptCacheHitTokens:  base.PromptCacheHitTokens + delta.PromptCacheHitTokens,
-		PromptCacheMissTokens: base.PromptCacheMissTokens + delta.PromptCacheMissTokens,
+		PromptTokens:           base.PromptTokens + delta.PromptTokens,
+		CompletionTokens:       base.CompletionTokens + delta.CompletionTokens,
+		TotalTokens:            base.TotalTokens + delta.TotalTokens,
+		CachedTokens:           base.CachedTokens + delta.CachedTokens,
+		ReasoningTokens:        base.ReasoningTokens + delta.ReasoningTokens,
+		PromptCacheHitTokens:   base.PromptCacheHitTokens + delta.PromptCacheHitTokens,
+		PromptCacheMissTokens:  base.PromptCacheMissTokens + delta.PromptCacheMissTokens,
+		LlmChatCompletionCount: base.LlmChatCompletionCount + delta.LlmChatCompletionCount,
 	}
 }
 
@@ -166,6 +187,9 @@ func usageDataMap(usage chat.UsageData) map[string]any {
 	}
 	if usage.PromptCacheMissTokens > 0 {
 		out["promptCacheMissTokens"] = usage.PromptCacheMissTokens
+	}
+	if usage.LlmChatCompletionCount > 0 {
+		out["llmChatCompletionCount"] = usage.LlmChatCompletionCount
 	}
 	return out
 }

@@ -457,6 +457,7 @@ type ChatUsageData struct {
 	CompletionTokensDetails *CompletionTokenDetails `json:"completionTokensDetails,omitempty"`
 	PromptCacheHitTokens    int                     `json:"promptCacheHitTokens,omitempty"`
 	PromptCacheMissTokens   int                     `json:"promptCacheMissTokens,omitempty"`
+	LlmChatCompletionCount  int                     `json:"llmChatCompletionCount,omitempty"`
 }
 
 type PromptTokenDetails struct {

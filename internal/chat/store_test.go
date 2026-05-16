@@ -1431,8 +1431,9 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 						"completionTokensDetails": map[string]any{
 							"reasoningTokens": 12,
 						},
-						"promptCacheHitTokens":  64,
-						"promptCacheMissTokens": 36,
+						"promptCacheHitTokens":   64,
+						"promptCacheMissTokens":  36,
+						"llmChatCompletionCount": 1,
 					},
 				},
 			},
@@ -1455,7 +1456,8 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 	promptDetails, _ := usage["promptTokensDetails"].(map[string]any)
 	completionDetails, _ := usage["completionTokensDetails"].(map[string]any)
 	if toIntValue(promptDetails["cachedTokens"]) != 64 || toIntValue(completionDetails["reasoningTokens"]) != 12 ||
-		toIntValue(usage["promptCacheHitTokens"]) != 64 || toIntValue(usage["promptCacheMissTokens"]) != 36 {
+		toIntValue(usage["promptCacheHitTokens"]) != 64 || toIntValue(usage["promptCacheMissTokens"]) != 36 ||
+		toIntValue(usage["llmChatCompletionCount"]) != 1 {
 		t.Fatalf("expected detailed step-level usage, got %#v", lines[0])
 	}
 	contextWindow, _ := lines[0]["contextWindow"].(map[string]any)
@@ -3971,6 +3973,7 @@ func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
 			"completion_tokens_details": map[string]any{"reasoning_tokens": 8},
 			"prompt_cache_hit_tokens":   32,
 			"prompt_cache_miss_tokens":  68,
+			"llm_chat_completion_count": 1,
 		},
 		ContextWindow: map[string]any{
 			"max_size":       128000,
@@ -4003,6 +4006,9 @@ func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
 	if toIntValue(terminalRunPromptDetails["cachedTokens"]) != 32 || toIntValue(terminalRunCompletionDetails["reasoningTokens"]) != 8 ||
 		toIntValue(terminalRunUsage["promptCacheHitTokens"]) != 32 || toIntValue(terminalRunUsage["promptCacheMissTokens"]) != 68 {
 		t.Fatalf("unexpected synthesized run.complete detailed run usage %#v", detail.Events[4])
+	}
+	if toIntValue(terminalRunUsage["llmChatCompletionCount"]) != 1 {
+		t.Fatalf("unexpected synthesized run.complete llm chat completion count %#v", detail.Events[4])
 	}
 }
 

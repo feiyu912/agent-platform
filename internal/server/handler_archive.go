@@ -343,9 +343,10 @@ func mapRunSummary(run chat.RunSummary) api.RunSummary {
 		StartedAt:      run.StartedAt,
 		CompletedAt:    run.CompletedAt,
 		Usage: api.ChatUsageData{
-			PromptTokens:     run.Usage.PromptTokens,
-			CompletionTokens: run.Usage.CompletionTokens,
-			TotalTokens:      run.Usage.TotalTokens,
+			PromptTokens:           run.Usage.PromptTokens,
+			CompletionTokens:       run.Usage.CompletionTokens,
+			TotalTokens:            run.Usage.TotalTokens,
+			LlmChatCompletionCount: run.Usage.LlmChatCompletionCount,
 		},
 		FeedbackType:    run.FeedbackType,
 		FeedbackComment: run.FeedbackComment,

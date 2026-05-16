@@ -129,6 +129,7 @@ func (s *Server) handleProxyQuery(w http.ResponseWriter, r *http.Request, req ap
 	tools := map[string]*toolBucket{}
 	startedAt := time.Now().UnixMilli()
 	finishReason := "complete"
+	var runUsage chat.UsageData
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 256*1024), 1024*1024)
@@ -267,12 +268,15 @@ func (s *Server) handleProxyQuery(w http.ResponseWriter, r *http.Request, req ap
 
 		case "run.complete":
 			finishReason = "complete"
+			applyTerminalEventUsage(&runUsage, event)
 			stepWriter.OnEvent(event)
 		case "run.cancel":
 			finishReason = "cancel"
+			applyTerminalEventUsage(&runUsage, event)
 			stepWriter.OnEvent(event)
 		case "run.error":
 			finishReason = "error"
+			applyTerminalEventUsage(&runUsage, event)
 			stepWriter.OnEvent(event)
 		case "tool.result",
 			"task.start", "task.complete", "task.cancel", "task.fail",
@@ -296,6 +300,7 @@ func (s *Server) handleProxyQuery(w http.ResponseWriter, r *http.Request, req ap
 			FinishReason:    finishReason,
 			StartedAtMillis: startedAt,
 			UpdatedAtMillis: time.Now().UnixMilli(),
+			Usage:           runUsage,
 		}); err != nil {
 			log.Printf("[proxy] OnRunCompleted failed: %v", err)
 		} else if sum, err := chatStore.Summary(req.ChatID); err == nil && sum != nil {

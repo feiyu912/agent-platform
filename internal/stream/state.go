@@ -27,13 +27,14 @@ type StreamEventStateData struct {
 }
 
 type runUsageState struct {
-	PromptTokens          int
-	CompletionTokens      int
-	TotalTokens           int
-	CachedTokens          int
-	ReasoningTokens       int
-	PromptCacheHitTokens  int
-	PromptCacheMissTokens int
+	PromptTokens           int
+	CompletionTokens       int
+	TotalTokens            int
+	CachedTokens           int
+	ReasoningTokens        int
+	PromptCacheHitTokens   int
+	PromptCacheMissTokens  int
+	LLMChatCompletionCount int
 }
 
 type reasoningBlockState struct {

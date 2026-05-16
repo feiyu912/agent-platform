@@ -147,48 +147,51 @@ type DeltaRequestSteer struct {
 func (DeltaRequestSteer) agentDeltaTag() {}
 
 type DeltaDebugPreCall struct {
-	ChatID                   string
-	ProviderKey              string
-	ProviderEndpoint         string
-	ModelKey                 string
-	ModelID                  string
-	RequestBody              map[string]any
-	InjectedPrompt           map[string]any
-	SystemRef                map[string]any
-	ContextWindow            int
-	CurrentContextSize       int
-	EstimatedNextCallSize    int
-	RunPromptTokens          int
-	RunCompletionTokens      int
-	RunTotalTokens           int
-	RunCachedTokens          int
-	RunReasoningTokens       int
-	RunPromptCacheHitTokens  int
-	RunPromptCacheMissTokens int
+	ChatID                    string
+	ProviderKey               string
+	ProviderEndpoint          string
+	ModelKey                  string
+	ModelID                   string
+	RequestBody               map[string]any
+	InjectedPrompt            map[string]any
+	SystemRef                 map[string]any
+	ContextWindow             int
+	CurrentContextSize        int
+	EstimatedNextCallSize     int
+	RunPromptTokens           int
+	RunCompletionTokens       int
+	RunTotalTokens            int
+	RunCachedTokens           int
+	RunReasoningTokens        int
+	RunPromptCacheHitTokens   int
+	RunPromptCacheMissTokens  int
+	RunLLMChatCompletionCount int
 }
 
 func (DeltaDebugPreCall) agentDeltaTag() {}
 
 type DeltaDebugPostCall struct {
-	ChatID                         string
-	ModelKey                       string
-	ContextWindow                  int
-	CurrentContextSize             int
-	EstimatedNextCallSize          int
-	LLMReturnPromptTokens          int
-	LLMReturnCompletionTokens      int
-	LLMReturnTotalTokens           int
-	LLMReturnCachedTokens          int
-	LLMReturnReasoningTokens       int
-	LLMReturnPromptCacheHitTokens  int
-	LLMReturnPromptCacheMissTokens int
-	RunPromptTokens                int
-	RunCompletionTokens            int
-	RunTotalTokens                 int
-	RunCachedTokens                int
-	RunReasoningTokens             int
-	RunPromptCacheHitTokens        int
-	RunPromptCacheMissTokens       int
+	ChatID                          string
+	ModelKey                        string
+	ContextWindow                   int
+	CurrentContextSize              int
+	EstimatedNextCallSize           int
+	LLMReturnPromptTokens           int
+	LLMReturnCompletionTokens       int
+	LLMReturnTotalTokens            int
+	LLMReturnCachedTokens           int
+	LLMReturnReasoningTokens        int
+	LLMReturnPromptCacheHitTokens   int
+	LLMReturnPromptCacheMissTokens  int
+	LLMReturnLLMChatCompletionCount int
+	RunPromptTokens                 int
+	RunCompletionTokens             int
+	RunTotalTokens                  int
+	RunCachedTokens                 int
+	RunReasoningTokens              int
+	RunPromptCacheHitTokens         int
+	RunPromptCacheMissTokens        int
+	RunLLMChatCompletionCount       int
 }
 
 func (DeltaDebugPostCall) agentDeltaTag() {}

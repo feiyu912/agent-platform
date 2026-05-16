@@ -124,6 +124,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 
 	var chatTotalPromptTokens, chatTotalCompletionTokens, chatTotalTotalTokens int
 	var chatTotalCachedTokens, chatTotalReasoningTokens, chatTotalPromptCacheHitTokens, chatTotalPromptCacheMissTokens int
+	var chatTotalLlmChatCompletionCount int
 	taskQueries := map[string]replayedSubTaskQuery{}
 	for _, line := range lines {
 		if lineType, _ := line["_type"].(string); lineType != "query" {
@@ -234,22 +235,24 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			replayDebugEvents := len(stepPreCallData) > 0
 			if replayDebugEvents {
 				runCumulativePre := map[string]int{
-					"promptTokens":          rd.totalPromptTokens,
-					"completionTokens":      rd.totalCompletionTokens,
-					"totalTokens":           rd.totalTotalTokens,
-					"cachedTokens":          rd.totalCachedTokens,
-					"reasoningTokens":       rd.totalReasoningTokens,
-					"promptCacheHitTokens":  rd.totalPromptCacheHitTokens,
-					"promptCacheMissTokens": rd.totalPromptCacheMissTokens,
+					"promptTokens":           rd.totalPromptTokens,
+					"completionTokens":       rd.totalCompletionTokens,
+					"totalTokens":            rd.totalTotalTokens,
+					"cachedTokens":           rd.totalCachedTokens,
+					"reasoningTokens":        rd.totalReasoningTokens,
+					"promptCacheHitTokens":   rd.totalPromptCacheHitTokens,
+					"promptCacheMissTokens":  rd.totalPromptCacheMissTokens,
+					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
 				}
 				chatCumulativePre := map[string]int{
-					"promptTokens":          chatTotalPromptTokens,
-					"completionTokens":      chatTotalCompletionTokens,
-					"totalTokens":           chatTotalTotalTokens,
-					"cachedTokens":          chatTotalCachedTokens,
-					"reasoningTokens":       chatTotalReasoningTokens,
-					"promptCacheHitTokens":  chatTotalPromptCacheHitTokens,
-					"promptCacheMissTokens": chatTotalPromptCacheMissTokens,
+					"promptTokens":           chatTotalPromptTokens,
+					"completionTokens":       chatTotalCompletionTokens,
+					"totalTokens":            chatTotalTotalTokens,
+					"cachedTokens":           chatTotalCachedTokens,
+					"reasoningTokens":        chatTotalReasoningTokens,
+					"promptCacheHitTokens":   chatTotalPromptCacheHitTokens,
+					"promptCacheMissTokens":  chatTotalPromptCacheMissTokens,
+					"llmChatCompletionCount": chatTotalLlmChatCompletionCount,
 				}
 				if ev := synthesizePreCallEvent(runID, chatID, taskID, runCumulativePre, chatCumulativePre, stepContextWindow, stepPreCallData, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)
@@ -276,6 +279,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.totalReasoningTokens += toNestedIntFromKeys(stepUsage, "completionTokensDetails", "completion_tokens_details", "reasoningTokens", "reasoning_tokens")
 				rd.totalPromptCacheHitTokens += toIntFromKeys(stepUsage, "promptCacheHitTokens", "prompt_cache_hit_tokens")
 				rd.totalPromptCacheMissTokens += toIntFromKeys(stepUsage, "promptCacheMissTokens", "prompt_cache_miss_tokens")
+				rd.totalLlmChatCompletionCount += toIntFromKeys(stepUsage, "llmChatCompletionCount", "llm_chat_completion_count")
 				chatTotalPromptTokens += toIntFromKeys(stepUsage, "promptTokens", "prompt_tokens")
 				chatTotalCompletionTokens += toIntFromKeys(stepUsage, "completionTokens", "completion_tokens")
 				chatTotalTotalTokens += toIntFromKeys(stepUsage, "totalTokens", "total_tokens")
@@ -283,6 +287,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				chatTotalReasoningTokens += toNestedIntFromKeys(stepUsage, "completionTokensDetails", "completion_tokens_details", "reasoningTokens", "reasoning_tokens")
 				chatTotalPromptCacheHitTokens += toIntFromKeys(stepUsage, "promptCacheHitTokens", "prompt_cache_hit_tokens")
 				chatTotalPromptCacheMissTokens += toIntFromKeys(stepUsage, "promptCacheMissTokens", "prompt_cache_miss_tokens")
+				chatTotalLlmChatCompletionCount += toIntFromKeys(stepUsage, "llmChatCompletionCount", "llm_chat_completion_count")
 				rd.chatTotalPromptTokens = chatTotalPromptTokens
 				rd.chatTotalCompletionTokens = chatTotalCompletionTokens
 				rd.chatTotalTotalTokens = chatTotalTotalTokens
@@ -290,25 +295,28 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.chatTotalReasoningTokens = chatTotalReasoningTokens
 				rd.chatTotalPromptCacheHitTokens = chatTotalPromptCacheHitTokens
 				rd.chatTotalPromptCacheMissTokens = chatTotalPromptCacheMissTokens
+				rd.chatTotalLlmChatCompletionCount = chatTotalLlmChatCompletionCount
 			}
 			if replayDebugEvents && (stepUsage != nil || len(stepContextWindow) > 0) {
 				runCumulativePost := map[string]int{
-					"promptTokens":          rd.totalPromptTokens,
-					"completionTokens":      rd.totalCompletionTokens,
-					"totalTokens":           rd.totalTotalTokens,
-					"cachedTokens":          rd.totalCachedTokens,
-					"reasoningTokens":       rd.totalReasoningTokens,
-					"promptCacheHitTokens":  rd.totalPromptCacheHitTokens,
-					"promptCacheMissTokens": rd.totalPromptCacheMissTokens,
+					"promptTokens":           rd.totalPromptTokens,
+					"completionTokens":       rd.totalCompletionTokens,
+					"totalTokens":            rd.totalTotalTokens,
+					"cachedTokens":           rd.totalCachedTokens,
+					"reasoningTokens":        rd.totalReasoningTokens,
+					"promptCacheHitTokens":   rd.totalPromptCacheHitTokens,
+					"promptCacheMissTokens":  rd.totalPromptCacheMissTokens,
+					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
 				}
 				chatCumulativePost := map[string]int{
-					"promptTokens":          chatTotalPromptTokens,
-					"completionTokens":      chatTotalCompletionTokens,
-					"totalTokens":           chatTotalTotalTokens,
-					"cachedTokens":          chatTotalCachedTokens,
-					"reasoningTokens":       chatTotalReasoningTokens,
-					"promptCacheHitTokens":  chatTotalPromptCacheHitTokens,
-					"promptCacheMissTokens": chatTotalPromptCacheMissTokens,
+					"promptTokens":           chatTotalPromptTokens,
+					"completionTokens":       chatTotalCompletionTokens,
+					"totalTokens":            chatTotalTotalTokens,
+					"cachedTokens":           chatTotalCachedTokens,
+					"reasoningTokens":        chatTotalReasoningTokens,
+					"promptCacheHitTokens":   chatTotalPromptCacheHitTokens,
+					"promptCacheMissTokens":  chatTotalPromptCacheMissTokens,
+					"llmChatCompletionCount": chatTotalLlmChatCompletionCount,
 				}
 				if ev := synthesizePostCallEvent(runID, chatID, taskID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)
@@ -387,17 +395,19 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		// Synthesize run.complete for the frontend (not persisted in JSONL).
 		if runID != "" {
 			payload := map[string]any{"runId": runID, "finishReason": "stop"}
-			if rd.totalTotalTokens > 0 {
+			if rd.totalTotalTokens > 0 || rd.totalLlmChatCompletionCount > 0 {
 				chatUsage := map[string]any{
-					"promptTokens":     rd.chatTotalPromptTokens,
-					"completionTokens": rd.chatTotalCompletionTokens,
-					"totalTokens":      rd.chatTotalTotalTokens,
+					"promptTokens":           rd.chatTotalPromptTokens,
+					"completionTokens":       rd.chatTotalCompletionTokens,
+					"totalTokens":            rd.chatTotalTotalTokens,
+					"llmChatCompletionCount": rd.chatTotalLlmChatCompletionCount,
 				}
 				addUsageDetailsToMap(chatUsage, rd.chatTotalCachedTokens, rd.chatTotalReasoningTokens, rd.chatTotalPromptCacheHitTokens, rd.chatTotalPromptCacheMissTokens)
 				runUsage := map[string]any{
-					"promptTokens":     rd.totalPromptTokens,
-					"completionTokens": rd.totalCompletionTokens,
-					"totalTokens":      rd.totalTotalTokens,
+					"promptTokens":           rd.totalPromptTokens,
+					"completionTokens":       rd.totalCompletionTokens,
+					"totalTokens":            rd.totalTotalTokens,
+					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
 				}
 				addUsageDetailsToMap(runUsage, rd.totalCachedTokens, rd.totalReasoningTokens, rd.totalPromptCacheHitTokens, rd.totalPromptCacheMissTokens)
 				payload["usage"] = map[string]any{

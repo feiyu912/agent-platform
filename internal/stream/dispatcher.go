@@ -106,11 +106,24 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 		return events
 	case InputDebugPreCall:
 		runUsage := map[string]any{
-			"promptTokens":     value.RunPromptTokens,
-			"completionTokens": value.RunCompletionTokens,
-			"totalTokens":      value.RunTotalTokens,
+			"promptTokens":           value.RunPromptTokens,
+			"completionTokens":       value.RunCompletionTokens,
+			"totalTokens":            value.RunTotalTokens,
+			"llmChatCompletionCount": value.RunLLMChatCompletionCount,
 		}
 		addDetailedUsage(runUsage, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens)
+		if value.RunTotalTokens > 0 || value.RunLLMChatCompletionCount > 0 {
+			d.state.runUsage = &runUsageState{
+				PromptTokens:           value.RunPromptTokens,
+				CompletionTokens:       value.RunCompletionTokens,
+				TotalTokens:            value.RunTotalTokens,
+				CachedTokens:           value.RunCachedTokens,
+				ReasoningTokens:        value.RunReasoningTokens,
+				PromptCacheHitTokens:   value.RunPromptCacheHitTokens,
+				PromptCacheMissTokens:  value.RunPromptCacheMissTokens,
+				LLMChatCompletionCount: value.RunLLMChatCompletionCount,
+			}
+		}
 		payload := map[string]any{
 			"runId":  d.request.RunID,
 			"chatId": value.ChatID,
@@ -141,27 +154,30 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 		}
 		return []StreamEvent{NewEvent("debug.preCall", payload)}
 	case InputDebugPostCall:
-		if value.RunTotalTokens > 0 {
+		if value.RunTotalTokens > 0 || value.RunLLMChatCompletionCount > 0 {
 			d.state.runUsage = &runUsageState{
-				PromptTokens:          value.RunPromptTokens,
-				CompletionTokens:      value.RunCompletionTokens,
-				TotalTokens:           value.RunTotalTokens,
-				CachedTokens:          value.RunCachedTokens,
-				ReasoningTokens:       value.RunReasoningTokens,
-				PromptCacheHitTokens:  value.RunPromptCacheHitTokens,
-				PromptCacheMissTokens: value.RunPromptCacheMissTokens,
+				PromptTokens:           value.RunPromptTokens,
+				CompletionTokens:       value.RunCompletionTokens,
+				TotalTokens:            value.RunTotalTokens,
+				CachedTokens:           value.RunCachedTokens,
+				ReasoningTokens:        value.RunReasoningTokens,
+				PromptCacheHitTokens:   value.RunPromptCacheHitTokens,
+				PromptCacheMissTokens:  value.RunPromptCacheMissTokens,
+				LLMChatCompletionCount: value.RunLLMChatCompletionCount,
 			}
 		}
 		llmReturnUsage := map[string]any{
-			"promptTokens":     value.LLMReturnPromptTokens,
-			"completionTokens": value.LLMReturnCompletionTokens,
-			"totalTokens":      value.LLMReturnTotalTokens,
+			"promptTokens":           value.LLMReturnPromptTokens,
+			"completionTokens":       value.LLMReturnCompletionTokens,
+			"totalTokens":            value.LLMReturnTotalTokens,
+			"llmChatCompletionCount": value.LLMReturnLLMChatCompletionCount,
 		}
 		addDetailedUsage(llmReturnUsage, value.LLMReturnCachedTokens, value.LLMReturnReasoningTokens, value.LLMReturnPromptCacheHitTokens, value.LLMReturnPromptCacheMissTokens)
 		runUsage := map[string]any{
-			"promptTokens":     value.RunPromptTokens,
-			"completionTokens": value.RunCompletionTokens,
-			"totalTokens":      value.RunTotalTokens,
+			"promptTokens":           value.RunPromptTokens,
+			"completionTokens":       value.RunCompletionTokens,
+			"totalTokens":            value.RunTotalTokens,
+			"llmChatCompletionCount": value.RunLLMChatCompletionCount,
 		}
 		addDetailedUsage(runUsage, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens)
 		payload := map[string]any{
