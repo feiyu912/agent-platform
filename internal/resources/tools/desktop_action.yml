@@ -11,6 +11,11 @@ inputSchema:
       description: Required. Allowlisted Desktop action name to call through the local Desktop Action Bridge.
       enum:
         - desktop.page.getContext
+        - desktop.page.readCurrent
+        - desktop.page.extractStructured
+        - desktop.page.interact
+        - desktop.page.fillForm
+        - desktop.page.submitForm
         - desktop.page.getFormState
         - desktop.page.validateForm
         - desktop.page.previewPatch
