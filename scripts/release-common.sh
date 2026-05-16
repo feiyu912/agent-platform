@@ -282,10 +282,6 @@ ${error_log_json}
       {
         "key": "AUTH_ENABLED",
         "value": "true"
-      },
-      {
-        "key": "AUTH_LOCAL_PUBLIC_KEY_FILE",
-        "value": "configs/local-public-key.pem"
       }
     ]
   }
