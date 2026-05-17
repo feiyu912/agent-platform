@@ -648,6 +648,7 @@ func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t
 	}, testFixtureOptions{
 		configure: func(cfg *config.Config) {
 			cfg.Stream.DebugEventsEnabled = true
+			cfg.Memory.Enabled = true
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
 			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml")
@@ -662,6 +663,8 @@ func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t
 				"  tools:",
 				"    - datetime",
 				"    - _memory_search_",
+				"memoryConfig:",
+				"  enabled: true",
 				"mode: PLAN_EXECUTE",
 				"stageSettings:",
 				"  maxWorkRoundsPerTask: 4",
