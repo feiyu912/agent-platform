@@ -407,7 +407,7 @@ func defaultConfig() Config {
 		AGWCLIDir:       filepath.Join("..", "agw-cli"),
 	}
 	return Config{
-		Server: ServerConfig{Port: "8080"},
+		Server: ServerConfig{Port: "11949"},
 		Paths:  paths,
 		Agents: CatalogConfig{ExternalDir: paths.AgentsDir},
 		Teams:  CatalogConfig{ExternalDir: paths.TeamsDir},

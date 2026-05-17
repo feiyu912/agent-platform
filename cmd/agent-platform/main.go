@@ -86,9 +86,6 @@ func resolvedRuntimeDescription(cfg config.Config) string {
 		strings.HasPrefix(cfg.Paths.ChatsDir, "/opt/") {
 		return "mode=compose/container"
 	}
-	if hostPort, ok := os.LookupEnv("HOST_PORT"); ok && strings.TrimSpace(hostPort) != "" {
-		return fmt.Sprintf("mode=local host_port=%s", strings.TrimSpace(hostPort))
-	}
 	return "mode=local"
 }
 

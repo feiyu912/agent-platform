@@ -81,6 +81,12 @@ function Import-ProgramEnv {
   }
 }
 
+function Set-ProgramServerPortEnv {
+  if ([string]::IsNullOrWhiteSpace($env:SERVER_PORT)) {
+    $env:SERVER_PORT = '11949'
+  }
+}
+
 function Initialize-ProgramRuntime {
   New-Item -ItemType Directory -Force -Path `
     $Script:RunDir, `

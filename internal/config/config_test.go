@@ -13,8 +13,8 @@ func TestLoadDefaults(t *testing.T) {
 		if err != nil {
 			t.Fatalf("load config: %v", err)
 		}
-		if cfg.Server.Port != "8080" {
-			t.Fatalf("expected default port 8080, got %q", cfg.Server.Port)
+		if cfg.Server.Port != "11949" {
+			t.Fatalf("expected default port 11949, got %q", cfg.Server.Port)
 		}
 		if cfg.Paths.RegistriesDir != filepath.Join("runtime", "registries") {
 			t.Fatalf("unexpected registries dir: %q", cfg.Paths.RegistriesDir)
@@ -188,20 +188,6 @@ func TestLoadServerPortFromEnv(t *testing.T) {
 		}
 		if cfg.Server.Port != "11949" {
 			t.Fatalf("expected server port 11949, got %q", cfg.Server.Port)
-		}
-	})
-}
-
-func TestLoadIgnoresHostPortForServerPort(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
-		"HOST_PORT": "11949",
-	}, func() {
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("load config: %v", err)
-		}
-		if cfg.Server.Port != "8080" {
-			t.Fatalf("expected default server port 8080 when only HOST_PORT is set, got %q", cfg.Server.Port)
 		}
 	})
 }
@@ -870,7 +856,6 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 
 	keys := append([]string{}, deprecatedEnvVars...)
 	keys = append(keys,
-		"HOST_PORT",
 		"SERVICE_CONFIG_DIR",
 		"SERVER_PORT",
 		"REGISTRIES_DIR",

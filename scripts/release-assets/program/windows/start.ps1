@@ -14,5 +14,6 @@ foreach ($arg in $args) {
 Set-Location $ScriptDir
 Test-ProgramBundle
 Import-ProgramEnv
+Set-ProgramServerPortEnv
 Initialize-ProgramRuntime
 Start-ProgramBackend -Daemon:$Daemon

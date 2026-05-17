@@ -3,10 +3,9 @@
 ## 环境变量
 
 ```bash
-# 本地 make run 与 Docker Compose 默认都走 HOST_PORT=11949
+# 本地 make run 与 Docker Compose 默认都走 SERVER_PORT=11949
 BASE_URL="http://localhost:11949"
-# 若你绕过 make run 直接执行 go run，可切换为 SERVER_PORT 或默认 8080
-# BASE_URL="http://localhost:8080"
+# 若你改了 SERVER_PORT，同步调整 BASE_URL
 ```
 
 ## Catalog 接口

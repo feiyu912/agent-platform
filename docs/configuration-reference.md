@@ -23,15 +23,14 @@
 
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `HOST_PORT` | `11949` | `End user` | 本地 `make run` 与 `compose.yml` 的主入口端口 |
-| `SERVER_PORT` | `8080` | `End user` | 应用内部监听端口；`make run` 会优先用 `HOST_PORT` 覆盖到本地监听端口 |
+| `SERVER_PORT` | `11949` | `End user` | 本地 `make run` 与 `compose.yml` 的外部入口端口 |
 
 本地运行约定：
 
 - `make run` 会先加载根目录 `.env`
-- `make run` 的端口链路为 `HOST_PORT -> SERVER_PORT -> 8080`
+- `make run` 的端口链路为 `SERVER_PORT -> 11949`
 - 直接执行 `go run ./cmd/agent-platform` 不会自动加载 `.env`
-- 直接 `go run` 时，应用端口链路仍然是 `SERVER_PORT -> 8080`
+- 直接 `go run` 时，应用端口链路仍然是 `SERVER_PORT -> 11949`
 
 ### Auth / Ticket
 
@@ -422,7 +421,7 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 | `PAN_DIR` | `/opt/pan` |
 | `SKILLS_MARKET_DIR` | `/opt/skills-market` |
 
-这些环境变量在容器内也会同步设置为对应 `/opt/*` 路径，且 `SERVER_PORT` 固定为 `8080`。
+这些环境变量在容器内也会同步设置为对应 `/opt/*` 路径，且容器内应用监听端口固定为 `8080`。
 
 ## Agent Context Tags
 

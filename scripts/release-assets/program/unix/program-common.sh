@@ -70,6 +70,12 @@ program_load_env() {
   set +a
 }
 
+program_apply_server_port_env() {
+  if [[ -z "${SERVER_PORT:-}" ]]; then
+    export SERVER_PORT="11949"
+  fi
+}
+
 program_prepare_runtime_dirs() {
   mkdir -p \
     "$RUN_DIR" \

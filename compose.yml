@@ -6,7 +6,7 @@ services:
     container_name: agent-platform
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-11949}:8080"
+      - "${SERVER_PORT:-11949}:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:

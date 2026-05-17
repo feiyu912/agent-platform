@@ -64,7 +64,7 @@ cp .env.example .env
 make run
 ```
 
-`make run` 会先加载根目录 `.env`，并按参考仓库同样的入口规则把 `HOST_PORT` 映射到本地监听端口。日常本地联调和 `docker compose` 都优先使用 `HOST_PORT`；`SERVER_PORT` 仅保留为兼容/高级覆盖项。`make run` 还会默认带上 `CGO_ENABLED=0`，以规避当前 macOS 环境里 `CGO=1` 的 `net/http` 二进制在进入 `main()` 前被系统直接 `signal: killed` 的问题。直接执行 `go run ./cmd/agent-platform` 不会自动加载 `.env`，也不会自动注入这个默认值。
+`make run` 会先加载根目录 `.env`，并使用 `SERVER_PORT` 作为本地监听端口；未设置时默认监听 `11949`。`make run` 还会默认带上 `CGO_ENABLED=0`，以规避当前 macOS 环境里 `CGO=1` 的 `net/http` 二进制在进入 `main()` 前被系统直接 `signal: killed` 的问题。直接执行 `go run ./cmd/agent-platform` 不会自动加载 `.env`，也不会自动注入这个默认值。
 
 常用验证：
 
@@ -133,7 +133,6 @@ RUN_SOCKET_TESTS=1 make test-integration
 
 根 `.env.example` 现在是面向最终用户的最小启动模板，默认保留以下高频配置：
 
-- `HOST_PORT`
 - `SERVER_PORT`
 - `AUTH_ENABLED`
 - `AUTH_LOCAL_PUBLIC_KEY_FILE`
@@ -239,9 +238,9 @@ docker compose up --build
 `compose.yml` 与参考仓库保持同样的目录变量工作流：
 
 - 使用 `env_file: .env`
-- 本地 `make run` 会优先把 `HOST_PORT` 作为监听端口
-- 宿主机端口映射为 `${HOST_PORT}:8080`
-- 容器内应用监听端口固定为 `8080`；`HOST_PORT` 负责对外暴露端口
+- 本地 `make run` 使用 `SERVER_PORT` 作为监听端口
+- 宿主机端口映射为 `${SERVER_PORT}:8080`
+- 容器内应用监听端口固定为 `8080`
 - 容器内目录固定为 `/opt/registries`、`/opt/owner`、`/opt/agents`、`/opt/teams`、`/opt/root`、`/opt/schedules`、`/opt/chats`、`/opt/memory`、`/opt/pan`、`/opt/skills-market`
 - `./configs` 只读挂载到 `/opt/configs`
 
