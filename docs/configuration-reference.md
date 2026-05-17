@@ -66,6 +66,8 @@
 | `MEMORY_DIR` | `runtime/memory` | `End user` | memory 落盘目录 |
 | `PAN_DIR` | `runtime/pan` | `End user` | pan 目录映射 |
 | `SKILLS_MARKET_DIR` | `runtime/skills-market` | `End user` | skills market 目录映射 |
+| `WECOM_GO_SKILL_DIR` | `../wecom-go-skill` | `Advanced / operator` | `platform: wecom-go-skill` 沙箱挂载的宿主目录 |
+| `AGW_CLI_DIR` | `../agw-cli` | `Advanced / operator` | `platform: agw-cli` 沙箱挂载的宿主目录 |
 | `PROVIDER_APIKEY_KEY_PART` | 空 | `Advanced / operator` | provider `apiKey: AES(...)` 的环境变量半密钥 |
 
 ### Container Hub
@@ -95,6 +97,7 @@ Container Hub 默认基础挂载为：
 - `/memory` 当前只影响沙箱挂载与 prompt 中的路径暴露；runtime 自身 memory store 仍保持现有 `MEMORY_DIR` 存储布局
 - `runtimeConfig.extraMounts` 会真实影响 Container Hub session payload，并在基础挂载生成后应用覆盖规则
 - `platform: agent` / `platform: owner` / `platform: memory` 主要用于覆盖默认 `/agent` / `/owner` / `/memory` 的只读模式，不会新增第二个挂载
+- `platform: wecom-go-skill` 会挂载 `WECOM_GO_SKILL_DIR` 到 `/opt/wecom-go-skill`；`platform: agw-cli` 会挂载 `AGW_CLI_DIR` 到 `/opt/agw-cli`
 - `destination + mode` 是覆盖默认基础挂载模式的唯一合法写法
 - `source + destination + mode` 只能新增非默认目标路径挂载；若目标是默认基础挂载路径会直接报错
 
