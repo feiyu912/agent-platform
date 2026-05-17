@@ -3,9 +3,9 @@ package server
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/chat"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/chat"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/stream"
 )
 
 func TestRunEventProcessorDecoratesTerminalUsage(t *testing.T) {

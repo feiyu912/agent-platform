@@ -3,8 +3,8 @@ package llm
 import (
 	"strings"
 
-	. "agent-platform-runner-go/internal/contracts"
-	. "agent-platform-runner-go/internal/models"
+	. "agent-platform/internal/contracts"
+	. "agent-platform/internal/models"
 )
 
 type protocolRuntimeConfig struct {

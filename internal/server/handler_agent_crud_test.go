@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/ws"
 
 	gws "github.com/gorilla/websocket"
 )
@@ -149,9 +149,9 @@ func TestAgentCRUDSafetyErrors(t *testing.T) {
 			name: "duplicate",
 			path: "/api/agent-create",
 			body: map[string]any{
-				"key": "mock-runner",
+				"key": "mock-agent",
 				"definition": map[string]any{
-					"key":         "mock-runner",
+					"key":         "mock-agent",
 					"name":        "Duplicate",
 					"description": "duplicate",
 				},

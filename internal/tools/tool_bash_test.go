@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/bashsec"
-	"agent-platform-runner-go/internal/config"
-	contracts "agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/bashsec"
+	"agent-platform/internal/config"
+	contracts "agent-platform/internal/contracts"
 )
 
 func TestResolveHostShellInvocationDefaultsToPowerShellOnWindows(t *testing.T) {

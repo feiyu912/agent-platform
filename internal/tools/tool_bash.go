@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/bashsec"
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/bashsec"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
 )
 
 func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {

@@ -6,13 +6,13 @@ import (
 	"io"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/bashsec"
-	"agent-platform-runner-go/internal/chat"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/filetools"
-	"agent-platform-runner-go/internal/hitl"
-	. "agent-platform-runner-go/internal/models"
+	"agent-platform/internal/api"
+	"agent-platform/internal/bashsec"
+	"agent-platform/internal/chat"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
+	"agent-platform/internal/hitl"
+	. "agent-platform/internal/models"
 )
 
 type llmRunStream struct {

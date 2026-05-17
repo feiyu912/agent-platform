@@ -3,8 +3,8 @@ package memory
 import (
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/observability"
+	"agent-platform/internal/api"
+	"agent-platform/internal/observability"
 )
 
 func logMemoryOperation(operation string, fields map[string]any) {

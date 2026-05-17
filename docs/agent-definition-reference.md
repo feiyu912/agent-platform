@@ -1,6 +1,6 @@
 # Agent Definition 参考
 
-本文件与参考仓库保持同一主题。当前 Go runner 已支持从 `AGENTS_DIR` 读取 `runtime/agents/*.yml` 与 `runtime/agents/<key>/agent.yml`，并将结果直接暴露给 `/api/agents` 与 query agent 选择逻辑。
+本文件与参考仓库保持同一主题。当前 Go runtime 已支持从 `AGENTS_DIR` 读取 `runtime/agents/*.yml` 与 `runtime/agents/<key>/agent.yml`，并将结果直接暴露给 `/api/agents` 与 query agent 选择逻辑。
 
 ## 当前状态
 
@@ -101,7 +101,7 @@ plain:
 
 ## Context Tags
 
-当前 Go runner 不会为所有 agent 自动附加一组全局默认 `context tags`；每个 agent 仍需在 definition 中显式声明：
+当前 Go runtime 不会为所有 agent 自动附加一组全局默认 `context tags`；每个 agent 仍需在 definition 中显式声明：
 
 - 优先 `contextConfig.tags`
 - 回退 `contextTags`
@@ -184,7 +184,7 @@ memoryConfig:
 
 ## Runtime Config
 
-Go runner 当前支持在 `agent.yml -> runtimeConfig` 下声明：
+Go runtime 当前支持在 `agent.yml -> runtimeConfig` 下声明：
 
 ```yaml
 runtimeConfig:

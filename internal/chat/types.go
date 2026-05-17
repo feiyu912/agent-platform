@@ -1,6 +1,6 @@
 package chat
 
-import "agent-platform-runner-go/internal/stream"
+import "agent-platform/internal/stream"
 
 // ---------------------------------------------------------------------------
 // Plan / Artifact state (shared by step lines and API responses)

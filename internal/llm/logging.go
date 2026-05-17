@@ -5,10 +5,10 @@ import (
 	"log"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	. "agent-platform-runner-go/internal/contracts"
-	. "agent-platform-runner-go/internal/models"
-	"agent-platform-runner-go/internal/observability"
+	"agent-platform/internal/api"
+	. "agent-platform/internal/contracts"
+	. "agent-platform/internal/models"
+	"agent-platform/internal/observability"
 )
 
 func (e *LLMAgentEngine) logOutgoingRequest(runID string, provider ProviderDefinition, model ModelDefinition, endpoint string, messages []openAIMessage, toolSpecs []openAIToolSpec, toolChoice string, body []byte) {

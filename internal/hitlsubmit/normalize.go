@@ -6,8 +6,8 @@ import (
 	"log"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	contracts "agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	contracts "agent-platform/internal/contracts"
 )
 
 func Normalize(args map[string]any, params any) (map[string]any, error) {

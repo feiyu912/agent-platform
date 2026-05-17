@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/bashast"
+	"agent-platform/internal/api"
+	"agent-platform/internal/bashast"
 )
 
 type SkillChecker struct {

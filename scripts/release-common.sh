@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="agent-platform"
-PROGRAM_NAME="agent-platform-runner"
+PROGRAM_NAME="agent-platform"
 
 die() {
   echo "[release] $*" >&2
@@ -180,7 +180,7 @@ write_program_manifest() {
     stop_script="stop.ps1"
     deploy_script="deploy.ps1"
     program_common="scripts/program-common.ps1"
-    error_log_json='    "errorLogRelativePath": "run/agent-platform-runner.stderr.log",'
+    error_log_json='    "errorLogRelativePath": "run/agent-platform.stderr.log",'
   fi
 
   cat >"$dest" <<EOF
@@ -236,8 +236,8 @@ write_program_manifest() {
     }
   ],
   "runtime": {
-    "pidRelativePath": "run/agent-platform-runner.pid",
-    "logRelativePath": "run/agent-platform-runner.log",
+    "pidRelativePath": "run/agent-platform.pid",
+    "logRelativePath": "run/agent-platform.log",
 ${error_log_json}
     "requiredPaths": [
       "$backend_entry",

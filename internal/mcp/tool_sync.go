@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	"agent-platform/internal/contracts"
 )
 
 type ToolSync struct {

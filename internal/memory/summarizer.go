@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/models"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/models"
 )
 
 type RememberSummarizer interface {

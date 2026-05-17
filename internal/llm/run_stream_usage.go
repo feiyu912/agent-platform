@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	. "agent-platform-runner-go/internal/contracts"
+	. "agent-platform/internal/contracts"
 )
 
 func (s *llmRunStream) currentContextSize() int {

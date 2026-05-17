@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/memory"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	"agent-platform/internal/memory"
 )
 
 func TestHandleLearnStoresObservationFromLatestRun(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	. "agent-platform-runner-go/internal/contracts"
+	. "agent-platform/internal/contracts"
 )
 
 const defaultDesktopActionBridgeURL = "http://127.0.0.1:11788/actions/call"

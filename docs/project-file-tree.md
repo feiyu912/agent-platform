@@ -23,12 +23,12 @@
 - `go.mod` (23 行): Go 模块与依赖声明
 - `go.sum` (29 行): Go 依赖校验和
 
-## `cmd/agent-platform-runner/`
+## `cmd/agent-platform/`
 
 目录作用：服务进程启动入口。
 
-- `cmd/agent-platform-runner/main.go` (127 行): 程序入口与启动流程
-- `cmd/agent-platform-runner/main_test.go` (169 行): 测试与回归验证：main
+- `cmd/agent-platform/main.go` (127 行): 程序入口与启动流程
+- `cmd/agent-platform/main_test.go` (169 行): 测试与回归验证：main
 
 ## `configs/`
 

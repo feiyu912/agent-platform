@@ -6,11 +6,11 @@ import (
 	"sync"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/llm"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/llm"
+	"agent-platform/internal/stream"
 )
 
 type recordingNotificationSink struct {

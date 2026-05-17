@@ -8,7 +8,7 @@ default-sandbox-level: run
 agent-idle-timeout-ms: 1800000
 # run 级别会话异步销毁延迟（ms）
 destroy-queue-delay-ms: 5000
-# 目录挂载统一来自 runner 全局目录配置：
+# 目录挂载统一来自 runtime 全局目录配置：
 # - /workspace -> CHATS_DIR        (default: rw)
 # - /root      -> ROOT_DIR         (default: rw)
 # - /skills    -> AGENTS_DIR/<agentKey>/skills for RUN/AGENT, SKILLS_MARKET_DIR for GLOBAL (default: ro)

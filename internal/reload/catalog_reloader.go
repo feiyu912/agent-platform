@@ -11,10 +11,10 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/models"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/models"
 )
 
 const reloadDebounce = 500 * time.Millisecond

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	contracts "agent-platform-runner-go/internal/contracts"
+	contracts "agent-platform/internal/contracts"
 )
 
 func TestPlanStageToolsDefaultsToPlanAddTasksOnly(t *testing.T) {

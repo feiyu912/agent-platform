@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	. "agent-platform-runner-go/internal/contracts"
+	. "agent-platform/internal/contracts"
 )
 
 func (t *RuntimeToolExecutor) invokePlanAddTasks(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {

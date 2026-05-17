@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 const (

@@ -1,6 +1,6 @@
 package llm
 
-import "agent-platform-runner-go/internal/contracts"
+import "agent-platform/internal/contracts"
 
 type OrchestratableAgentStream interface {
 	contracts.AgentStream

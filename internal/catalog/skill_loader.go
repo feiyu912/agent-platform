@@ -324,7 +324,7 @@ func writeManifest(skillsDir string, ids []string) error {
 		return err
 	}
 	writer := bufio.NewWriter(file)
-	if _, err := writer.WriteString("# market-synced skills (managed by agent-platform-runner)\n"); err != nil {
+	if _, err := writer.WriteString("# market-synced skills (managed by agent-platform)\n"); err != nil {
 		file.Close()
 		return err
 	}

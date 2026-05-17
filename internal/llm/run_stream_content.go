@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	. "agent-platform-runner-go/internal/contracts"
+	. "agent-platform/internal/contracts"
 )
 
 func (s *llmRunStream) appendCompatReasoningFromOpenAI(reasoningContent string, reasoningDetails []map[string]any) {

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 type chatRunData struct {

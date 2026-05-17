@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	. "agent-platform-runner-go/internal/contracts"
+	. "agent-platform/internal/contracts"
 )
 
 func TestInvokeDesktopActionCallsBridge(t *testing.T) {

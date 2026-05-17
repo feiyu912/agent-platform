@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/contracts"
 )
 
 func TestBashYAMLParity(t *testing.T) {

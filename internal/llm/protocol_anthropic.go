@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/filetools"
-	. "agent-platform-runner-go/internal/models"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
+	. "agent-platform/internal/models"
 )
 
 type anthropicProtocol struct {

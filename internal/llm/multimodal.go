@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/filetools"
+	"agent-platform/internal/api"
+	"agent-platform/internal/filetools"
 )
 
 const (

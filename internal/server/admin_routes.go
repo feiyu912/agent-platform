@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 // adminOnly 包裹 admin 路由的两个前置检查：

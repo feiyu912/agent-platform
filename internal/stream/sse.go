@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 const DoneSentinel = "[DONE]"

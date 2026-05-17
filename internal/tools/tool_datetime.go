@@ -3,7 +3,7 @@ package tools
 import (
 	"time"
 
-	. "agent-platform-runner-go/internal/contracts"
+	. "agent-platform/internal/contracts"
 )
 
 func (t *RuntimeToolExecutor) invokeDateTime(args map[string]any) ToolExecutionResult {

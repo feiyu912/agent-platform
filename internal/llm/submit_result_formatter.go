@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
+	"agent-platform/internal/api"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
 )
 
 func formatSubmitResultForLLM(tool api.ToolDetailResponse, frontend *frontendtools.Registry, result ToolExecutionResult) string {

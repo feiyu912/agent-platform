@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"agent-platform-runner-go/internal/channel"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/ws"
-	"agent-platform-runner-go/internal/ws/gatewayclient"
+	"agent-platform/internal/channel"
+	"agent-platform/internal/config"
+	"agent-platform/internal/ws"
+	"agent-platform/internal/ws/gatewayclient"
 )
 
 // Entry 是 Registry 里一条 gateway 的运行态快照，给 Admin API List 用。

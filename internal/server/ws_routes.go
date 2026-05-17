@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/ws"
 )
 
 type wsTokenAuthenticator struct {

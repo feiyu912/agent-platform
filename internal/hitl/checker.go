@@ -1,6 +1,6 @@
 package hitl
 
-import "agent-platform-runner-go/internal/api"
+import "agent-platform/internal/api"
 
 type Checker interface {
 	Check(command string, chatLevel int) InterceptResult

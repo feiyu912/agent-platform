@@ -1,6 +1,6 @@
 package chat
 
-import "agent-platform-runner-go/internal/stream"
+import "agent-platform/internal/stream"
 
 type stepAwaitingReplay struct {
 	items          []map[string]any

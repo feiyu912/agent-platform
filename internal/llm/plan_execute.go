@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	. "agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	. "agent-platform/internal/contracts"
 )
 
 const defaultTaskExecutionPromptTemplate = `Task list:

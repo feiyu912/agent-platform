@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/contracts"
 )
 
 func (s *Server) listChatSummaries(lastRunID string, agentKey string) ([]api.ChatSummaryResponse, error) {

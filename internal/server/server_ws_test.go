@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/runctl"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/runctl"
+	"agent-platform/internal/ws"
 
 	gws "github.com/gorilla/websocket"
 )
@@ -89,19 +89,19 @@ func TestWebSocketChatReturnsActiveRunConflict(t *testing.T) {
 		},
 	})
 
-	if _, _, err := fixture.chats.EnsureChat("chat_ws_conflict", "mock-runner", "", "hello"); err != nil {
+	if _, _, err := fixture.chats.EnsureChat("chat_ws_conflict", "mock-agent", "", "hello"); err != nil {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	runs := fixture.runs.(*runctl.InMemoryRunManager)
 	_, _, _ = runs.Register(context.Background(), contracts.QuerySession{
 		RunID:    "run_ws_1",
 		ChatID:   "chat_ws_conflict",
-		AgentKey: "mock-runner",
+		AgentKey: "mock-agent",
 	})
 	_, _, _ = runs.Register(context.Background(), contracts.QuerySession{
 		RunID:    "run_ws_2",
 		ChatID:   "chat_ws_conflict",
-		AgentKey: "mock-runner",
+		AgentKey: "mock-agent",
 	})
 
 	server := httptest.NewServer(fixture.server)
@@ -161,7 +161,7 @@ func TestWebSocketPushesChatReadAfterMarkRead(t *testing.T) {
 		},
 	})
 
-	if _, _, err := fixture.chats.EnsureChat("chat_ws_read", "mock-runner", "", "hello"); err != nil {
+	if _, _, err := fixture.chats.EnsureChat("chat_ws_read", "mock-agent", "", "hello"); err != nil {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	if err := fixture.chats.OnRunCompleted(chat.RunCompletion{
@@ -203,8 +203,8 @@ func TestWebSocketPushesChatReadAfterMarkRead(t *testing.T) {
 	if data["chatId"] != "chat_ws_read" {
 		t.Fatalf("expected chatId chat_ws_read, got %#v", data)
 	}
-	if data["agentKey"] != "mock-runner" {
-		t.Fatalf("expected agentKey mock-runner, got %#v", data)
+	if data["agentKey"] != "mock-agent" {
+		t.Fatalf("expected agentKey mock-agent, got %#v", data)
 	}
 	if data["lastRunId"] != "loyw3v28" {
 		t.Fatalf("expected lastRunId loyw3v28, got %#v", data)
@@ -223,7 +223,7 @@ func TestWebSocketPushesChatReadAfterMarkRead(t *testing.T) {
 func TestWebSocketPushesChatUnreadAfterRunCompletion(t *testing.T) {
 	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
 		writeProviderSSE(t, w,
-			`{"choices":[{"delta":{"content":"Go runner test response"},"finish_reason":"stop"}]}`,
+			`{"choices":[{"delta":{"content":"Go runtime test response"},"finish_reason":"stop"}]}`,
 			`[DONE]`,
 		)
 	}, testFixtureOptions{
@@ -246,7 +246,7 @@ func TestWebSocketPushesChatUnreadAfterRunCompletion(t *testing.T) {
 
 	waitForPushFrameType(t, conn, "connected")
 
-	reqBody := bytes.NewBufferString(`{"chatId":"chat_ws_unread","runId":"loyw3v2s","agentKey":"mock-runner","message":"hello unread"}`)
+	reqBody := bytes.NewBufferString(`{"chatId":"chat_ws_unread","runId":"loyw3v2s","agentKey":"mock-agent","message":"hello unread"}`)
 	resp, err := http.Post(server.URL+"/api/query", "application/json", reqBody)
 	if err != nil {
 		t.Fatalf("post query: %v", err)
@@ -265,8 +265,8 @@ func TestWebSocketPushesChatUnreadAfterRunCompletion(t *testing.T) {
 	if data["chatId"] != "chat_ws_unread" {
 		t.Fatalf("expected chatId chat_ws_unread, got %#v", data)
 	}
-	if data["agentKey"] != "mock-runner" {
-		t.Fatalf("expected agentKey mock-runner, got %#v", data)
+	if data["agentKey"] != "mock-agent" {
+		t.Fatalf("expected agentKey mock-agent, got %#v", data)
 	}
 	if data["lastRunId"] != "loyw3v2s" {
 		t.Fatalf("expected lastRunId loyw3v2s, got %#v", data)
@@ -316,7 +316,7 @@ func TestWebSocketRunCompletionPushOrdering(t *testing.T) {
 		Payload: ws.MarshalPayload(map[string]any{
 			"chatId":   "chat_ws_order",
 			"runId":    "run_ws_order",
-			"agentKey": "mock-runner",
+			"agentKey": "mock-agent",
 			"message":  "hello ordering",
 		}),
 	}); err != nil {
@@ -373,7 +373,7 @@ func TestWebSocketRunStreamClosesDuringShutdown(t *testing.T) {
 	_, _, _ = runs.Register(context.Background(), contracts.QuerySession{
 		RunID:    runID,
 		ChatID:   "chat_ws_shutdown",
-		AgentKey: "mock-runner",
+		AgentKey: "mock-agent",
 	})
 
 	server := newLoopbackServer(t, fixture.server)
@@ -469,7 +469,7 @@ func TestWebSocketPushAwaitingAskAndAnswerSyncPendingChatSummary(t *testing.T) {
 	if awaitAskData["runId"] != flow.runID {
 		t.Fatalf("expected runId=%s in awaiting.ask push, got %#v", flow.runID, awaitAskData)
 	}
-	if awaitAskData["agentKey"] != "mock-runner" {
+	if awaitAskData["agentKey"] != "mock-agent" {
 		t.Fatalf("expected agentKey in awaiting.ask push, got %#v", awaitAskData)
 	}
 	if awaitAskData["awaitingId"] != flow.awaitingID || awaitAskData["mode"] != "question" {
@@ -808,10 +808,10 @@ func startAwaitingPushQuestionFlow(t *testing.T, configure func(*config.Config))
 			}
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
-			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-runner", "agent.yml")
+			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml")
 			if err := os.WriteFile(agentPath, []byte(strings.Join([]string{
-				"key: mock-runner",
-				"name: Mock Runner",
+				"key: mock-agent",
+				"name: Mock Agent",
 				"role: 测试代理",
 				"description: test agent",
 				"modelConfig:",
@@ -841,7 +841,7 @@ func startAwaitingPushQuestionFlow(t *testing.T, configure func(*config.Config))
 	}
 
 	chatID := "chat_ws_awaiting"
-	resp, err := http.Post(server.URL+"/api/query", "application/json", bytes.NewBufferString(`{"chatId":"`+chatID+`","agentKey":"mock-runner","message":"please confirm first"}`))
+	resp, err := http.Post(server.URL+"/api/query", "application/json", bytes.NewBufferString(`{"chatId":"`+chatID+`","agentKey":"mock-agent","message":"please confirm first"}`))
 	if err != nil {
 		conn.Close()
 		server.Close()

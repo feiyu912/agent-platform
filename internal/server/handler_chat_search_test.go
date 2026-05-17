@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
 )
 
 func TestHandleSessionSearchReturnsResults(t *testing.T) {

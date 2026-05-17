@@ -14,9 +14,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/filetools"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
 )
 
 func (t *RuntimeToolExecutor) invokeRead(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {

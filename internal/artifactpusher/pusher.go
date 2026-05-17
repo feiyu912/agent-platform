@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/contracts"
 )
 
 // Pusher forwards platform-hosted artifact files to the gateway's upload

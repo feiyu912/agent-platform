@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-platform-runner-go/internal/hitl"
+	"agent-platform/internal/hitl"
 )
 
 func extractCommandPayload(parsed hitl.CommandComponents) map[string]any {

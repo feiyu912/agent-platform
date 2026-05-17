@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/memory"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/memory"
 )
 
 var offsetTokenPattern = regexp.MustCompile(`([+-])(\d+)([ywDHMmS])`)

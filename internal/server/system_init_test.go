@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/llm"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/llm"
 )
 
 type systemInitStaticToolExecutor struct {

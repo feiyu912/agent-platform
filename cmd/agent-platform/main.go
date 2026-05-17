@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"agent-platform-runner-go/internal/app"
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/app"
+	"agent-platform/internal/config"
 )
 
 const gracefulShutdownTimeout = 3 * time.Second
@@ -26,7 +26,7 @@ type shutdownServer interface {
 
 func main() {
 	startedAt := time.Now()
-	log.Printf("starting runner: pid=%d", os.Getpid())
+	log.Printf("starting runtime: pid=%d", os.Getpid())
 
 	rootCtx, cancelRoot := context.WithCancel(context.Background())
 	defer cancelRoot()

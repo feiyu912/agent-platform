@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/observability"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/observability"
 )
 
 func TestLogPromptMemoryWritesDedicatedMemoryLog(t *testing.T) {

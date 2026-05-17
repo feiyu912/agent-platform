@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 // StepWriter accumulates SSE events and writes Java-compatible JSONL lines

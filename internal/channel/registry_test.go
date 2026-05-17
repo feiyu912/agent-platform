@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 func TestRegistryLookupAndDefaultAgent(t *testing.T) {

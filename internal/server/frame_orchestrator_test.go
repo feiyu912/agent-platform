@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
-	"agent-platform-runner-go/internal/llm"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
+	"agent-platform/internal/llm"
+	"agent-platform/internal/stream"
 )
 
 type orchestratorRegistry struct {

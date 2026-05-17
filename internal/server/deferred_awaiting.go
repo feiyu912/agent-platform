@@ -4,7 +4,7 @@ import (
 	"strings"
 	"sync"
 
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/chat"
 )
 
 type DeferredAwaiting struct {

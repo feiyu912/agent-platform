@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 
 	gws "github.com/gorilla/websocket"
 )

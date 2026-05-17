@@ -3,8 +3,8 @@ package tools
 import (
 	"strings"
 
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/observability"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/observability"
 )
 
 func logMemoryToolInvocation(toolName string, status string, execCtx *ExecutionContext, fields map[string]any) {

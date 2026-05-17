@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	"agent-platform/internal/contracts"
 )
 
 func TestSystemInitFingerprintStableAndToolOrderIndependent(t *testing.T) {

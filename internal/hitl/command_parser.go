@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"agent-platform-runner-go/internal/bashast"
+	"agent-platform/internal/bashast"
 )
 
 func ParseCommandComponents(command string) CommandComponents {

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/runctl"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/runctl"
+	"agent-platform/internal/stream"
 )
 
 func TestHandleAttachDefaultsMissingLastSeqToZero(t *testing.T) {

@@ -3,7 +3,7 @@ package viewport
 import (
 	"context"
 
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/contracts"
 )
 
 type Service struct {

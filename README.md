@@ -1,6 +1,6 @@
-# agent-platform-runner-go
+# agent-platform
 
-本仓库是 `agent-platform-runner` 的 Go 版运行时实现，当前以 Java runner 的 `.env` / `application.yml` 契约为事实源，支持目录驱动的 agents / teams / skills catalog、JWT 鉴权、resource ticket、chat 文件落盘、remember 输出、Container Hub sandbox，以及最小 OpenAI 兼容模型与 backend tool loop。
+本仓库是 `agent-platform` 的 Go 版运行时实现，当前以 Java runtime 的 `.env` / `application.yml` 契约为事实源，支持目录驱动的 agents / teams / skills catalog、JWT 鉴权、resource ticket、chat 文件落盘、remember 输出、Container Hub sandbox，以及最小 OpenAI 兼容模型与 backend tool loop。
 
 > 项目事实、架构与开发约束见 [CLAUDE.md](./CLAUDE.md)，补充说明见 [docs/](./docs)。
 
@@ -64,13 +64,13 @@ cp .env.example .env
 make run
 ```
 
-`make run` 会先加载根目录 `.env`，并按参考仓库同样的入口规则把 `HOST_PORT` 映射到本地监听端口。日常本地联调和 `docker compose` 都优先使用 `HOST_PORT`；`SERVER_PORT` 仅保留为兼容/高级覆盖项。`make run` 还会默认带上 `CGO_ENABLED=0`，以规避当前 macOS 环境里 `CGO=1` 的 `net/http` 二进制在进入 `main()` 前被系统直接 `signal: killed` 的问题。直接执行 `go run ./cmd/agent-platform-runner` 不会自动加载 `.env`，也不会自动注入这个默认值。
+`make run` 会先加载根目录 `.env`，并按参考仓库同样的入口规则把 `HOST_PORT` 映射到本地监听端口。日常本地联调和 `docker compose` 都优先使用 `HOST_PORT`；`SERVER_PORT` 仅保留为兼容/高级覆盖项。`make run` 还会默认带上 `CGO_ENABLED=0`，以规避当前 macOS 环境里 `CGO=1` 的 `net/http` 二进制在进入 `main()` 前被系统直接 `signal: killed` 的问题。直接执行 `go run ./cmd/agent-platform` 不会自动加载 `.env`，也不会自动注入这个默认值。
 
 常用验证：
 
 ```bash
 curl http://127.0.0.1:11949/api/agents
-curl "http://127.0.0.1:11949/api/agent?agentKey=go_runner"
+curl "http://127.0.0.1:11949/api/agent?agentKey=default_agent"
 curl http://127.0.0.1:11949/api/chats
 ```
 
@@ -149,7 +149,7 @@ RUN_SOCKET_TESTS=1 make test-integration
 - `REGISTRIES_DIR` / `OWNER_DIR` / `AGENTS_DIR` / `TEAMS_DIR` / `ROOT_DIR` / `SCHEDULES_DIR` / `CHATS_DIR` / `MEMORY_DIR` / `SKILLS_MARKET_DIR` / `PAN_DIR`
 - `PROVIDER_APIKEY_KEY_PART`
 
-以下环境变量仍受 Go runner 支持，但为了降低最终用户理解成本，默认不再出现在 `.env.example` 中：
+以下环境变量仍受 Go runtime 支持，但为了降低最终用户理解成本，默认不再出现在 `.env.example` 中：
 
 - 传输与渲染调试：`AGENT_SSE_HEARTBEAT_INTERVAL_MS`、`AGENT_H2A_RENDER_*`
 - WebSocket 深度调优：`AGENT_WS_MAX_MESSAGE_SIZE`、`AGENT_WS_PING_INTERVAL_MS`、`AGENT_WS_WRITE_TIMEOUT_MS`、`AGENT_WS_WRITE_QUEUE_SIZE`、`AGENT_WS_MAX_OBSERVES_PER_CONN`
@@ -163,7 +163,7 @@ Provider `apiKey` 支持两种写法：
 - 明文：`apiKey: sk-...`
 - 弱对抗密文：`apiKey: AES(...)`
 
-当使用 `AES(...)` 时，runner 会在加载 provider registry 时自动解密，并继续把还原后的真实 key 用于上游请求头。需要同时满足程序内置 code part 和环境变量 `PROVIDER_APIKEY_KEY_PART`。这套方案只用于“防直接看配置文件”，不等同于真正的 secret manager；明文 `apiKey` 仍然兼容，便于渐进迁移和回滚。旧的 `AES(v1:...)` 已不再支持，需要重新生成密文。
+当使用 `AES(...)` 时，runtime 会在加载 provider registry 时自动解密，并继续把还原后的真实 key 用于上游请求头。需要同时满足程序内置 code part 和环境变量 `PROVIDER_APIKEY_KEY_PART`。这套方案只用于“防直接看配置文件”，不等同于真正的 secret manager；明文 `apiKey` 仍然兼容，便于渐进迁移和回滚。旧的 `AES(v1:...)` 已不再支持，需要重新生成密文。
 
 ### `configs/` 目录
 
@@ -176,7 +176,7 @@ Provider `apiKey` 支持两种写法：
 - `configs/local-public-key.example.pem`
 - `configs/channels.example.yml`
 
-当前 Go runner 实际会读取：
+当前 Go runtime 实际会读取：
 
 - `configs/bash.yml`
 - `configs/channels.yml`
@@ -185,9 +185,9 @@ Provider `apiKey` 支持两种写法：
 - `configs/file-tools.yml`
 - `configs/local-public-key.pem`
 
-`configs/` 不是可配置目录，固定使用 runner 根目录下的 `./configs`；容器内固定挂载到 `/opt/configs`。
+`configs/` 不是可配置目录，固定使用 runtime 根目录下的 `./configs`；容器内固定挂载到 `/opt/configs`。
 
-**静态配置**：`configs/` 下所有文件都只在进程启动时读取一次；修改 `configs/*.yml` 或 `configs/*.pem` 后必须重启 runner 才会生效。
+**静态配置**：`configs/` 下所有文件都只在进程启动时读取一次；修改 `configs/*.yml` 或 `configs/*.pem` 后必须重启 runtime 才会生效。
 
 本地 JWT 公钥规则：
 
@@ -224,7 +224,7 @@ Provider `apiKey` 支持两种写法：
 ### 容器构建
 
 ```bash
-docker build -t agent-platform-runner-go:latest .
+docker build -t agent-platform:latest .
 ```
 
 ### 本地编排

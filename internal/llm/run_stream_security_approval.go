@@ -3,10 +3,10 @@ package llm
 import (
 	"strings"
 
-	"agent-platform-runner-go/internal/bashsec"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/filetools"
-	"agent-platform-runner-go/internal/hitl"
+	"agent-platform/internal/bashsec"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
+	"agent-platform/internal/hitl"
 )
 
 func (s *llmRunStream) emitBashSecurityApprovalDeltas(invocation *preparedToolInvocation, review bashsec.ReviewResult) error {

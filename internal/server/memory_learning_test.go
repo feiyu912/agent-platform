@@ -3,10 +3,10 @@ package server
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/memory"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	"agent-platform/internal/memory"
 )
 
 func TestAutoLearnIfEnabledStoresObservation(t *testing.T) {

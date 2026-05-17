@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/config"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/robfig/cron/v3"

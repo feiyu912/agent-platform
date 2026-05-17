@@ -50,8 +50,8 @@
     }
   ],
   "runtime": {
-    "pidRelativePath": "run/agent-platform-runner.pid",
-    "logRelativePath": "run/agent-platform-runner.log",
+    "pidRelativePath": "run/agent-platform.pid",
+    "logRelativePath": "run/agent-platform.log",
     "__ERROR_LOG_LINE__": "__ERROR_LOG_LINE__",
     "requiredPaths": [
       "__BACKEND_ENTRY__",

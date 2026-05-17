@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 func (s *Server) handleSkillCandidates(w http.ResponseWriter, r *http.Request) {

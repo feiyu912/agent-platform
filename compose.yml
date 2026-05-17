@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: agent-platform-runner-go
+    container_name: agent-platform
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-11949}:8080"

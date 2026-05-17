@@ -8,9 +8,9 @@ import (
 	"strings"
 	"unicode"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
 )
 
 func resolveDirectoryAgentConfig(dirPath string) string {

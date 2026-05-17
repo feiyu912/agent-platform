@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 type Definition struct {

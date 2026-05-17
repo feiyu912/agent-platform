@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 type DispatchFunc func(ctx context.Context, req api.QueryRequest) error

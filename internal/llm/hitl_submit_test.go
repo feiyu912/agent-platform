@@ -3,7 +3,7 @@ package llm
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 func mustEncodeHITLSubmitParams(t *testing.T, value any) api.SubmitParams {

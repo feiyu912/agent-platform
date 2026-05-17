@@ -1,6 +1,6 @@
 package contracts
 
-import "agent-platform-runner-go/internal/api"
+import "agent-platform/internal/api"
 
 type ToolDefinitionLookup interface {
 	Tool(name string) (api.ToolDetailResponse, bool)

@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/stream"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/stream"
+	"agent-platform/internal/ws"
 )
 
 func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/memory"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/memory"
+	"agent-platform/internal/ws"
 
 	gws "github.com/gorilla/websocket"
 )
@@ -22,7 +22,7 @@ func TestHandleMemoryScopesReturnsEditableScopes(t *testing.T) {
 
 	writeTestMemory(t, server.deps.Memory, api.StoredMemoryResponse{
 		ID:         "mem_user_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeUser,
 		ScopeKey:   "user:alice",
@@ -38,7 +38,7 @@ func TestHandleMemoryScopesReturnsEditableScopes(t *testing.T) {
 	})
 	writeTestMemory(t, server.deps.Memory, api.StoredMemoryResponse{
 		ID:         "mem_team_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeTeam,
 		ScopeKey:   "team:platform",
@@ -53,7 +53,7 @@ func TestHandleMemoryScopesReturnsEditableScopes(t *testing.T) {
 		UpdatedAt:  210,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/scopes?agentKey=mock-runner&userKey=alice", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/scopes?agentKey=mock-agent&userKey=alice", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryScopes(rec, req)
 
@@ -107,15 +107,15 @@ func TestHandleMemoryContextPreviewReturnsInjectedMemory(t *testing.T) {
 	fixture := newMemoryEnabledTestFixture(t)
 	server := fixture.server
 
-	if _, _, err := fixture.chats.EnsureChat("chat-preview", "mock-runner", "team-1", "memory preview"); err != nil {
+	if _, _, err := fixture.chats.EnsureChat("chat-preview", "mock-agent", "team-1", "memory preview"); err != nil {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	writeTestMemory(t, server.deps.Memory, api.StoredMemoryResponse{
 		ID:         "mem_agent_release",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeAgent,
-		ScopeKey:   "agent:mock-runner",
+		ScopeKey:   "agent:mock-agent",
 		Title:      "Desktop builtin release",
 		Summary:    "desktop builtin 发布流程是先 make release-program，再同步 desktop assets。",
 		SourceType: "tool-write",
@@ -128,7 +128,7 @@ func TestHandleMemoryContextPreviewReturnsInjectedMemory(t *testing.T) {
 	})
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_chat_release",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindObservation,
 		ScopeType:  memory.ScopeChat,
 		ScopeKey:   "chat:chat-preview",
@@ -156,7 +156,7 @@ func TestHandleMemoryContextPreviewReturnsInjectedMemory(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !resp.Data.Enabled || resp.Data.AgentKey != "mock-runner" || resp.Data.ChatID != "chat-preview" {
+	if !resp.Data.Enabled || resp.Data.AgentKey != "mock-agent" || resp.Data.ChatID != "chat-preview" {
 		t.Fatalf("unexpected preview envelope: %#v", resp.Data)
 	}
 	if !strings.Contains(resp.Data.Prompts.Stable, "make release-program") {
@@ -192,7 +192,7 @@ func TestHandleMemoryScopeReturnsMarkdownAndRecords(t *testing.T) {
 
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_user_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeUser,
 		ScopeKey:   "user:alice",
@@ -207,7 +207,7 @@ func TestHandleMemoryScopeReturnsMarkdownAndRecords(t *testing.T) {
 		UpdatedAt:  200,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/scope?agentKey=mock-runner&scopeType=user&scopeKey=user:alice", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/scope?agentKey=mock-agent&scopeType=user&scopeKey=user:alice", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryScope(rec, req)
 
@@ -239,7 +239,7 @@ func TestHandleMemoryScopeValidateRejectsBadImportance(t *testing.T) {
 	fixture := newMemoryEnabledTestFixture(t)
 	server := fixture.server
 
-	reqBody := `{"agentKey":"mock-runner","scopeType":"user","markdown":"# USER\n\n- [new] 偏好中文输出\n  importance: 99\n  content: xxx"}`
+	reqBody := `{"agentKey":"mock-agent","scopeType":"user","markdown":"# USER\n\n- [new] 偏好中文输出\n  importance: 99\n  content: xxx"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/memory/scope/validate", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -263,7 +263,7 @@ func TestHandleMemoryScopeSaveUpdatesAndCreatesFacts(t *testing.T) {
 
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_user_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeUser,
 		ScopeKey:   "user:alice",
@@ -279,7 +279,7 @@ func TestHandleMemoryScopeSaveUpdatesAndCreatesFacts(t *testing.T) {
 	})
 
 	reqBody := `{
-	  "agentKey":"mock-runner",
+	  "agentKey":"mock-agent",
 	  "scopeType":"user",
 	  "scopeKey":"user:alice",
 	  "mode":"markdown",
@@ -301,14 +301,14 @@ func TestHandleMemoryScopeSaveUpdatesAndCreatesFacts(t *testing.T) {
 	if resp.Data.Summary.Created != 1 || resp.Data.Summary.Updated != 1 {
 		t.Fatalf("unexpected save summary: %#v", resp.Data.Summary)
 	}
-	record, err := fixture.memories.ReadDetail("mock-runner", "mem_user_1")
+	record, err := fixture.memories.ReadDetail("mock-agent", "mem_user_1")
 	if err != nil {
 		t.Fatalf("read updated detail: %v", err)
 	}
 	if record == nil || record.Importance != 9 {
 		t.Fatalf("unexpected updated record: %#v", record)
 	}
-	results, err := memory.ListConsoleRecords(fixture.memories, memory.RecordFilter{AgentKey: "mock-runner", ScopeType: memory.ScopeUser, Limit: 20})
+	results, err := memory.ListConsoleRecords(fixture.memories, memory.RecordFilter{AgentKey: "mock-agent", ScopeType: memory.ScopeUser, Limit: 20})
 	if err != nil {
 		t.Fatalf("list records: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestHandleMemoryRecordsFiltersResults(t *testing.T) {
 
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_fact_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeUser,
 		ScopeKey:   "user:alice",
@@ -340,7 +340,7 @@ func TestHandleMemoryRecordsFiltersResults(t *testing.T) {
 	})
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_obs_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		ChatID:     "chat-1",
 		Kind:       memory.KindObservation,
 		ScopeType:  memory.ScopeChat,
@@ -356,7 +356,7 @@ func TestHandleMemoryRecordsFiltersResults(t *testing.T) {
 		UpdatedAt:  now,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/records?agentKey=mock-runner&kind=fact", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/records?agentKey=mock-agent&kind=fact", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryRecords(rec, req)
 
@@ -378,10 +378,10 @@ func TestMemoryWSRecordsMirrorsHTTP(t *testing.T) {
 
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_fact_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeAgent,
-		ScopeKey:   "agent:mock-runner",
+		ScopeKey:   "agent:mock-agent",
 		Title:      "偏好中文输出",
 		Summary:    "用户偏好中文输出。",
 		SourceType: "manual",
@@ -394,7 +394,7 @@ func TestMemoryWSRecordsMirrorsHTTP(t *testing.T) {
 	})
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_obs_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		ChatID:     "chat-1",
 		Kind:       memory.KindObservation,
 		ScopeType:  memory.ScopeChat,
@@ -418,7 +418,7 @@ func TestMemoryWSRecordsMirrorsHTTP(t *testing.T) {
 		Type:  "/api/memory/records",
 		ID:    "records",
 		Payload: ws.MarshalPayload(map[string]any{
-			"agentKey": "mock-runner",
+			"agentKey": "mock-agent",
 			"kind":     "fact",
 		}),
 	}); err != nil {
@@ -443,7 +443,7 @@ func TestMemoryWSRecordAndMeta(t *testing.T) {
 
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_obs_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		ChatID:     "chat-1",
 		Kind:       memory.KindObservation,
 		ScopeType:  memory.ScopeChat,
@@ -467,7 +467,7 @@ func TestMemoryWSRecordAndMeta(t *testing.T) {
 		Type:  "/api/memory/record",
 		ID:    "record",
 		Payload: ws.MarshalPayload(map[string]any{
-			"agentKey": "mock-runner",
+			"agentKey": "mock-agent",
 			"id":       "mem_obs_1",
 		}),
 	}); err != nil {
@@ -513,10 +513,10 @@ func TestHandleMemoryRecordReturnsRawFields(t *testing.T) {
 
 	writeTestMemory(t, fixture.memories, api.StoredMemoryResponse{
 		ID:         "mem_fact_1",
-		AgentKey:   "mock-runner",
+		AgentKey:   "mock-agent",
 		Kind:       memory.KindFact,
 		ScopeType:  memory.ScopeAgent,
-		ScopeKey:   "agent:mock-runner",
+		ScopeKey:   "agent:mock-agent",
 		Title:      "修复权限问题",
 		Summary:    "修复了权限问题。",
 		SourceType: "tool-write",
@@ -528,7 +528,7 @@ func TestHandleMemoryRecordReturnsRawFields(t *testing.T) {
 		UpdatedAt:  now,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/record?agentKey=mock-runner&id=mem_fact_1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/record?agentKey=mock-agent&id=mem_fact_1", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryRecord(rec, req)
 

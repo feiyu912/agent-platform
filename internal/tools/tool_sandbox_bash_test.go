@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	contracts "agent-platform-runner-go/internal/contracts"
+	contracts "agent-platform/internal/contracts"
 )
 
 type stubSandboxClient struct {

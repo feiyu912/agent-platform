@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/config"
+	"agent-platform/internal/stream"
 )
 
 func TestConnRejectsDuplicateRequestID(t *testing.T) {

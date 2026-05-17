@@ -91,7 +91,7 @@ build_program_bundle() {
   CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
     go build \
     -o "$backend_path" \
-    ./cmd/agent-platform-runner
+    ./cmd/agent-platform
 
   echo "[release] assembling program bundle for $target_os..."
   cp "$REPO_ROOT/.env.example" "$bundle_root/.env.example"

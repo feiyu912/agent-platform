@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 func TestDecodePayload(t *testing.T) {

@@ -3,7 +3,7 @@ package llm
 import (
 	"context"
 
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/chat"
 )
 
 type approvalSummaryContextKey struct{}

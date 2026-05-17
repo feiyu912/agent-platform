@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
 )
 
 func TestCreateSessionIncludesContainerHubErrorDetail(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 var memorySecretPatterns = []*regexp.Regexp{

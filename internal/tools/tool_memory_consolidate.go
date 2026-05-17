@@ -1,8 +1,8 @@
 package tools
 
 import (
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/memory"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/memory"
 )
 
 func (t *RuntimeToolExecutor) invokeMemoryConsolidate(toolName string, _ map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {

@@ -1,6 +1,6 @@
 package runctl
 
-import "agent-platform-runner-go/internal/contracts"
+import "agent-platform/internal/contracts"
 
 type RunControl = contracts.RunControl
 type SubmitResult = contracts.SubmitResult

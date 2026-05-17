@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/resources"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/resources"
 )
 
 var requiredBuiltinToolNames = []string{

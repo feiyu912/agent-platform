@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/stream"
 )
 
 const (

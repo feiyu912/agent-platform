@@ -3,7 +3,7 @@ package hitl
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/bashast"
+	"agent-platform/internal/bashast"
 )
 
 func TestParseCommandComponents(t *testing.T) {

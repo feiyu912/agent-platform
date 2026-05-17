@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	configpkg "agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
+	configpkg "agent-platform/internal/config"
+	"agent-platform/internal/contracts"
 )
 
 type EditableAgentSource struct {

@@ -40,7 +40,7 @@ VERSION=$(cat VERSION) ARCH=arm64 bash scripts/release.sh
 
 ```text
 agent-platform/
-  agent-platform-runner
+  agent-platform
   .env.example
   start.sh
   stop.sh

@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/memory"
-	"agent-platform-runner-go/internal/skills"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/memory"
+	"agent-platform/internal/skills"
 )
 
 // ArtifactPusher 是 tool_artifact 产物外发的最小依赖面：由应用层注入（通常是

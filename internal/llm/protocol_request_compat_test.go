@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"testing"
 
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
-	. "agent-platform-runner-go/internal/models"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
+	. "agent-platform/internal/models"
 )
 
 func TestCompatRequestOverridesMergeAlwaysAndReasoningScopedEntries(t *testing.T) {

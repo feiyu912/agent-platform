@@ -1,6 +1,6 @@
 # Memory Configuration
 
-本文说明当前 runner 中与记忆系统直接相关的配置入口。当前规则是：`.env` 只负责 memory 存储目录；agent 是否启用 memory、是否自动学习、使用哪个总结模型，全部放在 agent 配置；embedding 默认参数放在 provider 配置。
+本文说明当前 runtime 中与记忆系统直接相关的配置入口。当前规则是：`.env` 只负责 memory 存储目录；agent 是否启用 memory、是否自动学习、使用哪个总结模型，全部放在 agent 配置；embedding 默认参数放在 provider 配置。
 
 ## 快速结论
 

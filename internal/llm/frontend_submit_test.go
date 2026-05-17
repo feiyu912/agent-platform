@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	contracts "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
+	"agent-platform/internal/api"
+	contracts "agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
 )
 
 func frontendAwaitingContext(awaitingID string) contracts.AwaitingSubmitContext {

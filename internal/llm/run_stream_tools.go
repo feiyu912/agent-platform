@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/bashsec"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/filetools"
+	"agent-platform/internal/api"
+	"agent-platform/internal/bashsec"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
 )
 
 func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolInvocation, []AgentDelta, *openAIMessage) {

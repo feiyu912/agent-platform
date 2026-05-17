@@ -3,7 +3,7 @@ package contracts
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 func TestResolveBudgetSupportsHitlTimeoutOverride(t *testing.T) {

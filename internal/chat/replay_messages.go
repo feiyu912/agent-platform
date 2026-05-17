@@ -3,7 +3,7 @@ package chat
 import (
 	"strings"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, nextSeq func() int64) []stream.EventData {

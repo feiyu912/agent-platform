@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 func loadTeams(root string) (map[string]TeamDefinition, error) {

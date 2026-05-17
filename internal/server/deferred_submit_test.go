@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	"agent-platform/internal/ws"
 
 	gws "github.com/gorilla/websocket"
 )
@@ -354,7 +354,7 @@ func TestDeferredSubmitAcceptsWithinTimeout(t *testing.T) {
 
 func seedDeferredAwaiting(t *testing.T, store chat.Store, chatID string, runID string, awaitingID string, mode string, timeoutMs int, createdAt int64) {
 	t.Helper()
-	if _, _, err := store.EnsureChat(chatID, "mock-runner", "", "hello"); err != nil {
+	if _, _, err := store.EnsureChat(chatID, "mock-agent", "", "hello"); err != nil {
 		t.Fatalf("ensure chat: %v", err)
 	}
 	if err := store.AppendStepLine(chatID, chat.StepLine{

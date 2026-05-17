@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	. "agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	. "agent-platform/internal/contracts"
 )
 
 func TestBuildSystemPromptPlacesStaticMemoryBeforeRuntimeMemory(t *testing.T) {
@@ -162,12 +162,12 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 	prompt := buildRuntimeContextPrompt(QuerySession{}, api.QueryRequest{
 		Params: map[string]any{
 			"desktop": map[string]any{
-				"source": "copilot",
-				"route":  "/settings?section=navigation",
-				"pageKey": "native:/settings?section=navigation",
-				"pageKind": "native",
+				"source":          "copilot",
+				"route":           "/settings?section=navigation",
+				"pageKey":         "native:/settings?section=navigation",
+				"pageKind":        "native",
 				"snapshotVersion": 3,
-				"snapshotAt": "2026-05-16T12:00:00Z",
+				"snapshotAt":      "2026-05-16T12:00:00Z",
 				"pageContext": map[string]any{
 					"title": "Bing",
 					"url":   "https://www.bing.com/",

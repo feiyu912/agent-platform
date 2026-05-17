@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/api"
+	"agent-platform/internal/stream"
 )
 
 func testAwaitingContext(awaitingID string) AwaitingSubmitContext {

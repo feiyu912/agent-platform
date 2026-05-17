@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 type recordingCatalogReloader struct {

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/observability"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/observability"
 )
 
 type Client struct {
@@ -41,7 +41,7 @@ func (c *Client) Initialize(ctx context.Context, serverKey string) error {
 		"protocolVersion": "2025-06",
 		"capabilities":    map[string]any{},
 		"clientInfo": map[string]any{
-			"name":    "agent-platform-runner",
+			"name":    "agent-platform",
 			"version": "0.0.1",
 		},
 	}, nil)

@@ -19,19 +19,19 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
-	"agent-platform-runner-go/internal/llm"
-	"agent-platform-runner-go/internal/memory"
-	"agent-platform-runner-go/internal/models"
-	"agent-platform-runner-go/internal/reload"
-	"agent-platform-runner-go/internal/runctl"
-	"agent-platform-runner-go/internal/stream"
-	"agent-platform-runner-go/internal/tools"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
+	"agent-platform/internal/llm"
+	"agent-platform/internal/memory"
+	"agent-platform/internal/models"
+	"agent-platform/internal/reload"
+	"agent-platform/internal/runctl"
+	"agent-platform/internal/stream"
+	"agent-platform/internal/tools"
 )
 
 var disallowedPersistedEventTypes = []string{
@@ -97,7 +97,7 @@ type testFixtureOptions struct {
 func newTestFixture(t *testing.T) testFixture {
 	return newTestFixtureWithModelHandler(t, func(w http.ResponseWriter, r *http.Request) {
 		writeProviderSSE(t, w,
-			`{"choices":[{"delta":{"content":"Go runner "}}]}`,
+			`{"choices":[{"delta":{"content":"Go runtime "}}]}`,
 			`{"choices":[{"delta":{"content":"test response"},"finish_reason":"stop"}]}`,
 			`[DONE]`,
 		)
@@ -107,7 +107,7 @@ func newTestFixture(t *testing.T) testFixture {
 func newMemoryEnabledTestFixture(t *testing.T) testFixture {
 	return newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
 		writeProviderSSE(t, w,
-			`{"choices":[{"delta":{"content":"Go runner "}}]}`,
+			`{"choices":[{"delta":{"content":"Go runtime "}}]}`,
 			`{"choices":[{"delta":{"content":"test response"},"finish_reason":"stop"}]}`,
 			`[DONE]`,
 		)
@@ -116,7 +116,7 @@ func newMemoryEnabledTestFixture(t *testing.T) testFixture {
 			cfg.Memory.Enabled = true
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
-			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-runner", "agent.yml")
+			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml")
 			data, err := os.ReadFile(agentPath)
 			if err != nil {
 				t.Fatalf("read agent config: %v", err)
@@ -162,7 +162,7 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 	if err := os.MkdirAll(modelsDir, 0o755); err != nil {
 		t.Fatalf("mkdir models dir: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(agentsDir, "mock-runner"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(agentsDir, "mock-agent"), 0o755); err != nil {
 		t.Fatalf("mkdir agents dir: %v", err)
 	}
 	if err := os.MkdirAll(teamsDir, 0o755); err != nil {
@@ -189,9 +189,9 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 	}, "\n")), 0o644); err != nil {
 		t.Fatalf("write model config: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(agentsDir, "mock-runner", "agent.yml"), []byte(strings.Join([]string{
-		"key: mock-runner",
-		"name: Mock Runner",
+	if err := os.WriteFile(filepath.Join(agentsDir, "mock-agent", "agent.yml"), []byte(strings.Join([]string{
+		"key: mock-agent",
+		"name: Mock Agent",
 		"role: 测试代理",
 		"description: test agent",
 		"wonders:",
@@ -239,9 +239,9 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 	}
 	if err := os.WriteFile(filepath.Join(teamsDir, "default.demo.yml"), []byte(strings.Join([]string{
 		"name: Default Team",
-		"defaultAgentKey: mock-runner",
+		"defaultAgentKey: mock-agent",
 		"agentKeys:",
-		"  - mock-runner",
+		"  - mock-agent",
 	}, "\n")), 0o644); err != nil {
 		t.Fatalf("write team config: %v", err)
 	}

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 func TestEnsureChatDoesNotCreateChatDirectory(t *testing.T) {

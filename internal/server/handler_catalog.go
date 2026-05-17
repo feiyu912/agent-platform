@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/ws"
 )
 
 type editableAgentRegistry interface {

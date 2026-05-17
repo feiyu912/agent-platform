@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/schedule"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/schedule"
+	"agent-platform/internal/ws"
 )
 
 type scheduleStatusError struct {

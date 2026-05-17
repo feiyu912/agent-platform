@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/chat"
 )
 
 func CandidateFromRunTrace(trace chat.RunTrace, agentKey string, chatID string) (CandidateInput, bool) {

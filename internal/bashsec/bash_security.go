@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"agent-platform-runner-go/internal/bashast"
+	"agent-platform/internal/bashast"
 )
 
 type ReviewDecision string

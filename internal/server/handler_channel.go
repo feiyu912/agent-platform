@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"sort"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 func (s *Server) handleChannels(w http.ResponseWriter, _ *http.Request) {

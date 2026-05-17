@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 type MutationInput struct {

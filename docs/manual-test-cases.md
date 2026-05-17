@@ -16,7 +16,7 @@ curl -X GET "$BASE_URL/api/agents"
 ```
 
 ```bash
-curl -X GET "$BASE_URL/api/agent?agentKey=go_runner"
+curl -X GET "$BASE_URL/api/agent?agentKey=default_agent"
 ```
 
 ```bash
@@ -46,7 +46,7 @@ curl -X GET "$BASE_URL/api/chats?lastRunId=test-run-id"
 ```
 
 ```bash
-curl -X GET "$BASE_URL/api/chats?agentKey=go_runner"
+curl -X GET "$BASE_URL/api/chats?agentKey=default_agent"
 ```
 
 ```bash
@@ -68,25 +68,25 @@ curl -X GET "$BASE_URL/api/chat?chatId=replace-me&includeRawMessages=true"
 ```bash
 curl -N -X POST "$BASE_URL/api/query" \
   -H "Content-Type: application/json" \
-  -d '{"message":"元素碳的简介，100字","agentKey":"go_runner"}'
+  -d '{"message":"元素碳的简介，100字","agentKey":"default_agent"}'
 ```
 
 ```bash
 curl -N -X POST "$BASE_URL/api/query" \
   -H "Content-Type: application/json" \
-  -d '{"message":"列出当前仓库的 Go 文件数量，并说明你会调用什么工具","agentKey":"go_runner"}'
+  -d '{"message":"列出当前仓库的 Go 文件数量，并说明你会调用什么工具","agentKey":"default_agent"}'
 ```
 
 ```bash
 curl -N -X POST "$BASE_URL/api/query" \
   -H "Content-Type: application/json" \
-  -d '{"chatId":"replace-me","message":"继续上一轮内容","agentKey":"go_runner"}'
+  -d '{"chatId":"replace-me","message":"继续上一轮内容","agentKey":"default_agent"}'
 ```
 
 ```bash
 curl -N -X POST "$BASE_URL/api/query" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","message":"使用指定 runId 发起一次请求","agentKey":"go_runner"}'
+  -d '{"runId":"replace-me","message":"使用指定 runId 发起一次请求","agentKey":"default_agent"}'
 ```
 
 ## Submit / Steer / Interrupt

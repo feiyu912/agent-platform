@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 type principalContextKey struct{}

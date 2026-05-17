@@ -384,16 +384,16 @@ func TestLoadTeamsSupportsYAMLAndSkipsExampleFiles(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "default.yaml"), []byte(
 		"name: Default Team\n"+
-			"defaultAgentKey: runner\n"+
+			"defaultAgentKey: default_agent\n"+
 			"agentKeys:\n"+
-			"  - runner\n",
+			"  - default_agent\n",
 	), 0o644); err != nil {
 		t.Fatalf("write yaml team: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "example.example.yml"), []byte(
 		"name: Example Team\n"+
 			"agentKeys:\n"+
-			"  - runner\n",
+			"  - default_agent\n",
 	), 0o644); err != nil {
 		t.Fatalf("write example team: %v", err)
 	}

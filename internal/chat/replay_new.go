@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 func (s *FileStore) LoadChat(chatID string) (Detail, error) {

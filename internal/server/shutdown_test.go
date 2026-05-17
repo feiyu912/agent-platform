@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/runctl"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/runctl"
 )
 
 func TestHTTPQueryStreamClosesDuringRootContextShutdown(t *testing.T) {
@@ -35,9 +35,9 @@ func TestHTTPQueryStreamClosesDuringRootContextShutdown(t *testing.T) {
 		<-r.Context().Done()
 	}, testFixtureOptions{
 		setupRuntime: func(_ string, cfg *config.Config) {
-			writeAgentConfig(t, filepath.Join(cfg.Paths.AgentsDir, "mock-runner", "agent.yml"), []string{
-				"key: mock-runner",
-				"name: Mock Runner",
+			writeAgentConfig(t, filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml"), []string{
+				"key: mock-agent",
+				"name: Mock Agent",
 				"role: 测试代理",
 				"description: test agent",
 				"modelConfig:",
@@ -122,7 +122,7 @@ func TestHTTPRunStreamDetachesObserverDuringRootContextShutdown(t *testing.T) {
 	_, _, _ = runs.Register(context.Background(), contracts.QuerySession{
 		RunID:    runID,
 		ChatID:   "chat_http_shutdown",
-		AgentKey: "mock-runner",
+		AgentKey: "mock-agent",
 	})
 
 	httpServer := newLoopbackServerWithBaseContext(t, fixture.server, rootCtx)
@@ -182,10 +182,10 @@ func TestProxyQueryCancelsUpstreamRequestDuringRootContextShutdown(t *testing.T)
 		writeProviderSSE(t, w, `[DONE]`)
 	}, testFixtureOptions{
 		setupRuntime: func(_ string, cfg *config.Config) {
-			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-runner", "agent.yml")
+			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml")
 			writeAgentConfig(t, agentPath, []string{
-				"key: mock-runner",
-				"name: Mock Proxy Runner",
+				"key: mock-agent",
+				"name: Mock Proxy Agent",
 				"role: 测试代理",
 				"description: proxy test agent",
 				"mode: PROXY",

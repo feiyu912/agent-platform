@@ -4,7 +4,7 @@ import (
 	"strings"
 	"sync"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 type Registry struct {

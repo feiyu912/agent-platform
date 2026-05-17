@@ -6,11 +6,11 @@ import (
 	"log"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/memory"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/memory"
 )
 
 type querySessionBuildOptions struct {

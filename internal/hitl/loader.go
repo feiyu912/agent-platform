@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/config"
 )
 
 func loadRulesFromDir(root string) ([]FlatRule, error) {

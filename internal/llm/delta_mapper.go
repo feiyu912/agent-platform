@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
-	"agent-platform-runner-go/internal/stream"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
+	"agent-platform/internal/stream"
 )
 
 type DeltaMapper struct {

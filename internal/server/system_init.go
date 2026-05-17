@@ -1,10 +1,10 @@
 package server
 
 import (
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/llm"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/llm"
 )
 
 func (s *Server) prepareSystemInitCache(req api.QueryRequest, session *contracts.QuerySession, created bool) ([]chat.QueryLineSystemInit, error) {

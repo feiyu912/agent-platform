@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
 )
 
 func TestFrontendSubmitAndSteerAreConsumedBeforeNextTurn(t *testing.T) {
@@ -1733,7 +1733,7 @@ func runSandboxBashQueryForResultShape(t *testing.T, sandbox contracts.SandboxCl
 		sandbox: sandbox,
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"list sample","agentKey":"mock-runner"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"list sample","agentKey":"mock-agent"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	fixture.server.ServeHTTP(rec, req)

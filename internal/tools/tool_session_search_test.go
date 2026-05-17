@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
 )
 
 func TestSessionSearchToolUsesCurrentChatByDefault(t *testing.T) {

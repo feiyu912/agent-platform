@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 func refreshSnapshots(root string, agentKey string, items []api.StoredMemoryResponse) error {

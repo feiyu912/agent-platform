@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/chat"
 )
 
 func TestDeferredAwaitingStoreRegisterLookupRemove(t *testing.T) {

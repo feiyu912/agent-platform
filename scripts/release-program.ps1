@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $APP_NAME = "agent-platform"
-$PROGRAM_NAME = "agent-platform-runner"
+$PROGRAM_NAME = "agent-platform"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $REPO_ROOT = Split-Path -Parent $SCRIPT_DIR
 $PROGRAM_RELEASE_ASSETS_DIR = Join-Path $SCRIPT_DIR "release-assets/program"
@@ -183,7 +183,7 @@ function Write-ProgramManifest {
     # Replace the entire errorLog line placeholder: Windows gets real value, others remove the line entirely
     $errorLogPattern = '"__ERROR_LOG_LINE__": "__ERROR_LOG_LINE__",\r?\n'
     if ($TargetOs -eq "windows") {
-        $errorLogReplacement = '    "errorLogRelativePath": "run/agent-platform-runner.stderr.log",' + "`n"
+        $errorLogReplacement = '    "errorLogRelativePath": "run/agent-platform.stderr.log",' + "`n"
         $manifest = $manifest -replace $errorLogPattern, $errorLogReplacement
     } else {
         $manifest = $manifest -replace $errorLogPattern, ""
@@ -222,7 +222,7 @@ function Build-ProgramBundle {
 
         Write-Host "[release] building program binary for $TargetOs..."
         $env:CGO_ENABLED = "0"
-        & go build -o $backendPath ./cmd/agent-platform-runner
+        & go build -o $backendPath ./cmd/agent-platform
         if ($LASTEXITCODE -ne 0) {
             Write-Error "go build failed for $TargetOs"
         }

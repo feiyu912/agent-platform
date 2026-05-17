@@ -3,8 +3,8 @@ package tools
 import (
 	"strings"
 
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/skills"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/skills"
 )
 
 func (t *RuntimeToolExecutor) invokeSkillCandidateWrite(toolName string, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {

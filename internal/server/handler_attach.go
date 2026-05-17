@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/api"
+	"agent-platform/internal/stream"
 )
 
 func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {

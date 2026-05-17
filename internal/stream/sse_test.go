@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/config"
 )
 
 func TestWriterWritesImmediatelyWhenBufferingDisabled(t *testing.T) {

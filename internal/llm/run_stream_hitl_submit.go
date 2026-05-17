@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/bashsec"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/filetools"
-	"agent-platform-runner-go/internal/hitl"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/bashsec"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
+	"agent-platform/internal/hitl"
+	"agent-platform/internal/stream"
 )
 
 func (s *llmRunStream) awaitHITLSubmitAndExecute() error {

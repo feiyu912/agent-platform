@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 func TestDispatcherBuildsStructuredQueryRequest(t *testing.T) {

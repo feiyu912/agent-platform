@@ -1,6 +1,6 @@
 package llm
 
-import "agent-platform-runner-go/internal/hitlsubmit"
+import "agent-platform/internal/hitlsubmit"
 
 func normalizeHITLSubmit(args map[string]any, params any) (map[string]any, error) {
 	return hitlsubmit.Normalize(args, params)

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"agent-platform-runner-go/internal/config"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/skills"
+	"agent-platform/internal/config"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/skills"
 )
 
 func TestSkillCandidateToolWriteAndList(t *testing.T) {

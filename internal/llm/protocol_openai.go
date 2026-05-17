@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 type openAIProtocol struct {

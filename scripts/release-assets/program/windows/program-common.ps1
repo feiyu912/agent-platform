@@ -2,18 +2,18 @@ $ErrorActionPreference = 'Stop'
 
 $Script:ProgramCommonDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Script:BundleRoot = Split-Path -Parent $Script:ProgramCommonDir
-$Script:AppName = 'agent-platform-runner'
+$Script:AppName = 'agent-platform'
 $Script:ManifestFile = Join-Path $Script:BundleRoot 'manifest.json'
 $Script:EnvExampleFile = Join-Path $Script:BundleRoot '.env.example'
 $Script:EnvFile = Join-Path $(if ($env:SERVICE_CONFIG_DIR) { $env:SERVICE_CONFIG_DIR } else { $Script:BundleRoot }) '.env'
-$Script:BackendBin = Join-Path (Join-Path $Script:BundleRoot 'backend') 'agent-platform-runner.exe'
+$Script:BackendBin = Join-Path (Join-Path $Script:BundleRoot 'backend') 'agent-platform.exe'
 $Script:ConfigDir = Join-Path $(if ($env:SERVICE_CONFIG_DIR) { $env:SERVICE_CONFIG_DIR } else { $Script:BundleRoot }) 'configs'
 $Script:RuntimeRoot = if ($env:SERVICE_DATA_DIR) { $env:SERVICE_DATA_DIR } else { Join-Path $Script:BundleRoot 'runtime' }
 $Script:RunDir = if ($env:SERVICE_STATE_DIR) { $env:SERVICE_STATE_DIR } else { Join-Path $Script:BundleRoot 'run' }
 $Script:LogDir = if ($env:SERVICE_LOG_DIR) { $env:SERVICE_LOG_DIR } else { $Script:RunDir }
-$Script:PidFile = Join-Path $Script:RunDir 'agent-platform-runner.pid'
-$Script:LogFile = Join-Path $Script:LogDir 'agent-platform-runner.log'
-$Script:ErrorLogFile = Join-Path $Script:LogDir 'agent-platform-runner.stderr.log'
+$Script:PidFile = Join-Path $Script:RunDir 'agent-platform.pid'
+$Script:LogFile = Join-Path $Script:LogDir 'agent-platform.log'
+$Script:ErrorLogFile = Join-Path $Script:LogDir 'agent-platform.stderr.log'
 
 function Fail-Program([string]$Message) {
   throw "[program] $Message"

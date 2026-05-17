@@ -3,7 +3,7 @@ package skills
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/chat"
 )
 
 func TestCandidateFromRunTraceExtractsWorkflowFields(t *testing.T) {

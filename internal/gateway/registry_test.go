@@ -4,8 +4,8 @@ import (
 	"sync"
 	"testing"
 
-	"agent-platform-runner-go/internal/channel"
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/channel"
+	"agent-platform/internal/config"
 )
 
 func TestChannelFromChatID(t *testing.T) {

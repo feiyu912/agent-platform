@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 // AppendEvent writes a raw SSE event to events.jsonl (legacy path).

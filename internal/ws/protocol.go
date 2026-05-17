@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 const (

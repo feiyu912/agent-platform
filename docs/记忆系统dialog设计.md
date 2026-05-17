@@ -30,7 +30,7 @@
 
 ```text
 +------------------------------------------------------------------------------------------------+
-| Memory Console / 偏好设置                                                     agent: go_runner |
+| Memory Console / 偏好设置                                                     agent: default_agent |
 +------------------------------------------------------------------------------------------------+
 | Scope Tabs: [USER] [AGENT] [TEAM] [GLOBAL]                                                   刷新 |
 +-------------------------------+--------------------------------------+-------------------------+
@@ -71,7 +71,7 @@
 
 ### 1. 获取 scope 列表
 
-`GET /api/memory/scopes?agentKey=go_runner`
+`GET /api/memory/scopes?agentKey=default_agent`
 
 用途：
 返回当前 agent 下可编辑的 scope 摘要。
@@ -83,7 +83,7 @@
   "code": 0,
   "msg": "success",
   "data": {
-    "agentKey": "go_runner",
+    "agentKey": "default_agent",
     "scopes": [
       {
         "scopeType": "user",
@@ -95,7 +95,7 @@
       },
       {
         "scopeType": "agent",
-        "scopeKey": "agent:go_runner",
+        "scopeKey": "agent:default_agent",
         "label": "AGENT",
         "fileName": "AGENT.md",
         "recordCount": 12,
@@ -124,7 +124,7 @@
 
 ### 2. 获取单个 scope 详情
 
-`GET /api/memory/scope?agentKey=go_runner&scopeType=user`
+`GET /api/memory/scope?agentKey=default_agent&scopeType=user`
 
 用途：
 返回当前 scope 的 markdown 视图和对应结构化记录。
@@ -136,7 +136,7 @@
   "code": 0,
   "msg": "success",
   "data": {
-    "agentKey": "go_runner",
+    "agentKey": "default_agent",
     "scopeType": "user",
     "scopeKey": "user:joe",
     "label": "USER",
@@ -178,7 +178,7 @@
 
 ```json
 {
-  "agentKey": "go_runner",
+  "agentKey": "default_agent",
   "scopeType": "user",
   "scopeKey": "user:joe",
   "mode": "markdown",
@@ -191,7 +191,7 @@
 
 ```json
 {
-  "agentKey": "go_runner",
+  "agentKey": "default_agent",
   "scopeType": "user",
   "scopeKey": "user:joe",
   "mode": "records",
@@ -227,7 +227,7 @@
   "msg": "success",
   "data": {
     "saved": true,
-    "agentKey": "go_runner",
+    "agentKey": "default_agent",
     "scopeType": "user",
     "scopeKey": "user:joe",
     "summary": {
@@ -270,7 +270,7 @@
 
 ```json
 {
-  "agentKey": "go_runner",
+  "agentKey": "default_agent",
   "scopeType": "user",
   "markdown": "# USER\n\n- [new] 偏好中文输出\n  importance: 99\n  content: xxx"
 }
@@ -408,7 +408,7 @@
   "msg": "success",
   "data": {
     "message": "怎么发布 desktop builtin？",
-    "agentKey": "go_runner",
+    "agentKey": "default_agent",
     "chatId": "chat-123",
     "teamId": "team-1",
     "enabled": true,
@@ -441,7 +441,7 @@
             "id": "mem_101",
             "kind": "fact",
             "scopeType": "agent",
-            "scopeKey": "agent:go_runner",
+            "scopeKey": "agent:default_agent",
             "title": "发布流程",
             "summary": "先 make release-program，再同步 desktop assets。",
             "category": "workflow",
@@ -469,7 +469,7 @@
 
 ### 7. 查询记录列表
 
-`GET /api/memory/records?agentKey=go_runner&kind=fact&scopeType=user&status=active&limit=20&cursor=`
+`GET /api/memory/records?agentKey=default_agent&kind=fact&scopeType=user&status=active&limit=20&cursor=`
 
 用途：
 查询统一记录视图。
@@ -495,7 +495,7 @@
         "summary": "偏好中文输出，术语保持准确。",
         "importance": 8,
         "confidence": 0.95,
-        "agentKey": "go_runner",
+        "agentKey": "default_agent",
         "chatId": "chat-1",
         "sourceType": "tool-write",
         "updatedAt": 1777344300000
@@ -511,7 +511,7 @@
         "summary": "回答时先给结论，再展开解释。",
         "importance": 7,
         "confidence": 0.90,
-        "agentKey": "go_runner",
+        "agentKey": "default_agent",
         "chatId": "chat-2",
         "sourceType": "remember",
         "updatedAt": 1777344400000
@@ -523,7 +523,7 @@
 
 ### 8. 获取单条记录详情
 
-`GET /api/memory/record?agentKey=go_runner&id=mem_201`
+`GET /api/memory/record?agentKey=default_agent&id=mem_201`
 
 用途：
 返回完整字段和来源表信息。
@@ -541,7 +541,7 @@
       "id": "mem_201",
       "requestId": "req_1",
       "chatId": "chat-123",
-      "agentKey": "go_runner",
+      "agentKey": "default_agent",
       "subjectKey": "chat-123",
       "kind": "observation",
       "refId": "run_abc",
@@ -576,7 +576,7 @@
 
 ### 7. 查询关系 links
 
-`GET /api/memory/links?agentKey=go_runner&id=mem_201`
+`GET /api/memory/links?agentKey=default_agent&id=mem_201`
 
 响应示例：
 
@@ -602,7 +602,7 @@
 
 ### 8. 查询 snapshots
 
-`GET /api/memory/snapshots?agentKey=go_runner`
+`GET /api/memory/snapshots?agentKey=default_agent`
 
 响应示例：
 
@@ -615,7 +615,7 @@
       {
         "id": "snap_abc123",
         "chatId": "chat-123",
-        "agentKey": "go_runner",
+        "agentKey": "default_agent",
         "stableItemIds": ["mem_101", "mem_102"],
         "observedItemIds": ["mem_201"],
         "createdAt": 1777344000000,
@@ -628,7 +628,7 @@
 
 ### 9. 查询 timeline
 
-`GET /api/memory/timeline?agentKey=go_runner&id=mem_201&limit=20`
+`GET /api/memory/timeline?agentKey=default_agent&id=mem_201&limit=20`
 
 响应示例：
 

@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 type hybridParams struct {

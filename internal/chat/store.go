@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 var ErrChatNotFound = errors.New("chat not found")

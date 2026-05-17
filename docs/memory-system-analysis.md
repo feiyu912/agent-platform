@@ -28,7 +28,7 @@
 
 ### 1.1 这个项目是什么
 
-`agent-platform-runner-go` 是一个 Go 版 agent runtime执行层：
+`agent-platform` 是一个 Go 版 agent runtime执行层：
 
 - 目录驱动的 agent / team / skill / tool 注册系统
 - OpenAI 兼容模型调用与多阶段 prompt 组装

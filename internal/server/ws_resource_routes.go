@@ -17,9 +17,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/ws"
 )
 
 // wsDownload 处理网关通过 WS 通知 platform "有一份用户传到企微仓库的文件、

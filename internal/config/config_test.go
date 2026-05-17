@@ -412,7 +412,7 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS": "60000",
 	}, func() {
 		content := "" +
-			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runner")) + "\n" +
+			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
 			"allowed-commands: pwd,echo\n" +
 			"path-check-bypass-commands: echo\n" +
 			"shell-features-enabled: true\n" +
@@ -435,7 +435,7 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 			if !cfg.Bash.ShellFeaturesEnabled {
 				t.Fatalf("expected shell features enabled from yaml")
 			}
-			if cfg.Bash.WorkingDirectory != filepath.Join("var", "runner") {
+			if cfg.Bash.WorkingDirectory != filepath.Join("var", "runtime") {
 				t.Fatalf("unexpected working directory: %q", cfg.Bash.WorkingDirectory)
 			}
 			if len(cfg.Bash.AllowedCommands) != 2 {
@@ -485,7 +485,7 @@ func TestLoadBashShellArgsFromFile(t *testing.T) {
 func TestFileToolsConfigDefaultsDoNotInheritBashPaths(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runner")) + "\n" +
+			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
 			"allowed-paths: [\".\", \"/tmp/example\"]\n"
 		withProjectFileContents(t, filepath.Join("configs", "bash.yml"), &content, func() {
 			withProjectFileContents(t, filepath.Join("configs", "file-tools.yml"), nil, func() {
@@ -493,7 +493,7 @@ func TestFileToolsConfigDefaultsDoNotInheritBashPaths(t *testing.T) {
 				if err != nil {
 					t.Fatalf("load config: %v", err)
 				}
-				if cfg.FileTools.WorkingDirectory != filepath.Join("var", "runner") {
+				if cfg.FileTools.WorkingDirectory != filepath.Join("var", "runtime") {
 					t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
 				}
 				if strings.Join(cfg.FileTools.AllowedReadPaths, ",") != ".,/tmp" {

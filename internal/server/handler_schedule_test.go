@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/schedule"
-	"agent-platform-runner-go/internal/ws"
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/schedule"
+	"agent-platform/internal/ws"
 
 	gws "github.com/gorilla/websocket"
 )

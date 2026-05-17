@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
-	"agent-platform-runner-go/internal/hitlsubmit"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
+	"agent-platform/internal/hitlsubmit"
 )
 
 func (s *Server) hydrateDeferredAwaitings() {

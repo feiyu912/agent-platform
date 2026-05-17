@@ -3,9 +3,9 @@ package llm
 import (
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
+	"agent-platform/internal/api"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
 )
 
 func TestFormatSubmitResultForLLM_DelegatesToFrontendHandler(t *testing.T) {

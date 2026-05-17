@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 func (s *Server) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {

@@ -11,16 +11,16 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/config"
 )
 
 func TestAgentEndpointReturnsDetail(t *testing.T) {
 	fixture := newMemoryEnabledTestFixture(t)
 	rec := httptest.NewRecorder()
 
-	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agent?agentKey=mock-runner", nil))
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agent?agentKey=mock-agent", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -30,8 +30,8 @@ func TestAgentEndpointReturnsDetail(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode agent response: %v", err)
 	}
-	if response.Data.Key != "mock-runner" {
-		t.Fatalf("expected mock-runner key, got %#v", response.Data)
+	if response.Data.Key != "mock-agent" {
+		t.Fatalf("expected mock-agent key, got %#v", response.Data)
 	}
 	if response.Data.Model != "mock-model-id" {
 		t.Fatalf("expected resolved model id, got %#v", response.Data)
@@ -207,7 +207,7 @@ func TestCatalogEndpoints(t *testing.T) {
 	fixture := newTestFixture(t)
 	server := fixture.server
 
-	for _, path := range []string{"/api/agents", "/api/agent?agentKey=mock-runner", "/api/teams", "/api/skills", "/api/tools", "/api/tool?toolName=bash"} {
+	for _, path := range []string{"/api/agents", "/api/agent?agentKey=mock-agent", "/api/teams", "/api/skills", "/api/tools", "/api/tool?toolName=bash"} {
 		rec := httptest.NewRecorder()
 		server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK {
@@ -368,7 +368,7 @@ func TestExecuteInternalQueryBypassesHTTPAuth(t *testing.T) {
 
 	status, body, err := server.ExecuteInternalQuery(context.Background(), api.QueryRequest{
 		Message:  "计划任务内部执行",
-		AgentKey: "mock-runner",
+		AgentKey: "mock-agent",
 	})
 	if err != nil {
 		t.Fatalf("execute internal query: %v", err)

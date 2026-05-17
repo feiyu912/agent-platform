@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/stream"
 )
 
 func cloneEventMap(event map[string]any) map[string]any {

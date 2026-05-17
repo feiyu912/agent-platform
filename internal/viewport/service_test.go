@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/contracts"
 )
 
 func TestServiceLoadsLocalViewportAndFallbacks(t *testing.T) {

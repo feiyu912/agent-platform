@@ -10,15 +10,15 @@ import (
 	"testing"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/bashsec"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	contracts "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/frontendtools"
-	"agent-platform-runner-go/internal/hitl"
-	streampkg "agent-platform-runner-go/internal/stream"
-	runtimetools "agent-platform-runner-go/internal/tools"
+	"agent-platform/internal/api"
+	"agent-platform/internal/bashsec"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	contracts "agent-platform/internal/contracts"
+	"agent-platform/internal/frontendtools"
+	"agent-platform/internal/hitl"
+	streampkg "agent-platform/internal/stream"
+	runtimetools "agent-platform/internal/tools"
 )
 
 func encodedSubmitParams(t *testing.T, value any) api.SubmitParams {

@@ -9,11 +9,11 @@ import (
 	"reflect"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	channelpkg "agent-platform-runner-go/internal/channel"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	channelpkg "agent-platform/internal/channel"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
 )
 
 type channelTestCatalogRegistry struct {

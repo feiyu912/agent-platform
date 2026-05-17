@@ -14,16 +14,16 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
 )
 
 func TestQuerySSEPersistsChatHistory(t *testing.T) {
 	fixture := newTestFixture(t)
 	server := fixture.server
 
-	body := bytes.NewBufferString(`{"message":"元素碳的简介，100字","agentKey":"mock-runner"}`)
+	body := bytes.NewBufferString(`{"message":"元素碳的简介，100字","agentKey":"mock-agent"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/query", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -424,7 +424,7 @@ func TestQueryDecryptsAESProviderAPIKeyBeforeSendingAuthorizationHeader(t *testi
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hello","agentKey":"mock-runner"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hello","agentKey":"mock-agent"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	fixture.server.ServeHTTP(rec, req)
@@ -650,10 +650,10 @@ func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t
 			cfg.Stream.DebugEventsEnabled = true
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
-			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-runner", "agent.yml")
+			agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml")
 			if err := os.WriteFile(agentPath, []byte(strings.Join([]string{
-				"key: mock-runner",
-				"name: Mock Runner",
+				"key: mock-agent",
+				"name: Mock Agent",
 				"role: 测试代理",
 				"description: plan execute test agent",
 				"modelConfig:",
@@ -671,7 +671,7 @@ func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"请先规划再按顺序执行两个任务","agentKey":"mock-runner"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"请先规划再按顺序执行两个任务","agentKey":"mock-agent"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	fixture.server.ServeHTTP(rec, req)

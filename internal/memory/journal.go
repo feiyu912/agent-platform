@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/api"
+	"agent-platform/internal/api"
 )
 
 func AppendJournal(root string, item api.StoredMemoryResponse) error {

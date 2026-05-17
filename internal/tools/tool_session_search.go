@@ -3,7 +3,7 @@ package tools
 import (
 	"strings"
 
-	. "agent-platform-runner-go/internal/contracts"
+	. "agent-platform/internal/contracts"
 )
 
 func (t *RuntimeToolExecutor) invokeSessionSearch(toolName string, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {

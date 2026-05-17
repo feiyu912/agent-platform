@@ -3,7 +3,7 @@ package tools
 import (
 	"time"
 
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/contracts"
 )
 
 func maxInt(value int, fallback int) int {

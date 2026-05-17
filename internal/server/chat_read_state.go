@@ -1,8 +1,8 @@
 package server
 
 import (
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
 )
 
 func toAPIReadState(state chat.ChatReadState) api.ChatReadState {

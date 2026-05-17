@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/filetools"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
 )
 
 func TestInvokeGrepFilesWithMatchesGlob(t *testing.T) {

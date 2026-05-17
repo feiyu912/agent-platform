@@ -3,9 +3,9 @@ package frontendtools
 import (
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/api"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/stream"
 )
 
 type Handler interface {

@@ -1,4 +1,4 @@
-module agent-platform-runner-go
+module agent-platform
 
 go 1.25.0
 

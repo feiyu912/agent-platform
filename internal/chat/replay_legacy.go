@@ -1,6 +1,6 @@
 package chat
 
-import "agent-platform-runner-go/internal/stream"
+import "agent-platform/internal/stream"
 
 // ---------------------------------------------------------------------------
 // Legacy format: raw SSE events with "type" field (old Go format)

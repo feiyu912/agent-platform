@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
 )
 
 type ContainerHubSandboxService struct {

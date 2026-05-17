@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"agent-platform-runner-go/internal/bashsec"
-	"agent-platform-runner-go/internal/chat"
-	. "agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/hitl"
+	"agent-platform/internal/bashsec"
+	"agent-platform/internal/chat"
+	. "agent-platform/internal/contracts"
+	"agent-platform/internal/hitl"
 )
 
 func (s *llmRunStream) approvalHITLResult(invocation *preparedToolInvocation) hitl.InterceptResult {

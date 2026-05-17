@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"agent-platform-runner-go/internal/contracts"
+	"agent-platform/internal/contracts"
 )
 
 func normalizeQuestionAnswer(definition map[string]any, rawAnswer any) (any, error) {

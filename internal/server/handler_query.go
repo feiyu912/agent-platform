@@ -9,15 +9,15 @@ import (
 	"sort"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/catalog"
-	"agent-platform-runner-go/internal/channel"
-	"agent-platform-runner-go/internal/chat"
-	"agent-platform-runner-go/internal/config"
-	"agent-platform-runner-go/internal/contracts"
-	"agent-platform-runner-go/internal/llm"
-	"agent-platform-runner-go/internal/memory"
-	"agent-platform-runner-go/internal/stream"
+	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
+	"agent-platform/internal/channel"
+	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
+	"agent-platform/internal/contracts"
+	"agent-platform/internal/llm"
+	"agent-platform/internal/memory"
+	"agent-platform/internal/stream"
 )
 
 // isHiddenRequest 判断请求是否标记为"系统自发触发"：

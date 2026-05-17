@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"agent-platform-runner-go/internal/api"
-	"agent-platform-runner-go/internal/chat"
+	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
 )
 
 func (s *Server) handleSessionSearch(w http.ResponseWriter, r *http.Request) {
