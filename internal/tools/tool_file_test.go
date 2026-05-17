@@ -627,7 +627,7 @@ func TestInvokeWriteMaxBytes(t *testing.T) {
 	executor := fileToolExecutor(root, false)
 	executor.cfg.FileTools.MaxWriteBytes = 3
 
-	result, err := executor.Invoke(context.Background(), "write", map[string]any{
+	result, err := executor.Invoke(context.Background(), "file_write", map[string]any{
 		"file_path":   "too-big.txt",
 		"content":     strings.Repeat("x", 4),
 		"description": "写入测试文件",

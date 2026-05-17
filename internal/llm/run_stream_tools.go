@@ -550,15 +550,15 @@ func (s *llmRunStream) fileAccessPlanNeedsApproval(plan filetools.AccessPlan) bo
 
 func fileAccessPlanInput(toolName string, args map[string]any) (filetools.AccessMode, string, bool) {
 	switch strings.ToLower(strings.TrimSpace(toolName)) {
-	case "read":
+	case "file_read":
 		return filetools.ReadAccess, mapStringArg(args, "file_path"), strings.TrimSpace(mapStringArg(args, "file_path")) != ""
-	case "grep":
+	case "file_grep":
 		rawPath := strings.TrimSpace(mapStringArg(args, "path"))
 		if rawPath == "" {
 			rawPath = "."
 		}
 		return filetools.ReadAccess, rawPath, true
-	case "write":
+	case "file_write":
 		return filetools.WriteAccess, mapStringArg(args, "file_path"), strings.TrimSpace(mapStringArg(args, "file_path")) != ""
 	default:
 		return "", "", false
@@ -641,7 +641,7 @@ func (s *llmRunStream) executeApprovedFileWriteInvocation(invocation *preparedTo
 
 func fileAccessDeniedToolResult(invocation *preparedToolInvocation, code string) ToolExecutionResult {
 	message := "file access rejected"
-	if invocation != nil && strings.EqualFold(strings.TrimSpace(invocation.toolName), "write") {
+	if invocation != nil && strings.EqualFold(strings.TrimSpace(invocation.toolName), "file_write") {
 		message = "file write access rejected"
 	}
 	result := structuredResult(map[string]any{
@@ -735,7 +735,7 @@ func isBashTool(name string) bool {
 }
 
 func isWriteTool(name string) bool {
-	return strings.EqualFold(strings.TrimSpace(name), "write")
+	return strings.EqualFold(strings.TrimSpace(name), "file_write")
 }
 
 func mapStringArg(args map[string]any, key string) string {

@@ -83,7 +83,7 @@ func BuildAccessPlan(cfg config.FileToolsConfig, mode AccessMode, rawPath string
 		Root:               root,
 		RuleKey:            "file-" + string(mode) + "::" + hex.EncodeToString(rootHash[:8]),
 		Fingerprint:        hex.EncodeToString(fingerprintHash[:]),
-		CommandText:        string(mode) + " " + realCandidate,
+		CommandText:        accessModeCommandName(mode) + " " + realCandidate,
 		AllowedByWhitelist: ok,
 		Mode:               mode,
 	}, nil
@@ -135,8 +135,15 @@ func BuildWritePlan(cfg config.FileToolsConfig, args map[string]any) (WritePlan,
 		Description: description,
 		Fingerprint: fingerprint,
 		RuleKey:     ruleKey,
-		CommandText: fmt.Sprintf("write %s (%d bytes)", access.Path, len(contentBytes)),
+		CommandText: fmt.Sprintf("file_write %s (%d bytes)", access.Path, len(contentBytes)),
 	}, nil
+}
+
+func accessModeCommandName(mode AccessMode) string {
+	if mode == WriteAccess {
+		return "file_write"
+	}
+	return "file_read"
 }
 
 func ConsumeReadApproval(execCtx *ExecutionContext, plan AccessPlan) bool {

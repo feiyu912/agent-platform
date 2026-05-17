@@ -35,7 +35,7 @@ func TestBuildAccessPlanAllowedByWhitelist(t *testing.T) {
 	if plan.Root != realPathForTest(t, root) {
 		t.Fatalf("unexpected root: %#v", plan)
 	}
-	if !strings.HasPrefix(plan.RuleKey, "file-read::") || plan.Fingerprint == "" || plan.CommandText != "read "+plan.Path {
+	if !strings.HasPrefix(plan.RuleKey, "file-read::") || plan.Fingerprint == "" || plan.CommandText != "file_read "+plan.Path {
 		t.Fatalf("unexpected access metadata: %#v", plan)
 	}
 }
