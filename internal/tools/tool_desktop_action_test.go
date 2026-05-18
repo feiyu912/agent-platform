@@ -58,37 +58,6 @@ func TestInvokeDesktopActionCallsBridge(t *testing.T) {
 	}
 }
 
-func TestInvokeDesktopActionAllowsEmbeddedWebReadPageData(t *testing.T) {
-	var got desktopActionRequest
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true,"action":"desktop.embeddedWeb.readPageData","result":{"title":"Bing"}}`))
-	}))
-	defer server.Close()
-
-	result, err := newDesktopTestExecutor(server.URL, "").invokeDesktopAction(context.Background(), map[string]any{
-		"action": "desktop.embeddedWeb.readPageData",
-		"args": map[string]any{
-			"include": []any{"links"},
-		},
-	}, &ExecutionContext{Session: QuerySession{RunID: "run-web", ChatID: "chat-web"}})
-	if err != nil {
-		t.Fatalf("invoke desktop action: %v", err)
-	}
-	if result.ExitCode != 0 {
-		t.Fatalf("expected successful exit code, got %d: %s", result.ExitCode, result.Output)
-	}
-	if got.Action != "desktop.embeddedWeb.readPageData" {
-		t.Fatalf("unexpected action: %s", got.Action)
-	}
-	if got.Source.RunID != "run-web" || got.Source.ChatID != "chat-web" {
-		t.Fatalf("unexpected source: %#v", got.Source)
-	}
-}
-
 func TestInvokeDesktopCDPCallsBridge(t *testing.T) {
 	var got desktopCDPRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +115,25 @@ func TestInvokeDesktopActionRejectsUnknownAction(t *testing.T) {
 	}
 	if result.ExitCode != -1 || result.Error != "unknown_action" {
 		t.Fatalf("expected unknown_action failure, got exit=%d error=%q output=%s", result.ExitCode, result.Error, result.Output)
+	}
+}
+
+func TestInvokeDesktopActionRejectsPageActions(t *testing.T) {
+	for _, action := range []string{
+		"desktop.page.readCurrent",
+		"desktop.embeddedWeb.readPageData",
+	} {
+		t.Run(action, func(t *testing.T) {
+			result, err := (&RuntimeToolExecutor{}).invokeDesktopAction(context.Background(), map[string]any{
+				"action": action,
+			}, &ExecutionContext{})
+			if err != nil {
+				t.Fatalf("invoke desktop action: %v", err)
+			}
+			if result.ExitCode != -1 || result.Error != "unknown_action" {
+				t.Fatalf("expected unknown_action failure, got exit=%d error=%q output=%s", result.ExitCode, result.Error, result.Output)
+			}
+		})
 	}
 }
 

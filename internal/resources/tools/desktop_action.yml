@@ -10,16 +10,6 @@ inputSchema:
       type: string
       description: Required. Allowlisted Desktop action name to call through the local Desktop Action Bridge.
       enum:
-        - desktop.page.getContext
-        - desktop.page.readCurrent
-        - desktop.page.extractStructured
-        - desktop.page.interact
-        - desktop.page.fillForm
-        - desktop.page.submitForm
-        - desktop.page.getFormState
-        - desktop.page.validateForm
-        - desktop.page.previewPatch
-        - desktop.page.applyPatch
         - desktop.navigate.toRoute
         - desktop.controlCenter.listServices
         - desktop.controlCenter.getServiceStatus
@@ -77,20 +67,6 @@ inputSchema:
         - desktop.memory.previewItem
         - desktop.memory.enableAutoLearn
         - desktop.memory.disableAutoLearn
-        - desktop.embeddedWeb.listSurfaces
-        - desktop.embeddedWeb.getActiveSurface
-        - desktop.embeddedWeb.activateSurface
-        - desktop.embeddedWeb.getPageContext
-        - desktop.embeddedWeb.navigate
-        - desktop.embeddedWeb.reload
-        - desktop.embeddedWeb.goBack
-        - desktop.embeddedWeb.openTab
-        - desktop.embeddedWeb.closeTab
-        - desktop.embeddedWeb.switchTab
-        - desktop.embeddedWeb.readPageData
-        - desktop.embeddedWeb.extractStructured
-        - desktop.embeddedWeb.interactElement
-        - desktop.embeddedWeb.executeScript
     args:
       type: object
       description: JSON arguments for the selected action. Use only fields documented by the Desktop action catalog.

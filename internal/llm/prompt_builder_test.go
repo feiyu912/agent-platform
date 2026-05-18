@@ -181,9 +181,9 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 		"desktop_action",
 		"desktop_cdp",
 		"pageContext is only a snapshot",
-		"desktop.page.readCurrent",
-		"desktop.page.extractStructured",
-		"desktop.page.fillForm",
+		"Use desktop_action for Desktop shell",
+		"Use desktop_cdp for current page",
+		"Use desktop_cdp when the task depends on current live Desktop page state.",
 		"route: /settings?section=navigation",
 		"pageKey: native:/settings?section=navigation",
 		"pageKind: native",
@@ -193,6 +193,15 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 	} {
 		if !strings.Contains(prompt, expected) {
 			t.Fatalf("expected desktop guidance %q in prompt, got %q", expected, prompt)
+		}
+	}
+	for _, unexpected := range []string{
+		"desktop.page.readCurrent",
+		"desktop.page.extractStructured",
+		"desktop.embeddedWeb.*",
+	} {
+		if strings.Contains(prompt, unexpected) {
+			t.Fatalf("did not expect desktop_action page guidance %q in prompt, got %q", unexpected, prompt)
 		}
 	}
 }
