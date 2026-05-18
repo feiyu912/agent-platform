@@ -42,13 +42,12 @@ func (s *Server) handleProxyQuery(w http.ResponseWriter, r *http.Request, req ap
 		"requestId":  req.RequestID,
 		"runId":      req.RunID,
 		"chatId":     req.ChatID,
-		"agentKey":   req.AgentKey,
+		"agentKey":   proxyAgentKey(proxy, req.AgentKey),
 		"role":       req.Role,
 		"message":    req.Message,
 		"references": req.References,
 		"params":     req.Params,
 		"scene":      req.Scene,
-		"stream":     true,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))

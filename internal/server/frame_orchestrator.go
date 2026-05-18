@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -118,8 +121,8 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 			o.injectMainToolError(main, invoke.MainToolID, fmt.Sprintf("sub-agent not found: %s", subAgentKey))
 			return nil
 		}
-		if !canUseInvokeAgentsTool(agentDef.Mode) {
-			o.injectMainToolError(main, invoke.MainToolID, "sub-agent must be REACT/ONESHOT")
+		if !canUseInvokeAgentsTool(agentDef.Mode) && !isProxyAgentMode(agentDef.Mode) {
+			o.injectMainToolError(main, invoke.MainToolID, "sub-agent must be REACT/ONESHOT/PROXY")
 			return nil
 		}
 		if containsInvokeAgentsTool(agentDef.Tools) {
@@ -241,6 +244,9 @@ func (o *frameOrchestrator) runChildTask(index int, task preparedSubTask, princi
 	subReq.RunID = o.session.RunID
 	subReq.AgentKey = task.spec.SubAgentKey
 	subReq.Message = task.spec.TaskText
+	if strings.TrimSpace(subReq.Role) == "" {
+		subReq.Role = "user"
+	}
 
 	subSession, err := o.buildQuerySession(o.runCtx, subReq, o.summary, task.agentDef, querySessionBuildOptions{
 		Created:           false,
@@ -257,6 +263,10 @@ func (o *frameOrchestrator) runChildTask(index int, task preparedSubTask, princi
 		return result
 	}
 	o.writeChildTaskQueryAndSystem(subReq, &subSession, task)
+
+	if isProxyAgentMode(task.agentDef.Mode) {
+		return o.runProxyChildTask(result, subReq, task, route)
+	}
 
 	subStream, err := o.agent.Stream(o.runCtx, subReq, subSession)
 	if err != nil {
@@ -335,6 +345,146 @@ func (o *frameOrchestrator) runChildTask(index int, task preparedSubTask, princi
 	return result
 }
 
+func (o *frameOrchestrator) runProxyChildTask(result *childTaskResult, subReq api.QueryRequest, task preparedSubTask, route func(stream.StreamInput)) *childTaskResult {
+	proxy := task.agentDef.ProxyConfig
+	if proxy == nil || strings.TrimSpace(proxy.BaseURL) == "" {
+		result.Status = "failed"
+		result.Text = "PROXY sub-agent missing proxyConfig.baseUrl"
+		result.Error = result.Text
+		return result
+	}
+
+	targetURL := strings.TrimRight(proxy.BaseURL, "/") + "/api/query"
+	payload := map[string]any{
+		"agentKey":   proxyAgentKey(proxy, subReq.AgentKey),
+		"message":    subReq.Message,
+		"references": subReq.References,
+	}
+	if chatID := strings.TrimSpace(proxy.ChatID); chatID != "" {
+		payload["chatId"] = chatID
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		result.Status = "failed"
+		result.Text = err.Error()
+		result.Error = err.Error()
+		return result
+	}
+
+	timeout := time.Duration(proxy.TimeoutMs) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequestWithContext(o.runCtx, http.MethodPost, targetURL, bytes.NewReader(body))
+	if err != nil {
+		result.Status = "failed"
+		result.Text = err.Error()
+		result.Error = err.Error()
+		return result
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if strings.TrimSpace(proxy.Token) != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(proxy.Token))
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		result.Status = "failed"
+		result.Text = err.Error()
+		result.Error = err.Error()
+		return result
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(resp.Body)
+		result.Status = "failed"
+		result.Text = fmt.Sprintf("PROXY sub-agent returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+		result.Error = result.Text
+		return result
+	}
+
+	var assistantText strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 256*1024), 1024*1024)
+	for scanner.Scan() {
+		event, ok := parseProxySSEDataLine(scanner.Text())
+		if !ok {
+			continue
+		}
+		switch event.Type {
+		case "content.delta":
+			delta, _ := event.Payload["delta"].(string)
+			if delta == "" {
+				continue
+			}
+			assistantText.WriteString(delta)
+			contentID, _ := event.Payload["contentId"].(string)
+			if strings.TrimSpace(contentID) == "" {
+				contentID = task.taskID + ":proxy"
+			} else {
+				contentID = namespaceChildID(task.taskID, contentID)
+			}
+			route(routeChildStreamInput(task.taskID, stream.ContentDelta{
+				ContentID: contentID,
+				TaskID:    task.taskID,
+				Delta:     delta,
+			}))
+		case "run.error":
+			result.Status = "failed"
+			result.Text = errorMessage(event.Payload)
+			result.Error = result.Text
+			return result
+		case "run.cancel":
+			result.Status = "cancelled"
+			result.Text = "sub-agent cancelled"
+			return result
+		case "run.complete":
+			result.Text = strings.TrimSpace(assistantText.String())
+			if result.Text == "" {
+				result.Status = "failed"
+				result.Text = "PROXY sub-agent returned run.complete without assistant content"
+				result.Error = result.Text
+			}
+			return result
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		result.Status = "failed"
+		result.Text = err.Error()
+		result.Error = err.Error()
+		return result
+	}
+	result.Text = strings.TrimSpace(assistantText.String())
+	if result.Text == "" {
+		result.Status = "failed"
+		result.Text = "PROXY sub-agent returned an empty SSE stream"
+		result.Error = result.Text
+	}
+	return result
+}
+
+func parseProxySSEDataLine(line string) (stream.EventData, bool) {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "data:") {
+		return stream.EventData{}, false
+	}
+	payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+	if payload == "" || payload == stream.DoneSentinel {
+		return stream.EventData{}, false
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+		return stream.EventData{}, false
+	}
+	if nested, ok := raw["event"].(map[string]any); ok {
+		raw = nested
+	}
+	event := stream.EventDataFromMap(raw)
+	return event, strings.TrimSpace(event.Type) != ""
+}
+
 func (o *frameOrchestrator) writeChildTaskQueryAndSystem(subReq api.QueryRequest, subSession *contracts.QuerySession, task preparedSubTask) {
 	if o.chats == nil {
 		return
@@ -382,6 +532,10 @@ func containsInvokeAgentsTool(toolNames []string) bool {
 		}
 	}
 	return false
+}
+
+func isProxyAgentMode(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), "PROXY")
 }
 
 func routeChildStreamInput(taskID string, input stream.StreamInput) stream.StreamInput {
@@ -463,8 +617,28 @@ func errorMessage(payload map[string]any) string {
 	if payload == nil {
 		return "sub-agent failed"
 	}
-	if message, _ := payload["message"].(string); strings.TrimSpace(message) != "" {
+	if message := firstPayloadString(payload, "message", "error", "reason", "detail", "msg"); message != "" {
 		return message
 	}
+	for _, key := range []string{"error", "rawEvent"} {
+		if nested, ok := payload[key].(map[string]any); ok {
+			if message := firstPayloadString(nested, "message", "error", "reason", "detail", "msg"); message != "" {
+				return message
+			}
+		}
+	}
+	if data, err := json.Marshal(payload); err == nil && len(data) > 0 {
+		return "sub-agent failed: " + string(data)
+	}
 	return "sub-agent failed"
+}
+
+func firstPayloadString(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, _ := payload[key].(string)
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

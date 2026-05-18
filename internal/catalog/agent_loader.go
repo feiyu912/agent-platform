@@ -300,7 +300,10 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 	if proxyRaw := mapNode(root["proxyConfig"]); len(proxyRaw) > 0 {
 		def.ProxyConfig = &ProxyConfig{
 			BaseURL:   stringNode(proxyRaw["baseUrl"]),
-			Token:     stringNode(proxyRaw["token"]),
+			AgentKey:  stringNode(proxyRaw["agentKey"]),
+			ChatID:    stringNode(proxyRaw["chatId"]),
+			Token:     resolveProxyToken(proxyRaw),
+			TokenEnv:  stringNode(proxyRaw["tokenEnv"]),
 			TimeoutMs: intNode(proxyRaw["timeoutMs"]),
 		}
 		if def.ProxyConfig.TimeoutMs <= 0 {
@@ -378,6 +381,20 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		def.Role = def.Name
 	}
 	return def, root, nil
+}
+
+func resolveProxyToken(proxyRaw map[string]any) string {
+	if len(proxyRaw) == 0 {
+		return ""
+	}
+	if token := strings.TrimSpace(stringNode(proxyRaw["token"])); token != "" {
+		return token
+	}
+	envName := strings.TrimSpace(stringNode(proxyRaw["tokenEnv"]))
+	if envName == "" {
+		return ""
+	}
+	return strings.TrimSpace(os.Getenv(envName))
 }
 
 func parseAgentMemoryConfig(value any) AgentMemoryConfig {
