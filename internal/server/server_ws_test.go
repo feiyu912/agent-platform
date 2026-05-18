@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,6 +29,23 @@ import (
 
 	gws "github.com/gorilla/websocket"
 )
+
+type lockedLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedLogBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(data)
+}
+
+func (b *lockedLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
 
 func TestWebSocketUpgradeAcceptsValidTokenThroughStatusRecorder(t *testing.T) {
 	var privateKey *rsa.PrivateKey
@@ -75,6 +94,81 @@ func TestWebSocketUpgradeAcceptsValidTokenThroughStatusRecorder(t *testing.T) {
 		t.Fatalf("expected websocket handshake to succeed, got err=%v status=%d body=%q", err, status, body)
 	}
 	defer conn.Close()
+}
+
+func TestWebSocketRequestFramesAreLogged(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `[DONE]`)
+	}, testFixtureOptions{
+		notifications: ws.NewHub(),
+		configure: func(cfg *config.Config) {
+			cfg.WebSocket.WriteQueueSize = 8
+			cfg.WebSocket.PingIntervalMs = 30000
+		},
+	})
+
+	var buffer lockedLogBuffer
+	originalWriter := log.Writer()
+	log.SetOutput(&buffer)
+	defer log.SetOutput(originalWriter)
+
+	server := httptest.NewServer(fixture.server)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := gws.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+
+	readConnectedPush(t, conn)
+
+	for _, tc := range []struct {
+		frameType string
+		id        string
+	}{
+		{frameType: "/api/agents", id: "req_agents"},
+		{frameType: "/api/teams", id: "req_teams"},
+		{frameType: "/api/chats", id: "req_chats"},
+	} {
+		if err := conn.WriteJSON(ws.RequestFrame{
+			Frame:   ws.FrameRequest,
+			Type:    tc.frameType,
+			ID:      tc.id,
+			Payload: ws.MarshalPayload(map[string]any{}),
+		}); err != nil {
+			t.Fatalf("write %s request: %v", tc.frameType, err)
+		}
+		var response ws.ResponseFrame
+		if err := conn.ReadJSON(&response); err != nil {
+			t.Fatalf("read %s response: %v", tc.frameType, err)
+		}
+		if response.Frame != ws.FrameResponse || response.Type != tc.frameType || response.ID != tc.id || response.Code != 0 {
+			t.Fatalf("unexpected %s response: %#v", tc.frameType, response)
+		}
+	}
+
+	waitForLogText(t, &buffer, "WS /api/agents id=req_agents (arrived)")
+	waitForLogText(t, &buffer, "WS /api/agents id=req_agents -> done")
+	waitForLogText(t, &buffer, "WS /api/teams id=req_teams (arrived)")
+	waitForLogText(t, &buffer, "WS /api/teams id=req_teams -> done")
+	waitForLogText(t, &buffer, "WS /api/chats id=req_chats (arrived)")
+	waitForLogText(t, &buffer, "WS /api/chats id=req_chats -> done")
+	waitForLogText(t, &buffer, `"category":"ws.request"`)
+	waitForLogText(t, &buffer, `"sessionId":"ws_`)
+}
+
+func waitForLogText(t *testing.T, buffer *lockedLogBuffer, needle string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(buffer.String(), needle) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("expected log to contain %q, got %q", needle, buffer.String())
 }
 
 func TestWebSocketChatReturnsActiveRunConflict(t *testing.T) {

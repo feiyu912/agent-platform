@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"agent-platform/internal/ws"
 )
 
 func TestStatusRecorderExposesFlusherWhenUnderlyingWriterSupportsIt(t *testing.T) {
@@ -93,6 +95,35 @@ func TestServeHTTPLogsArrivalBeforeCompletion(t *testing.T) {
 	}
 	if arrived > completed {
 		t.Fatalf("expected arrival log before completion log, got %q", logText)
+	}
+}
+
+func TestServeHTTPLogsHideTokenQueryValues(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `[DONE]`)
+	}, testFixtureOptions{
+		notifications: ws.NewHub(),
+	})
+
+	var buffer bytes.Buffer
+	originalWriter := log.Writer()
+	log.SetOutput(&buffer)
+	defer log.SetOutput(originalWriter)
+
+	token := "real.jwt.value"
+	req := httptest.NewRequest(http.MethodGet, "/ws?token="+token+"&mode=test", nil)
+	rec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, req)
+
+	logText := buffer.String()
+	if strings.Contains(logText, token) {
+		t.Fatalf("expected token to be hidden, got %q", logText)
+	}
+	if !strings.Contains(logText, "GET /ws?token=<HIDDEN_TOKEN>&mode=test (arrived)") {
+		t.Fatalf("expected hidden token in arrival log, got %q", logText)
+	}
+	if !strings.Contains(logText, "GET /ws?token=<HIDDEN_TOKEN>&mode=test ->") {
+		t.Fatalf("expected hidden token in completion log, got %q", logText)
 	}
 }
 

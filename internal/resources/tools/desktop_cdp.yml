@@ -1,5 +1,5 @@
 name: desktop_cdp
-label: Desktop CDP
+label: 桌面端CDP
 description: Call the local ZenMind Desktop CDP Bridge to execute Chrome DevTools Protocol methods on Desktop-managed targets.
 submitResultFormat: json-compact
 type: function

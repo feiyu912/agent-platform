@@ -6,9 +6,12 @@ import (
 	"regexp"
 )
 
+const HiddenToken = "<HIDDEN_TOKEN>"
+
 var sensitivePatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)bearer\s+[a-z0-9_\-\.=]+`),
-	regexp.MustCompile(`(?i)(api[_-]?key|token|secret)\s*[:=]\s*[a-z0-9_\-\.=]+`),
+	regexp.MustCompile(`(?i)(bearer\s+)[a-z0-9_\-\.=]+`),
+	regexp.MustCompile(`(?i)((?:api[_-]?key|token|secret)\s*[:=]\s*)[a-z0-9_\-\.=]+`),
+	regexp.MustCompile(`(?i)((?:[?&](?:api[_-]?key|token|secret)=))[^&\s]+`),
 	regexp.MustCompile(`(?i)sk-[a-z0-9]+`),
 }
 
@@ -27,8 +30,9 @@ func Log(category string, fields map[string]any) {
 
 func SanitizeLog(text string) string {
 	sanitized := text
-	for _, pattern := range sensitivePatterns {
-		sanitized = pattern.ReplaceAllString(sanitized, "[redacted]")
-	}
+	sanitized = sensitivePatterns[0].ReplaceAllString(sanitized, "${1}"+HiddenToken)
+	sanitized = sensitivePatterns[1].ReplaceAllString(sanitized, "${1}"+HiddenToken)
+	sanitized = sensitivePatterns[2].ReplaceAllString(sanitized, "${1}"+HiddenToken)
+	sanitized = sensitivePatterns[3].ReplaceAllString(sanitized, HiddenToken)
 	return sanitized
 }

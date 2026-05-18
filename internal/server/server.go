@@ -189,7 +189,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.deps.Config.Logging.Request.Enabled {
-		log.Printf("%s %s (arrived)", r.Method, r.URL.RequestURI())
+		log.Printf("%s %s (arrived)", r.Method, observability.SanitizeLog(r.URL.RequestURI()))
 	}
 	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 	s.router.ServeHTTP(rec, r)
@@ -454,7 +454,7 @@ func (s *Server) logRequest(r *http.Request, status int, cost time.Duration) {
 		return
 	}
 	observability.LogRequest(r, status, cost)
-	log.Printf("%s %s -> %d (%s)", r.Method, r.URL.RequestURI(), status, cost.Round(time.Millisecond))
+	log.Printf("%s %s -> %d (%s)", r.Method, observability.SanitizeLog(r.URL.RequestURI()), status, cost.Round(time.Millisecond))
 }
 
 func originAllowed(origin string, allowed []string) bool {

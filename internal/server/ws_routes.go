@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/chat"
 	"agent-platform/internal/contracts"
+	"agent-platform/internal/observability"
 	"agent-platform/internal/ws"
 )
 
@@ -43,7 +45,32 @@ func (a wsTokenAuthenticator) VerifyToken(ctx context.Context, token string) (ws
 func (s *Server) newWSHandler(hub *ws.Hub) *ws.Handler {
 	handler := ws.NewHandler(s.deps.Config.WebSocket, time.Duration(s.deps.Config.SSE.HeartbeatIntervalMs)*time.Millisecond, hub, wsTokenAuthenticator{server: s})
 	s.registerWSRoutes(handler)
+	handler.SetDispatch(s.logWSDispatch(handler.Dispatch))
 	return handler
+}
+
+func (s *Server) logWSDispatch(next ws.RouteHandler) ws.RouteHandler {
+	return func(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
+		if next == nil {
+			return
+		}
+		if !s.deps.Config.Logging.Request.Enabled {
+			next(ctx, conn, req)
+			return
+		}
+		startedAt := time.Now()
+		frameType := observability.SanitizeLog(req.Type)
+		requestID := observability.SanitizeLog(req.ID)
+		sessionID := ""
+		if conn != nil {
+			sessionID = conn.SessionID()
+		}
+		log.Printf("WS %s id=%s (arrived)", frameType, requestID)
+		next(ctx, conn, req)
+		cost := time.Since(startedAt)
+		observability.LogWSRequest(req.Type, req.ID, sessionID, cost)
+		log.Printf("WS %s id=%s -> done (%s)", frameType, requestID, cost.Round(time.Millisecond))
+	}
 }
 
 func (s *Server) registerWSRoutes(handler *ws.Handler) {

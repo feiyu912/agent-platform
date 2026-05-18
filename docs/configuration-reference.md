@@ -230,7 +230,7 @@ agent definition 侧另有 `memoryConfig`：
 说明：
 
 - 默认日志会直接打印真实 `raw_chunk`、`parsed_content`、`parsed_finish_reason` 和 `parsed_tool_call` 内容
-- Bearer token / `apiKey` / `secret` 一类敏感串仍会被替换为 `[redacted]`
+- Bearer token / `apiKey` / `secret` 一类敏感串仍会被替换为 `<HIDDEN_TOKEN>`
 - 日志保持单行格式，换行会被转义为 `\n`
 - memory 操作日志会单独写入 `LOGGING_AGENT_MEMORY_FILE`，默认不混入主 stdout/stderr
 

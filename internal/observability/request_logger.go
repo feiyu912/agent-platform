@@ -18,3 +18,12 @@ func LogRequest(r *http.Request, status int, cost time.Duration) {
 		"remoteIP": r.RemoteAddr,
 	})
 }
+
+func LogWSRequest(frameType string, id string, sessionID string, cost time.Duration) {
+	Log("ws.request", map[string]any{
+		"type":      SanitizeLog(frameType),
+		"id":        SanitizeLog(id),
+		"sessionId": SanitizeLog(sessionID),
+		"costMs":    cost.Milliseconds(),
+	})
+}

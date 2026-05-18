@@ -21,6 +21,7 @@ type Handler struct {
 	authenticator     TokenAuthenticator
 	upgrader          gws.Upgrader
 	routes            map[string]RouteHandler
+	dispatch          RouteHandler
 }
 
 func NewHandler(cfg config.WebSocketConfig, heartbeatInterval time.Duration, hub *Hub, authenticator TokenAuthenticator) *Handler {
@@ -41,6 +42,13 @@ func (h *Handler) RegisterRoute(frameType string, route RouteHandler) {
 		return
 	}
 	h.routes[frameType] = route
+}
+
+func (h *Handler) SetDispatch(dispatch RouteHandler) {
+	if h == nil {
+		return
+	}
+	h.dispatch = dispatch
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +76,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn := NewConn(socket, h.hub, h.cfg, h.heartbeatInterval, auth)
-	conn.Run(h.Dispatch)
+	dispatch := h.Dispatch
+	if h.dispatch != nil {
+		dispatch = h.dispatch
+	}
+	conn.Run(dispatch)
 }
 
 func (h *Handler) Dispatch(ctx context.Context, conn *Conn, req RequestFrame) {
