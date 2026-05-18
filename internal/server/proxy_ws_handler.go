@@ -160,7 +160,7 @@ func (s *Server) runProxyWebSocket(
 		}
 	}()
 
-	if err := upstream.WriteJSON(proxyQueryPayload(prepared.req)); err != nil {
+	if err := upstream.WriteJSON(proxyQueryPayload(prepared.req, prepared.agentDef.ProxyConfig)); err != nil {
 		s.publishProxyError(eventBus, recorder, prepared.req, fmt.Errorf("proxy websocket write failed: %w", err))
 		return
 	}
@@ -238,19 +238,28 @@ func proxyWebSocketTarget(proxy *catalog.ProxyConfig) (string, http.Header, erro
 	return parsed.String(), header, nil
 }
 
-func proxyQueryPayload(req api.QueryRequest) map[string]any {
+func proxyQueryPayload(req api.QueryRequest, proxy *catalog.ProxyConfig) map[string]any {
 	return map[string]any{
 		"type":       "request.query",
 		"requestId":  req.RequestID,
 		"runId":      req.RunID,
 		"chatId":     req.ChatID,
-		"agentKey":   req.AgentKey,
+		"agentKey":   proxyAgentKey(proxy, req.AgentKey),
 		"role":       req.Role,
 		"message":    req.Message,
 		"references": req.References,
 		"params":     req.Params,
 		"scene":      req.Scene,
 	}
+}
+
+func proxyAgentKey(proxy *catalog.ProxyConfig, fallback string) string {
+	if proxy != nil {
+		if key := strings.TrimSpace(proxy.AgentKey); key != "" {
+			return key
+		}
+	}
+	return strings.TrimSpace(fallback)
 }
 
 func decodeProxyEvent(data []byte) (stream.EventData, bool) {

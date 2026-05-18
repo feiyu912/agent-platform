@@ -94,7 +94,10 @@ type AgentRuntimePrompts struct {
 // AGW-compatible service (e.g. claude-code relay-server on port 3210).
 type ProxyConfig struct {
 	BaseURL   string // e.g. http://127.0.0.1:3210
+	AgentKey  string // optional upstream agentKey override
+	ChatID    string // optional upstream chatId override
 	Token     string // optional Bearer token
+	TokenEnv  string // optional env var name for Bearer token
 	TimeoutMs int    // default 300000 (5 min)
 }
 

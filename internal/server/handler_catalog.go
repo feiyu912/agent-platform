@@ -200,6 +200,8 @@ func (s *Server) buildAgentEditorOptions() api.AgentEditorOptionsResponse {
 			DefaultTimeoutMs: 300000,
 			Fields: []api.AgentEditorProxyConfigField{
 				{Key: "baseUrl", Label: "Base URL", Type: "string", Required: true},
+				{Key: "agentKey", Label: "Upstream Agent Key", Type: "string"},
+				{Key: "chatId", Label: "Upstream Chat ID", Type: "string"},
 				{Key: "token", Label: "Token", Type: "password"},
 				{Key: "timeoutMs", Label: "Timeout (ms)", Type: "number"},
 			},

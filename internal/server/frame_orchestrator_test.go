@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -221,8 +224,128 @@ func TestFrameOrchestratorRejectsInvalidSubAgentMode(t *testing.T) {
 	if len(emitted) != 0 {
 		t.Fatalf("expected no task lifecycle deltas on invalid mode reject, got %#v", emitted)
 	}
-	if len(mainStream.injected) != 1 || !mainStream.injected[0].isError || mainStream.injected[0].text != "sub-agent must be REACT/ONESHOT" {
+	if len(mainStream.injected) != 1 || !mainStream.injected[0].isError || mainStream.injected[0].text != "sub-agent must be REACT/ONESHOT/PROXY" {
 		t.Fatalf("expected error tool result injected into main stream, got %#v", mainStream.injected)
+	}
+}
+
+func TestFrameOrchestratorRunsProxySubAgent(t *testing.T) {
+	var upstreamPayload map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/query" {
+			t.Fatalf("unexpected upstream path %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Accept"); got != "text/event-stream" {
+			t.Fatalf("unexpected accept header %q", got)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&upstreamPayload); err != nil {
+			t.Fatalf("decode upstream payload: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, `data: {"type":"content.delta","contentId":"remote_c_1","delta":"remote "}`+"\n\n")
+		_, _ = io.WriteString(w, `data: {"type":"content.delta","contentId":"remote_c_1","delta":"answer"}`+"\n\n")
+		_, _ = io.WriteString(w, `data: {"type":"run.complete","runId":"remote_run"}`+"\n\n")
+	}))
+	defer upstream.Close()
+
+	mainStream := &stubOrchestratableStream{
+		deltas: []contracts.AgentDelta{
+			newInvokeAgentsDelta(contracts.SubAgentTaskSpec{
+				SubAgentKey: "qiuer",
+				TaskText:    "查一下研发部",
+				TaskName:    "云端查询",
+			}),
+		},
+	}
+	var emitted []contracts.AgentDelta
+	var routed []stream.StreamInput
+	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{}, map[string]catalog.AgentDefinition{
+		"qiuer": {
+			Key:  "qiuer",
+			Name: "Qiuer",
+			Mode: "PROXY",
+			ProxyConfig: &catalog.ProxyConfig{
+				BaseURL:  upstream.URL,
+				AgentKey: "16",
+				ChatID:   "dc17be36-92b2-44a6-8076-6b724068a181",
+			},
+		},
+	}, &emitted, &routed)
+
+	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
+	if err != nil || streamFailed || streamInterrupted {
+		t.Fatalf("unexpected orchestrator result err=%v failed=%v interrupted=%v", err, streamFailed, streamInterrupted)
+	}
+	if upstreamPayload["agentKey"] != "16" || upstreamPayload["message"] != "查一下研发部" {
+		t.Fatalf("unexpected upstream payload %#v", upstreamPayload)
+	}
+	if upstreamPayload["chatId"] != "dc17be36-92b2-44a6-8076-6b724068a181" {
+		t.Fatalf("expected upstream proxy chatId override, got %#v", upstreamPayload)
+	}
+	if _, ok := upstreamPayload["stream"]; ok {
+		t.Fatalf("did not expect proxy child payload to force stream flag: %#v", upstreamPayload)
+	}
+	if _, ok := upstreamPayload["runId"]; ok {
+		t.Fatalf("did not expect proxy child payload to reuse local runId: %#v", upstreamPayload)
+	}
+	if len(mainStream.injected) != 1 || mainStream.injected[0].isError {
+		t.Fatalf("expected successful proxy aggregate, got %#v", mainStream.injected)
+	}
+	if !strings.Contains(mainStream.injected[0].text, "remote answer") {
+		t.Fatalf("expected proxy final text in aggregate, got %s", mainStream.injected[0].text)
+	}
+	if len(routed) != 2 {
+		t.Fatalf("expected two routed content deltas, got %#v", routed)
+	}
+	for _, input := range routed {
+		content, ok := input.(stream.ContentDelta)
+		if !ok || content.TaskID == "" || !strings.Contains(content.ContentID, "remote_c_1") {
+			t.Fatalf("expected routed proxy content delta, got %#v", input)
+		}
+	}
+	if len(emitted) != 2 {
+		t.Fatalf("expected start and complete lifecycle events, got %#v", emitted)
+	}
+}
+
+func TestFrameOrchestratorReportsProxySubAgentNestedError(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, `data: {"type":"run.error","error":{"message":"remote permission denied"}}`+"\n\n")
+	}))
+	defer upstream.Close()
+
+	mainStream := &stubOrchestratableStream{
+		deltas: []contracts.AgentDelta{
+			newInvokeAgentsDelta(contracts.SubAgentTaskSpec{
+				SubAgentKey: "qiuer",
+				TaskText:    "查一下研发部",
+				TaskName:    "云端查询",
+			}),
+		},
+	}
+	var emitted []contracts.AgentDelta
+	var routed []stream.StreamInput
+	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{}, map[string]catalog.AgentDefinition{
+		"qiuer": {
+			Key:  "qiuer",
+			Name: "Qiuer",
+			Mode: "PROXY",
+			ProxyConfig: &catalog.ProxyConfig{
+				BaseURL: upstream.URL,
+			},
+		},
+	}, &emitted, &routed)
+
+	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
+	if err != nil || streamFailed || streamInterrupted {
+		t.Fatalf("unexpected orchestrator result err=%v failed=%v interrupted=%v", err, streamFailed, streamInterrupted)
+	}
+	if len(mainStream.injected) != 1 || !mainStream.injected[0].isError {
+		t.Fatalf("expected proxy error result, got %#v", mainStream.injected)
+	}
+	if !strings.Contains(mainStream.injected[0].text, "remote permission denied") {
+		t.Fatalf("expected nested proxy error message, got %s", mainStream.injected[0].text)
 	}
 }
 
