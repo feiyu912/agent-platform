@@ -145,9 +145,10 @@ func buildDesktopSection(params map[string]any) string {
 	}
 	lines := []string{
 		"Runtime Context: ZenMind Desktop",
-		"Desktop Action Bridge is available through the desktop_action tool.",
+		"Desktop Action Bridge is available through the desktop_action tool; Desktop CDP Bridge is available through the desktop_cdp tool.",
 		"pageContext is only a snapshot captured when the Desktop page changed. It may already be stale.",
 		"Use desktop_action with action=desktop.page.readCurrent or action=desktop.page.extractStructured when the task depends on the current live Desktop page state.",
+		"Use desktop_cdp only when a task requires a direct Chrome DevTools Protocol method on a Desktop-managed target.",
 		"Use desktop.page.interact for live page interactions, desktop.page.fillForm to populate form fields without submitting, and desktop.page.submitForm when the form is ready to submit.",
 		"Use desktop.embeddedWeb.* only as a compatibility fallback when the unified desktop.page.* actions are not sufficient.",
 	}

@@ -221,6 +221,13 @@ write_program_manifest() {
       "required": false
     },
     {
+      "key": "desktop",
+      "label": "configs/desktop.yml",
+      "relativePath": "configs/desktop.yml",
+      "templateRelativePath": "configs/desktop.example.yml",
+      "required": false
+    },
+    {
       "key": "bash",
       "label": "configs/bash.yml",
       "relativePath": "configs/bash.yml",

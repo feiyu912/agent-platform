@@ -17,6 +17,7 @@ var requiredBuiltinToolNames = []string{
 	"bash",
 	"datetime",
 	"desktop_action",
+	"desktop_cdp",
 	"file_grep",
 	"file_read",
 	"file_write",

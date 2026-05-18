@@ -33,7 +33,7 @@ func TestBuildSessionToolNamesFiltersInvokeAgentsWhenDisallowed(t *testing.T) {
 	}
 }
 
-func TestEffectiveAgentToolsForDesktopRequestAddsDesktopAction(t *testing.T) {
+func TestEffectiveAgentToolsForDesktopRequestAddsDesktopTools(t *testing.T) {
 	got := effectiveAgentToolsForRequest(catalog.AgentDefinition{
 		Tools: []string{"datetime"},
 	}, api.QueryRequest{
@@ -41,21 +41,21 @@ func TestEffectiveAgentToolsForDesktopRequestAddsDesktopAction(t *testing.T) {
 			"desktop": map[string]any{"source": "copilot"},
 		},
 	})
-	want := []string{"datetime", "desktop_action"}
+	want := []string{"datetime", "desktop_action", "desktop_cdp"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("effectiveAgentToolsForRequest() = %#v, want %#v", got, want)
 	}
 }
 
-func TestEffectiveAgentToolsForDesktopRequestKeepsExplicitDesktopAction(t *testing.T) {
+func TestEffectiveAgentToolsForDesktopRequestKeepsExplicitDesktopTools(t *testing.T) {
 	got := effectiveAgentToolsForRequest(catalog.AgentDefinition{
-		Tools: []string{"datetime", "desktop_action"},
+		Tools: []string{"datetime", "desktop_action", "desktop_cdp"},
 	}, api.QueryRequest{
 		Params: map[string]any{
 			"desktop": true,
 		},
 	})
-	want := []string{"datetime", "desktop_action"}
+	want := []string{"datetime", "desktop_action", "desktop_cdp"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("effectiveAgentToolsForRequest() = %#v, want %#v", got, want)
 	}

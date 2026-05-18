@@ -5,14 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
+	"agent-platform/internal/config"
 	. "agent-platform/internal/contracts"
 )
-
-const defaultDesktopActionBridgeURL = "http://127.0.0.1:11788/actions/call"
 
 var desktopActionAllowlist = map[string]bool{
 	"desktop.page.getContext":                  true,
@@ -111,6 +109,16 @@ type desktopActionSource struct {
 	AgentKey string `json:"agentKey,omitempty"`
 }
 
+type desktopCDPRequest struct {
+	RequestID string              `json:"requestId,omitempty"`
+	Method    string              `json:"method"`
+	Params    map[string]any      `json:"params,omitempty"`
+	TargetID  string              `json:"targetId,omitempty"`
+	SessionID string              `json:"sessionId,omitempty"`
+	SurfaceID string              `json:"surfaceId,omitempty"`
+	Source    desktopActionSource `json:"source,omitempty"`
+}
+
 func (t *RuntimeToolExecutor) invokeDesktopAction(ctx context.Context, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
 	action := strings.TrimSpace(stringArg(args, "action"))
 	if action == "" {
@@ -134,12 +142,40 @@ func (t *RuntimeToolExecutor) invokeDesktopAction(ctx context.Context, args map[
 		Args:      actionArgs,
 		Source:    buildDesktopActionSource(execCtx),
 	}
+	return t.invokeDesktopBridge(ctx, t.cfg.Desktop.Action, payload, "desktop_action")
+}
+
+func (t *RuntimeToolExecutor) invokeDesktopCDP(ctx context.Context, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
+	method := strings.TrimSpace(stringArg(args, "method"))
+	if method == "" {
+		return desktopActionErrorResult("invalid_args", "method is required", nil), nil
+	}
+	params, ok := args["params"].(map[string]any)
+	if !ok || params == nil {
+		params = map[string]any{}
+	}
+	payload := desktopCDPRequest{
+		RequestID: strings.TrimSpace(stringArg(args, "requestId")),
+		Method:    method,
+		Params:    params,
+		TargetID:  strings.TrimSpace(stringArg(args, "targetId")),
+		SessionID: strings.TrimSpace(stringArg(args, "sessionId")),
+		SurfaceID: strings.TrimSpace(stringArg(args, "surfaceId")),
+		Source:    buildDesktopActionSource(execCtx),
+	}
+	return t.invokeDesktopBridge(ctx, t.cfg.Desktop.CDP, payload, "desktop_cdp")
+}
+
+func (t *RuntimeToolExecutor) invokeDesktopBridge(ctx context.Context, bridge config.DesktopBridgeConfig, payload any, toolName string) (ToolExecutionResult, error) {
+	bridgeURL := strings.TrimSpace(bridge.BridgeURL)
+	if bridgeURL == "" {
+		return desktopActionErrorResult(toolName+"_bridge_not_configured", "desktop bridge is not configured", nil), nil
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return desktopActionErrorResult("invalid_args", err.Error(), nil), nil
 	}
 
-	bridgeURL := desktopActionBridgeURL()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, bridgeURL, bytes.NewReader(body))
 	if err != nil {
 		return desktopActionErrorResult("invalid_bridge_url", err.Error(), map[string]any{"bridgeUrl": bridgeURL}), nil
@@ -147,10 +183,14 @@ func (t *RuntimeToolExecutor) invokeDesktopAction(ctx context.Context, args map[
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	timeout := time.Duration(bridge.RequestTimeoutMs) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+	client := &http.Client{Timeout: timeout}
 	response, err := client.Do(request)
 	if err != nil {
-		return desktopActionErrorResult("desktop_action_bridge_unavailable", err.Error(), map[string]any{"bridgeUrl": bridgeURL}), nil
+		return desktopActionErrorResult(toolName+"_bridge_unavailable", err.Error(), map[string]any{"bridgeUrl": bridgeURL}), nil
 	}
 	defer response.Body.Close()
 
@@ -171,13 +211,6 @@ func (t *RuntimeToolExecutor) invokeDesktopAction(ctx context.Context, args map[
 		"statusCode": response.StatusCode,
 		"response":   decoded,
 	}, exitCode), nil
-}
-
-func desktopActionBridgeURL() string {
-	if value := strings.TrimSpace(os.Getenv("DESKTOP_ACTION_BRIDGE_URL")); value != "" {
-		return value
-	}
-	return defaultDesktopActionBridgeURL
 }
 
 func buildDesktopActionSource(execCtx *ExecutionContext) desktopActionSource {

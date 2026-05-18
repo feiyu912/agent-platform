@@ -74,6 +74,8 @@ func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args 
 		return t.invokeArtifactPublish(args, execCtx)
 	case "desktop_action":
 		return t.invokeDesktopAction(ctx, args, execCtx)
+	case "desktop_cdp":
+		return t.invokeDesktopCDP(ctx, args, execCtx)
 	case "file_read":
 		return t.invokeRead(args, execCtx)
 	case "file_write":

@@ -61,6 +61,63 @@ func TestLoadDefaults(t *testing.T) {
 		if !cfg.Memory.Enabled {
 			t.Fatalf("expected memory runtime enabled by default")
 		}
+		if cfg.Desktop.Action.BridgeURL != "http://127.0.0.1:11788/actions/call" {
+			t.Fatalf("unexpected default desktop action bridge url: %q", cfg.Desktop.Action.BridgeURL)
+		}
+		if cfg.Desktop.CDP.BridgeURL != "http://127.0.0.1:11788/cdp/call" {
+			t.Fatalf("unexpected default desktop cdp bridge url: %q", cfg.Desktop.CDP.BridgeURL)
+		}
+	})
+}
+
+func TestLoadDesktopConfigMissingFileLeavesBridgeUnconfigured(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		withProjectFileContents(t, filepath.Join("configs", "desktop.yml"), nil, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.Desktop.Action.BridgeURL != "" {
+				t.Fatalf("expected missing desktop action bridge url, got %q", cfg.Desktop.Action.BridgeURL)
+			}
+			if cfg.Desktop.CDP.BridgeURL != "" {
+				t.Fatalf("expected missing desktop cdp bridge url, got %q", cfg.Desktop.CDP.BridgeURL)
+			}
+		})
+	})
+}
+
+func TestLoadDesktopConfigFromFile(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"action:\n" +
+			"  host: 127.0.0.2\n" +
+			"  port: 17001\n" +
+			"  path: actions/custom\n" +
+			"  request-timeout-ms: 1234\n" +
+			"cdp:\n" +
+			"  host: localhost\n" +
+			"  port: 17002\n" +
+			"  path: /cdp/custom\n" +
+			"  request-timeout-ms: 5678\n"
+		withProjectFileContents(t, filepath.Join("configs", "desktop.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.Desktop.Action.BridgeURL != "http://127.0.0.2:17001/actions/custom" {
+				t.Fatalf("unexpected desktop action bridge url: %q", cfg.Desktop.Action.BridgeURL)
+			}
+			if cfg.Desktop.Action.RequestTimeoutMs != 1234 {
+				t.Fatalf("unexpected desktop action timeout: %d", cfg.Desktop.Action.RequestTimeoutMs)
+			}
+			if cfg.Desktop.CDP.BridgeURL != "http://localhost:17002/cdp/custom" {
+				t.Fatalf("unexpected desktop cdp bridge url: %q", cfg.Desktop.CDP.BridgeURL)
+			}
+			if cfg.Desktop.CDP.RequestTimeoutMs != 5678 {
+				t.Fatalf("unexpected desktop cdp timeout: %d", cfg.Desktop.CDP.RequestTimeoutMs)
+			}
+		})
 	})
 }
 
