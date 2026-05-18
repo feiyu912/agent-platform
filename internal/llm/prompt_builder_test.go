@@ -179,6 +179,7 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 	for _, expected := range []string{
 		"Runtime Context: ZenMind Desktop",
 		"desktop_action",
+		"desktop_cdp",
 		"pageContext is only a snapshot",
 		"desktop.page.readCurrent",
 		"desktop.page.extractStructured",

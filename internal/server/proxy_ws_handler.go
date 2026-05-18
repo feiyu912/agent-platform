@@ -239,8 +239,7 @@ func proxyWebSocketTarget(proxy *catalog.ProxyConfig) (string, http.Header, erro
 }
 
 func proxyQueryPayload(req api.QueryRequest, proxy *catalog.ProxyConfig) map[string]any {
-	return map[string]any{
-		"type":       "request.query",
+	payload := map[string]any{
 		"requestId":  req.RequestID,
 		"runId":      req.RunID,
 		"chatId":     req.ChatID,
@@ -250,6 +249,13 @@ func proxyQueryPayload(req api.QueryRequest, proxy *catalog.ProxyConfig) map[str
 		"references": req.References,
 		"params":     req.Params,
 		"scene":      req.Scene,
+		"stream":     true,
+	}
+	return map[string]any{
+		"frame":   "request",
+		"type":    "request.query",
+		"id":      req.RequestID,
+		"payload": payload,
 	}
 }
 
@@ -308,14 +314,18 @@ func (s *Server) forwardProxySubmit(req api.SubmitRequest) (api.SubmitResponse, 
 		return api.SubmitResponse{}, false
 	}
 	payload := map[string]any{
-		"type":       "request.submit",
 		"runId":      req.RunID,
 		"chatId":     route.chatID,
 		"agentKey":   route.agentKey,
 		"awaitingId": req.AwaitingID,
 		"params":     req.Params,
 	}
-	if !sendProxyRouteMessage(route, payload) {
+	if !sendProxyRouteMessage(route, map[string]any{
+		"frame":   "request",
+		"type":    "request.submit",
+		"id":      req.AwaitingID,
+		"payload": payload,
+	}) {
 		return api.SubmitResponse{
 			Accepted:   false,
 			Status:     "unmatched",
@@ -339,12 +349,18 @@ func (s *Server) forwardProxyInterrupt(req api.InterruptRequest) (api.InterruptR
 		return api.InterruptResponse{}, false
 	}
 	payload := map[string]any{
-		"type":     "request.interrupt",
-		"runId":    req.RunID,
-		"chatId":   route.chatID,
-		"agentKey": route.agentKey,
+		"requestId": req.RequestID,
+		"runId":     req.RunID,
+		"chatId":    route.chatID,
+		"agentKey":  route.agentKey,
+		"message":   req.Message,
 	}
-	if !sendProxyRouteMessage(route, payload) {
+	if !sendProxyRouteMessage(route, map[string]any{
+		"frame":   "request",
+		"type":    "request.interrupt",
+		"id":      req.RequestID,
+		"payload": payload,
+	}) {
 		return api.InterruptResponse{
 			Accepted: false,
 			Status:   "unmatched",

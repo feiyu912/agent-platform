@@ -195,7 +195,7 @@ func backendToolDefinition(name string) api.ToolDetailResponse {
 }
 
 func writeToolDefinition() api.ToolDetailResponse {
-	return backendToolDefinition("write")
+	return backendToolDefinition("file_write")
 }
 
 func invokeAgentsToolDefinition() api.ToolDetailResponse {
@@ -1570,7 +1570,7 @@ func TestWriteToolEmitsApprovalBeforeExecuting(t *testing.T) {
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "write",
+			toolName: "file_write",
 			args: map[string]any{
 				"file_path":   "owner.md",
 				"content":     "hello",
@@ -1593,7 +1593,7 @@ func TestWriteToolEmitsApprovalBeforeExecuting(t *testing.T) {
 		t.Fatalf("expected approval ask, got %#v", stream.pending)
 	}
 	item, _ := ask.Approvals[0].(map[string]any)
-	if !strings.Contains(fmt.Sprint(item["command"]), "write ") || !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") {
+	if !strings.Contains(fmt.Sprint(item["command"]), "file_write ") || !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") {
 		t.Fatalf("unexpected write approval command: %#v", item)
 	}
 	if item["description"] != "写入 owner 文档" {
@@ -1625,7 +1625,7 @@ func TestWriteToolApprovalExecutesAndWritesFile(t *testing.T) {
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
 			toolID:           "tool_1",
-			toolName:         "write",
+			toolName:         "file_write",
 			approvalDecision: "approve",
 			args: map[string]any{
 				"file_path":   "owner.md",
@@ -1657,7 +1657,7 @@ func TestWriteToolApprovalExecutesAndWritesFile(t *testing.T) {
 func TestFileReadAccessApprovalEmitsAwaitingAsk(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
-	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("file_read")}}
 	stream := &llmRunStream{
 		ctx:     context.Background(),
 		session: contracts.QuerySession{RunID: "run_1"},
@@ -1677,7 +1677,7 @@ func TestFileReadAccessApprovalEmitsAwaitingAsk(t *testing.T) {
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "read",
+			toolName: "file_read",
 			args: map[string]any{
 				"file_path": filepath.Join(outside, "secret.txt"),
 			},
@@ -1701,7 +1701,7 @@ func TestFileReadAccessApprovalEmitsAwaitingAsk(t *testing.T) {
 		t.Fatalf("expected builtin approval viewport, got %#v", ask)
 	}
 	item, _ := ask.Approvals[0].(map[string]any)
-	if item["description"] != "read超出允许目录" || !strings.Contains(fmt.Sprint(item["command"]), "read ") {
+	if item["description"] != "read超出允许目录" || !strings.Contains(fmt.Sprint(item["command"]), "file_read ") {
 		t.Fatalf("unexpected read approval item: %#v", item)
 	}
 	options, _ := item["options"].([]any)
@@ -1721,7 +1721,7 @@ func TestFileReadAccessAllowsSessionSkillsDirBeforeApproval(t *testing.T) {
 	if err := os.WriteFile(skillFile, []byte("# Schedule\n"), 0o644); err != nil {
 		t.Fatalf("write skill fixture: %v", err)
 	}
-	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("file_read")}}
 	session := contracts.QuerySession{
 		RunID: "run_1",
 		RuntimeContext: contracts.RuntimeRequestContext{
@@ -1747,7 +1747,7 @@ func TestFileReadAccessAllowsSessionSkillsDirBeforeApproval(t *testing.T) {
 		execCtx: &contracts.ExecutionContext{Session: session},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "read",
+			toolName: "file_read",
 			args: map[string]any{
 				"file_path": skillFile,
 			},
@@ -1776,7 +1776,7 @@ func TestFileReadAccessApprovalDecisions(t *testing.T) {
 	outside := t.TempDir()
 	for _, decision := range []string{"approve", "approve_rule_run"} {
 		t.Run(decision, func(t *testing.T) {
-			executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
+			executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("file_read")}}
 			stream := &llmRunStream{
 				ctx:     context.Background(),
 				session: contracts.QuerySession{RunID: "run_1"},
@@ -1795,7 +1795,7 @@ func TestFileReadAccessApprovalDecisions(t *testing.T) {
 				execCtx: &contracts.ExecutionContext{},
 				activeToolCall: &preparedToolInvocation{
 					toolID:           "tool_1",
-					toolName:         "read",
+					toolName:         "file_read",
 					approvalDecision: decision,
 					args: map[string]any{
 						"file_path": filepath.Join(outside, "secret.txt"),
@@ -1821,7 +1821,7 @@ func TestFileReadAccessApprovalDecisions(t *testing.T) {
 func TestFileReadAccessRejectDoesNotExecute(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
-	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}}
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("file_read")}}
 	stream := &llmRunStream{
 		ctx:     context.Background(),
 		session: contracts.QuerySession{RunID: "run_1"},
@@ -1840,7 +1840,7 @@ func TestFileReadAccessRejectDoesNotExecute(t *testing.T) {
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
 			toolID:           "tool_1",
-			toolName:         "read",
+			toolName:         "file_read",
 			approvalDecision: "reject",
 			args: map[string]any{
 				"file_path": filepath.Join(outside, "secret.txt"),
@@ -1876,13 +1876,13 @@ func TestFileReadAccessApprovalNoticeUsesPlanCommand(t *testing.T) {
 					MaxWriteBytes:     1024,
 				},
 			},
-			tools: stubToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("read")}},
+			tools: stubToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("file_read")}},
 		},
 		execCtx: &contracts.ExecutionContext{},
 	}
 	invocation := &preparedToolInvocation{
 		toolID:   "tool_1",
-		toolName: "read",
+		toolName: "file_read",
 		args: map[string]any{
 			"file_path": "/etc/passwd",
 		},
@@ -1899,7 +1899,7 @@ func TestFileReadAccessApprovalNoticeUsesPlanCommand(t *testing.T) {
 	}
 	noticeText, _ := stream.messages[1].Content.(string)
 	if !strings.Contains(noticeText, `[System audit — HITL approval batch]`) ||
-		!strings.Contains(noticeText, `tool=read command="read `) ||
+		!strings.Contains(noticeText, `tool=file_read command="file_read `) ||
 		!strings.Contains(noticeText, `passwd" decision=approve`) ||
 		strings.Contains(noticeText, `[HITL]  → approve`) {
 		t.Fatalf("expected file read HITL audit notice to use plan command, got %#v", stream.messages[1])
@@ -1929,7 +1929,7 @@ func TestWriteOutsideAllowedPathsCombinesPathAndContentApproval(t *testing.T) {
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "write",
+			toolName: "file_write",
 			args: map[string]any{
 				"file_path":   filepath.Join(outside, "owner.md"),
 				"content":     "hello",
@@ -1951,7 +1951,7 @@ func TestWriteOutsideAllowedPathsCombinesPathAndContentApproval(t *testing.T) {
 		t.Fatalf("expected write approval ask, got %#v", stream.pending)
 	}
 	item, _ := ask.Approvals[0].(map[string]any)
-	if !strings.Contains(fmt.Sprint(item["command"]), "write ") || !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") {
+	if !strings.Contains(fmt.Sprint(item["command"]), "file_write ") || !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") {
 		t.Fatalf("expected combined approval command to include write size, got %#v", item)
 	}
 	if !strings.Contains(fmt.Sprint(item["description"]), "写入 owner 文档") || !strings.Contains(fmt.Sprint(item["description"]), "路径超出允许目录") {
@@ -1988,7 +1988,7 @@ func TestWriteOutsideAllowedPathsCombinedSubmitExecutesOriginalToolCall(t *testi
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
-			toolName: "write",
+			toolName: "file_write",
 			args: map[string]any{
 				"file_path":   filepath.Join(outside, "owner.md"),
 				"content":     "hello",
@@ -2015,8 +2015,8 @@ func TestWriteOutsideAllowedPathsCombinedSubmitExecutesOriginalToolCall(t *testi
 	if err := stream.awaitHITLSubmitAndExecute(); err != nil {
 		t.Fatalf("awaitHITLSubmitAndExecute returned error: %v", err)
 	}
-	if len(executor.invocations) != 1 || executor.invocations[0].name != "write" {
-		t.Fatalf("expected original write to execute once, got %#v", executor.invocations)
+	if len(executor.invocations) != 1 || executor.invocations[0].name != "file_write" {
+		t.Fatalf("expected original file_write to execute once, got %#v", executor.invocations)
 	}
 	for _, delta := range stream.pending {
 		if nextAsk, ok := delta.(contracts.DeltaAwaitAsk); ok {
@@ -2056,7 +2056,7 @@ func TestWriteOutsideAllowedPathsCombinedApprovalDecisions(t *testing.T) {
 				execCtx: &contracts.ExecutionContext{},
 				activeToolCall: &preparedToolInvocation{
 					toolID:           "tool_1",
-					toolName:         "write",
+					toolName:         "file_write",
 					approvalDecision: decision,
 					args: map[string]any{
 						"file_path":   target,
@@ -2120,7 +2120,7 @@ func TestWriteOutsideAllowedPathsCombinedRejectDoesNotExecute(t *testing.T) {
 		execCtx: &contracts.ExecutionContext{},
 		activeToolCall: &preparedToolInvocation{
 			toolID:           "tool_1",
-			toolName:         "write",
+			toolName:         "file_write",
 			approvalDecision: "reject",
 			args: map[string]any{
 				"file_path":   target,

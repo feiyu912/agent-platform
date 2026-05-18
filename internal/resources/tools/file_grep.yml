@@ -1,4 +1,4 @@
-name: grep
+name: file_grep
 label: 文件内容搜索
 description: |
   A powerful search tool built on ripgrep. Filter files with glob/type,

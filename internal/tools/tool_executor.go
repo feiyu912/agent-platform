@@ -74,11 +74,13 @@ func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args 
 		return t.invokeArtifactPublish(args, execCtx)
 	case "desktop_action":
 		return t.invokeDesktopAction(ctx, args, execCtx)
-	case "read":
+	case "desktop_cdp":
+		return t.invokeDesktopCDP(ctx, args, execCtx)
+	case "file_read":
 		return t.invokeRead(args, execCtx)
-	case "write":
+	case "file_write":
 		return t.invokeWrite(args, execCtx)
-	case "grep":
+	case "file_grep":
 		return t.invokeGrep(ctx, args, execCtx)
 	case "plan_add_tasks":
 		return t.invokePlanAddTasks(args, execCtx)

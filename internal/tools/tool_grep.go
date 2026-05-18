@@ -148,7 +148,7 @@ func (t *RuntimeToolExecutor) invokeGrep(ctx context.Context, args map[string]an
 	}
 	results, truncated := pageGrepResults(lines, offset, headLimit)
 	return structuredResult(map[string]any{
-		"tool":       "grep",
+		"tool":       "file_grep",
 		"mode":       mode,
 		"pattern":    pattern,
 		"path":       resolved.Path,

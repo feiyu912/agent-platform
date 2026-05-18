@@ -1,0 +1,30 @@
+name: desktop_cdp
+label: Desktop CDP
+description: Call the local ZenMind Desktop CDP Bridge to execute Chrome DevTools Protocol methods on Desktop-managed targets.
+submitResultFormat: json-compact
+type: function
+inputSchema:
+  type: object
+  properties:
+    method:
+      type: string
+      description: Required. Chrome DevTools Protocol method name to execute through the Desktop CDP Bridge.
+    params:
+      type: object
+      description: JSON parameters for the selected CDP method.
+      additionalProperties: true
+    targetId:
+      type: string
+      description: Optional Desktop-managed target id to route the CDP call to.
+    sessionId:
+      type: string
+      description: Optional CDP session id for an attached target session.
+    surfaceId:
+      type: string
+      description: Optional Desktop surface id used when Desktop needs to resolve the active target.
+    requestId:
+      type: string
+      description: Optional stable request id for audit/debug correlation. Leave blank to let Desktop generate one.
+  required:
+    - method
+  additionalProperties: false

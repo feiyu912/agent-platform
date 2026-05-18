@@ -45,7 +45,7 @@ func TestNormalizeHITLApprovalSubmitSupportsApproveRuleRunForCommand(t *testing.
 func TestNormalizeHITLApprovalSubmitSupportsApproveRuleRunForFile(t *testing.T) {
 	normalized, err := normalizeHITLApprovalSubmit(map[string]any{
 		"approvals": []any{
-			map[string]any{"id": "tool_1", "command": "read /tmp/owner.md"},
+			map[string]any{"id": "tool_1", "command": "file_read /tmp/owner.md"},
 		},
 	}, mustEncodeHITLSubmitParams(t, []map[string]any{
 		{"id": "tool_1", "decision": "approve_rule_run", "reason": "同规则本轮一并放行"},

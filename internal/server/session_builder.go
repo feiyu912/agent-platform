@@ -244,12 +244,19 @@ func effectiveAgentToolsForRequest(def catalog.AgentDefinition, req api.QueryReq
 	if !hasDesktopRuntimeContext(req.Params) {
 		return tools
 	}
-	for _, tool := range tools {
-		if strings.EqualFold(strings.TrimSpace(tool), "desktop_action") {
-			return tools
+	for _, desktopTool := range []string{"desktop_action", "desktop_cdp"} {
+		hasTool := false
+		for _, tool := range tools {
+			if strings.EqualFold(strings.TrimSpace(tool), desktopTool) {
+				hasTool = true
+				break
+			}
+		}
+		if !hasTool {
+			tools = append(tools, desktopTool)
 		}
 	}
-	return append(append([]string(nil), tools...), "desktop_action")
+	return tools
 }
 
 func hasDesktopRuntimeContext(params map[string]any) bool {

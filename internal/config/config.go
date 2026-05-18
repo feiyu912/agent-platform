@@ -29,6 +29,7 @@ type Config struct {
 	Logging        LoggingConfig
 	CORS           CORSConfig
 	ContainerHub   ContainerHubConfig
+	Desktop        DesktopConfig
 	Bash           BashConfig
 	FileTools      FileToolsConfig
 	BashHITL       BashHITLConfig
@@ -225,6 +226,19 @@ type ContainerHubConfig struct {
 	AgentIdleTimeoutMs   int64
 	DestroyQueueDelayMs  int64
 	ResolvedEngine       string
+}
+
+type DesktopConfig struct {
+	Action DesktopBridgeConfig
+	CDP    DesktopBridgeConfig
+}
+
+type DesktopBridgeConfig struct {
+	Host             string
+	Port             int
+	Path             string
+	RequestTimeoutMs int
+	BridgeURL        string
 }
 
 type BashConfig struct {
@@ -522,6 +536,14 @@ func defaultConfig() Config {
 			AgentIdleTimeoutMs:  600000,
 			DestroyQueueDelayMs: 5000,
 		},
+		Desktop: DesktopConfig{
+			Action: DesktopBridgeConfig{
+				RequestTimeoutMs: 20000,
+			},
+			CDP: DesktopBridgeConfig{
+				RequestTimeoutMs: 20000,
+			},
+		},
 		Bash: BashConfig{
 			WorkingDirectory: "",
 			AllowedPaths:     []string{".", "/tmp"},
@@ -578,6 +600,7 @@ func defaultConfig() Config {
 
 func (c *Config) applyStructuredConfig() error {
 	c.applyContainerHubFile(ConfigFile("configs/container-hub.yml"))
+	c.applyDesktopFile(ConfigFile("configs/desktop.yml"))
 	c.applyBashFile(ConfigFile("configs/bash.yml"))
 	c.applyFileToolsFile(ConfigFile("configs/file-tools.yml"))
 	c.applyCORSFile(ConfigFile("configs/cors.yml"))
@@ -586,6 +609,31 @@ func (c *Config) applyStructuredConfig() error {
 		return err
 	}
 	return nil
+}
+
+func (c *Config) applyDesktopFile(path string) {
+	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return
+	}
+	values, _ := tree.(map[string]any)
+	if len(values) == 0 {
+		return
+	}
+	c.Desktop.Action = parseDesktopBridgeConfig(values["action"], c.Desktop.Action)
+	c.Desktop.CDP = parseDesktopBridgeConfig(values["cdp"], c.Desktop.CDP)
+}
+
+func parseDesktopBridgeConfig(raw any, fallback DesktopBridgeConfig) DesktopBridgeConfig {
+	values, _ := raw.(map[string]any)
+	if len(values) == 0 {
+		return fallback
+	}
+	fallback.Host = stringValue(anyValue(values["host"], fallback.Host), fallback.Host)
+	fallback.Port = intValue(anyValue(values["port"], fallback.Port), fallback.Port)
+	fallback.Path = stringValue(anyValue(values["path"], fallback.Path), fallback.Path)
+	fallback.RequestTimeoutMs = intValue(anyValue(values["request-timeout-ms"], fallback.RequestTimeoutMs), fallback.RequestTimeoutMs)
+	return fallback
 }
 
 func (c *Config) applyContainerHubFile(path string) {
@@ -927,6 +975,8 @@ func (c *Config) normalize() error {
 	if c.ContainerHub.DefaultSandboxLevel == "" {
 		c.ContainerHub.DefaultSandboxLevel = "run"
 	}
+	c.Desktop.Action = normalizeDesktopBridgeConfig(c.Desktop.Action)
+	c.Desktop.CDP = normalizeDesktopBridgeConfig(c.Desktop.CDP)
 	c.ContainerHub.Enabled = strings.TrimSpace(c.ContainerHub.BaseURL) != ""
 	if c.Bash.WorkingDirectory == "" {
 		c.Bash.WorkingDirectory = "."
@@ -957,6 +1007,23 @@ func (c *Config) normalize() error {
 		return err
 	}
 	return nil
+}
+
+func normalizeDesktopBridgeConfig(cfg DesktopBridgeConfig) DesktopBridgeConfig {
+	cfg.Host = strings.TrimSpace(cfg.Host)
+	cfg.Path = strings.TrimSpace(cfg.Path)
+	if cfg.RequestTimeoutMs <= 0 {
+		cfg.RequestTimeoutMs = 20000
+	}
+	if cfg.Host == "" || cfg.Port <= 0 || cfg.Path == "" {
+		cfg.BridgeURL = ""
+		return cfg
+	}
+	if !strings.HasPrefix(cfg.Path, "/") {
+		cfg.Path = "/" + cfg.Path
+	}
+	cfg.BridgeURL = fmt.Sprintf("http://%s:%d%s", cfg.Host, cfg.Port, cfg.Path)
+	return cfg
 }
 
 // normalizeGateways 把 legacy 单 gateway 配置（GatewayWS）合成为 Gateways[0]。

@@ -2,7 +2,7 @@
 
 working-directory: .
 
-# read / grep allowlist. Out-of-allowlist paths fall back to HITL approval
+# file_read / file_grep allowlist. Out-of-allowlist paths fall back to HITL approval
 # with approve / approve_rule_run / reject.
 allowed-read-paths:
   - .
