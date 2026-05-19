@@ -128,7 +128,6 @@ func buildRuntimeContextPrompt(session QuerySession, req api.QueryRequest) strin
 		default:
 		}
 	}
-	appendIfPresent(&sections, buildDesktopSection(req.Params))
 	if session.AgentHasRuntimeSandbox || session.RuntimeContext.SandboxContext != nil {
 		appendIfPresent(&sections, buildSandboxSection(session.RuntimeContext.SandboxContext))
 	}
@@ -136,61 +135,6 @@ func buildRuntimeContextPrompt(session QuerySession, req api.QueryRequest) strin
 		appendIfPresent(&sections, buildMemorySection(session, req))
 	}
 	return strings.Join(sections, "\n\n")
-}
-
-func buildDesktopSection(params map[string]any) string {
-	desktop, ok := params["desktop"]
-	if !ok || desktop == nil {
-		return ""
-	}
-	lines := []string{
-		"Runtime Context: ZenMind Desktop",
-		"Desktop Action Bridge is available through the desktop_action tool; Desktop CDP Bridge is available through the desktop_cdp tool.",
-		"pageContext is only a snapshot captured when the Desktop page changed. It may already be stale.",
-		"Use desktop_action for Desktop shell, service, market, help, memory, agent, and automation management actions.",
-		"Use desktop_cdp for current page, webview, iframe, DOM reads, navigation, clicks, input, screenshots, and script execution.",
-		"Use desktop_cdp when the task depends on current live Desktop page state.",
-	}
-	if node, ok := desktop.(map[string]any); ok {
-		appendDesktopField(&lines, node, "source")
-		appendDesktopField(&lines, node, "route")
-		appendDesktopField(&lines, node, "pageKey")
-		appendDesktopField(&lines, node, "pageKind")
-		appendDesktopField(&lines, node, "surfaceId")
-		appendDesktopField(&lines, node, "webContentsId")
-		appendDesktopField(&lines, node, "frameMatchUrl")
-		appendDesktopField(&lines, node, "snapshotVersion")
-		appendDesktopField(&lines, node, "snapshotAt")
-		appendDesktopField(&lines, node, "permissionMode")
-		if pageContext, ok := node["pageContext"].(map[string]any); ok {
-			if title := strings.TrimSpace(stringValue(pageContext["title"])); title != "" {
-				lines = append(lines, "currentPageTitle: "+sanitizeYAMLScalar(title))
-			}
-			if url := strings.TrimSpace(stringValue(pageContext["url"])); url != "" {
-				lines = append(lines, "currentPageUrl: "+sanitizeYAMLScalar(url))
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-func appendDesktopField(lines *[]string, node map[string]any, key string) {
-	switch value := node[key].(type) {
-	case string:
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			return
-		}
-		*lines = append(*lines, key+": "+sanitizeYAMLScalar(trimmed))
-	case int, int8, int16, int32, int64:
-		*lines = append(*lines, key+": "+fmt.Sprint(value))
-	case uint, uint8, uint16, uint32, uint64:
-		*lines = append(*lines, key+": "+fmt.Sprint(value))
-	case float32, float64:
-		*lines = append(*lines, key+": "+fmt.Sprint(value))
-	case bool:
-		*lines = append(*lines, key+": "+fmt.Sprint(value))
-	}
 }
 
 func buildSystemEnvironmentSection(session QuerySession) string {

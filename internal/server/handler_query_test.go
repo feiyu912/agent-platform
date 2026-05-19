@@ -108,42 +108,6 @@ func TestResolveSkillRuntimeSettingsReturnsAgentEnvWithoutSkills(t *testing.T) {
 	}
 }
 
-func TestInjectDesktopCdpRuntimeEnvAddsAgentAndSurfaceSelectors(t *testing.T) {
-	env := map[string]string{
-		"CDP_HOST": "127.0.0.1",
-		"CDP_PORT": "11789",
-	}
-
-	got := injectDesktopCdpRuntimeEnv(env, "agent-a", "surface-a")
-	if got["ZENMIND_CDP_AGENT_KEY"] != "agent-a" {
-		t.Fatalf("ZENMIND_CDP_AGENT_KEY = %q", got["ZENMIND_CDP_AGENT_KEY"])
-	}
-	if got["ZENMIND_CDP_SURFACE_ID"] != "surface-a" {
-		t.Fatalf("ZENMIND_CDP_SURFACE_ID = %q", got["ZENMIND_CDP_SURFACE_ID"])
-	}
-}
-
-func TestInjectDesktopCdpRuntimeEnvLeavesNonCdpEnvUntouched(t *testing.T) {
-	env := map[string]string{"HTTP_PROXY": "http://127.0.0.1:8001"}
-
-	got := injectDesktopCdpRuntimeEnv(env, "agent-a", "surface-a")
-	if !reflect.DeepEqual(got, env) {
-		t.Fatalf("env = %#v, want %#v", got, env)
-	}
-}
-
-func TestInjectDesktopCdpRuntimeEnvLeavesStandardChromeCdpUntouched(t *testing.T) {
-	env := map[string]string{
-		"CDP_HOST": "localhost",
-		"CDP_PORT": "9222",
-	}
-
-	got := injectDesktopCdpRuntimeEnv(env, "agent-a", "surface-a")
-	if !reflect.DeepEqual(got, env) {
-		t.Fatalf("env = %#v, want %#v", got, env)
-	}
-}
-
 type queryMemoryRegistry struct {
 	testCatalogRegistry
 	def catalog.AgentDefinition
@@ -717,6 +681,57 @@ func TestPrepareQueryAllowsRuntimeEnvWithoutContainerHub(t *testing.T) {
 	}
 	if !containsString(prepared.session.ToolNames, "bash") {
 		t.Fatalf("expected bash tool for runtime env overrides, got %#v", prepared.session.ToolNames)
+	}
+}
+
+func TestPrepareQueryDesktopParamsDoNotGrantToolsOrRuntimeEnv(t *testing.T) {
+	chats, err := chat.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new chat store: %v", err)
+	}
+
+	server := &Server{deps: Dependencies{
+		Config: config.Config{
+			ContainerHub: config.ContainerHubConfig{Enabled: false},
+		},
+		Chats: chats,
+		Registry: queryMemoryRegistry{
+			def: catalog.AgentDefinition{
+				Key:      "agent-a",
+				Name:     "Agent A",
+				ModelKey: "mock-model",
+				Runtime: map[string]any{
+					"env": map[string]string{
+						"CDP_HOST": "127.0.0.1",
+						"CDP_PORT": "11789",
+					},
+				},
+				Tools: []string{"datetime"},
+			},
+		},
+	}}
+
+	body := `{"agentKey":"agent-a","chatId":"chat-1","message":"看当前页面","params":{"desktop":{"surfaceId":"surface-a","source":"copilot"}}}`
+	req := httptest.NewRequest("POST", "/api/query", bytes.NewBufferString(body))
+	prepared, err := server.prepareQuery(req)
+	if err != nil {
+		t.Fatalf("prepareQuery: %v", err)
+	}
+
+	if containsString(prepared.session.ToolNames, "desktop_action") || containsString(prepared.session.ToolNames, "desktop_cdp") {
+		t.Fatalf("did not expect desktop tools from params.desktop, got %#v", prepared.session.ToolNames)
+	}
+	if !reflect.DeepEqual(prepared.session.ToolNames, []string{"datetime", "bash"}) {
+		t.Fatalf("unexpected tool names: %#v", prepared.session.ToolNames)
+	}
+	if _, ok := prepared.session.RuntimeEnvOverrides["ZENMIND_CDP_AGENT_KEY"]; ok {
+		t.Fatalf("did not expect ZENMIND_CDP_AGENT_KEY injection: %#v", prepared.session.RuntimeEnvOverrides)
+	}
+	if _, ok := prepared.session.RuntimeEnvOverrides["ZENMIND_CDP_SURFACE_ID"]; ok {
+		t.Fatalf("did not expect ZENMIND_CDP_SURFACE_ID injection: %#v", prepared.session.RuntimeEnvOverrides)
+	}
+	if prepared.session.RuntimeEnvOverrides["CDP_PORT"] != "11789" {
+		t.Fatalf("expected explicit CDP_PORT to remain unchanged, got %#v", prepared.session.RuntimeEnvOverrides)
 	}
 }
 

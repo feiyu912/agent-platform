@@ -158,7 +158,7 @@ func TestBuildRuntimeContextPromptSkipsMemoryFallbackWithoutMemoryConfig(t *test
 	}
 }
 
-func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.T) {
+func TestBuildRuntimeContextPromptIgnoresDesktopParams(t *testing.T) {
 	prompt := buildRuntimeContextPrompt(QuerySession{}, api.QueryRequest{
 		Params: map[string]any{
 			"desktop": map[string]any{
@@ -176,7 +176,7 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 		},
 	})
 
-	for _, expected := range []string{
+	for _, unexpected := range []string{
 		"Runtime Context: ZenMind Desktop",
 		"desktop_action",
 		"desktop_cdp",
@@ -191,17 +191,8 @@ func TestBuildRuntimeContextPromptIncludesDesktopEmbeddedWebGuidance(t *testing.
 		"currentPageTitle: Bing",
 		"currentPageUrl: https://www.bing.com/",
 	} {
-		if !strings.Contains(prompt, expected) {
-			t.Fatalf("expected desktop guidance %q in prompt, got %q", expected, prompt)
-		}
-	}
-	for _, unexpected := range []string{
-		"desktop.page.readCurrent",
-		"desktop.page.extractStructured",
-		"desktop.embeddedWeb.*",
-	} {
 		if strings.Contains(prompt, unexpected) {
-			t.Fatalf("did not expect desktop_action page guidance %q in prompt, got %q", unexpected, prompt)
+			t.Fatalf("did not expect desktop context %q in prompt, got %q", unexpected, prompt)
 		}
 	}
 }

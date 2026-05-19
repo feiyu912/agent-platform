@@ -95,7 +95,6 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		s.deps.Config.Paths.SkillsMarketDir,
 		agentDef.Skills,
 	)
-	runtimeEnvOverrides = injectDesktopCdpRuntimeEnv(runtimeEnvOverrides, req.AgentKey, desktopCdpSurfaceIDFromParams(req.Params))
 	log.Printf("[server][skill-runtime] agent=%s skills=%v hookDirs=%v runtimeEnvKeys=%v",
 		agentDef.Key,
 		agentDef.Skills,
@@ -114,7 +113,7 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		AgentRole:              agentDef.Role,
 		AgentDescription:       agentDef.Description,
 		ModelKey:               agentDef.ModelKey,
-		ToolNames:              buildSessionToolNames(effectiveAgentToolsForRequest(agentDef, req), options.AllowInvokeAgents),
+		ToolNames:              buildSessionToolNames(effectiveAgentTools(agentDef), options.AllowInvokeAgents),
 		Mode:                   agentDef.Mode,
 		TeamID:                 req.TeamID,
 		Created:                options.Created,
@@ -178,46 +177,6 @@ func (s *Server) buildSessionToolOverrides(agentDef catalog.AgentDefinition) map
 	return overrides
 }
 
-func injectDesktopCdpRuntimeEnv(env map[string]string, agentKey string, surfaceID string) map[string]string {
-	if !hasDesktopCdpRuntimeEnv(env) {
-		return env
-	}
-	if env == nil {
-		env = map[string]string{}
-	}
-	if strings.TrimSpace(env["ZENMIND_CDP_AGENT_KEY"]) == "" {
-		if normalizedAgentKey := strings.TrimSpace(agentKey); normalizedAgentKey != "" {
-			env["ZENMIND_CDP_AGENT_KEY"] = normalizedAgentKey
-		}
-	}
-	if strings.TrimSpace(env["ZENMIND_CDP_SURFACE_ID"]) == "" {
-		if normalizedSurfaceID := strings.TrimSpace(surfaceID); normalizedSurfaceID != "" {
-			env["ZENMIND_CDP_SURFACE_ID"] = normalizedSurfaceID
-		}
-	}
-	return env
-}
-
-func hasDesktopCdpRuntimeEnv(env map[string]string) bool {
-	if strings.TrimSpace(env["ZENMIND_DESKTOP_CDP_GATEWAY_URL"]) != "" {
-		return true
-	}
-	return strings.TrimSpace(env["CDP_PORT"]) == "11789"
-}
-
-func desktopCdpSurfaceIDFromParams(params map[string]any) string {
-	desktop, ok := params["desktop"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	for _, key := range []string{"surfaceId", "cdpSurfaceId"} {
-		if value := strings.TrimSpace(stringValue(desktop[key])); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func buildSessionToolNames(base []string, allowInvokeAgents bool) []string {
 	tools := make([]string, 0, len(base))
 	seen := map[string]struct{}{}
@@ -237,46 +196,6 @@ func buildSessionToolNames(base []string, allowInvokeAgents bool) []string {
 		tools = append(tools, name)
 	}
 	return tools
-}
-
-func effectiveAgentToolsForRequest(def catalog.AgentDefinition, req api.QueryRequest) []string {
-	tools := effectiveAgentTools(def)
-	if !hasDesktopRuntimeContext(req.Params) {
-		return tools
-	}
-	for _, desktopTool := range []string{"desktop_action", "desktop_cdp"} {
-		hasTool := false
-		for _, tool := range tools {
-			if strings.EqualFold(strings.TrimSpace(tool), desktopTool) {
-				hasTool = true
-				break
-			}
-		}
-		if !hasTool {
-			tools = append(tools, desktopTool)
-		}
-	}
-	return tools
-}
-
-func hasDesktopRuntimeContext(params map[string]any) bool {
-	if len(params) == 0 {
-		return false
-	}
-	desktop, ok := params["desktop"]
-	if !ok || desktop == nil {
-		return false
-	}
-	switch value := desktop.(type) {
-	case bool:
-		return value
-	case map[string]any:
-		return true
-	case string:
-		return strings.TrimSpace(value) != ""
-	default:
-		return true
-	}
 }
 
 func canUseInvokeAgentsTool(mode string) bool {
