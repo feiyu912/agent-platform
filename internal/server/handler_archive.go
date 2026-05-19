@@ -16,9 +16,16 @@ import (
 
 func (s *Server) handleChatArchive(w http.ResponseWriter, r *http.Request) {
 	var req api.ArchiveChatRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeOptionalJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
+	}
+	if chatID := strings.TrimSpace(r.URL.Query().Get("chatId")); chatID != "" {
+		if len(req.ChatIDs) > 0 && (len(req.ChatIDs) != 1 || strings.TrimSpace(req.ChatIDs[0]) != chatID) {
+			writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "chatId mismatch"))
+			return
+		}
+		req.ChatIDs = []string{chatID}
 	}
 	if len(req.ChatIDs) == 0 {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "chatIds is required"))
@@ -81,11 +88,16 @@ func (s *Server) handleArchiveSearch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleArchiveDelete(w http.ResponseWriter, r *http.Request) {
 	var req api.ArchiveDeleteRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeOptionalJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
 	}
-	response, err := s.deleteArchive(req.ChatID)
+	chatID, idErr := queryOrBodyID(r, "chatId", req.ChatID)
+	if idErr != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, idErr.Error()))
+		return
+	}
+	response, err := s.deleteArchive(chatID)
 	if errors.Is(err, chat.ErrChatNotFound) {
 		writeJSON(w, http.StatusNotFound, api.Failure(http.StatusNotFound, "archive not found"))
 		return

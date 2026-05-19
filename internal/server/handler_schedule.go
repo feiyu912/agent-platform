@@ -67,16 +67,28 @@ func (s *Server) handleScheduleUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
 	}
+	id, err := queryOrBodyIDAny(r, []string{"scheduleId", "id"}, req.ScheduleID, req.ID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
+		return
+	}
+	req.ID = id
 	response, err := s.updateSchedule(req)
 	s.writeScheduleHTTPResponse(w, response, err)
 }
 
 func (s *Server) handleScheduleDelete(w http.ResponseWriter, r *http.Request) {
 	var req api.DeleteScheduleRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeOptionalJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
 	}
+	id, err := queryOrBodyIDAny(r, []string{"scheduleId", "id"}, req.ScheduleID, req.ID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
+		return
+	}
+	req.ID = id
 	response, err := s.deleteSchedule(req)
 	s.writeScheduleHTTPResponse(w, response, err)
 }
@@ -87,16 +99,28 @@ func (s *Server) handleScheduleToggle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
 	}
+	id, err := queryOrBodyIDAny(r, []string{"scheduleId", "id"}, req.ScheduleID, req.ID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
+		return
+	}
+	req.ID = id
 	response, err := s.toggleSchedule(req)
 	s.writeScheduleHTTPResponse(w, response, err)
 }
 
 func (s *Server) handleScheduleExecutions(w http.ResponseWriter, r *http.Request) {
 	var req api.ScheduleExecutionsRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeOptionalJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
 	}
+	id, err := queryOrBodyIDAny(r, []string{"scheduleId", "id"}, req.ScheduleID, req.ID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
+		return
+	}
+	req.ID = id
 	response, err := s.listScheduleExecutions(req)
 	s.writeScheduleHTTPResponse(w, response, err)
 }
@@ -212,6 +236,7 @@ func (s *Server) createSchedule(req api.CreateScheduleRequest) (api.ScheduleDeta
 }
 
 func (s *Server) updateSchedule(req api.UpdateScheduleRequest) (api.ScheduleDetailResponse, error) {
+	req.ID = firstNonBlank(req.ID, req.ScheduleID)
 	def, err := s.findSchedule(req.ID)
 	if err != nil {
 		return api.ScheduleDetailResponse{}, err
@@ -227,6 +252,7 @@ func (s *Server) updateSchedule(req api.UpdateScheduleRequest) (api.ScheduleDeta
 }
 
 func (s *Server) deleteSchedule(req api.DeleteScheduleRequest) (map[string]any, error) {
+	req.ID = firstNonBlank(req.ID, req.ScheduleID)
 	def, err := s.findSchedule(req.ID)
 	if err != nil {
 		return nil, err
@@ -241,6 +267,7 @@ func (s *Server) deleteSchedule(req api.DeleteScheduleRequest) (map[string]any, 
 }
 
 func (s *Server) toggleSchedule(req api.ToggleScheduleRequest) (api.ScheduleDetailResponse, error) {
+	req.ID = firstNonBlank(req.ID, req.ScheduleID)
 	return s.updateSchedule(api.UpdateScheduleRequest{ID: req.ID, Enabled: &req.Enabled})
 }
 
@@ -251,7 +278,7 @@ func (s *Server) listScheduleExecutions(req api.ScheduleExecutionsRequest) (api.
 	if s.deps.ScheduleExecutions == nil {
 		return api.ScheduleExecutionListResponse{}, newScheduleStatusError(http.StatusServiceUnavailable, "unavailable", "schedule execution store is not configured")
 	}
-	id := strings.TrimSpace(req.ID)
+	id := firstNonBlank(req.ID, req.ScheduleID)
 	if id == "" {
 		return api.ScheduleExecutionListResponse{}, newScheduleStatusError(http.StatusBadRequest, "invalid_request", "id is required")
 	}
@@ -537,6 +564,7 @@ func (s *Server) wsScheduleUpdate(_ context.Context, conn *ws.Conn, req ws.Reque
 		s.sendScheduleWSError(conn, req, newScheduleStatusError(http.StatusBadRequest, "invalid_request", "invalid payload"))
 		return
 	}
+	payload.ID = firstNonBlank(payload.ScheduleID, payload.ID)
 	response, updateErr := s.updateSchedule(payload)
 	s.sendScheduleWSResponse(conn, req, response, updateErr)
 }
@@ -547,6 +575,7 @@ func (s *Server) wsScheduleDelete(_ context.Context, conn *ws.Conn, req ws.Reque
 		s.sendScheduleWSError(conn, req, newScheduleStatusError(http.StatusBadRequest, "invalid_request", "invalid payload"))
 		return
 	}
+	payload.ID = firstNonBlank(payload.ScheduleID, payload.ID)
 	response, deleteErr := s.deleteSchedule(payload)
 	s.sendScheduleWSResponse(conn, req, response, deleteErr)
 }
@@ -557,6 +586,7 @@ func (s *Server) wsScheduleToggle(_ context.Context, conn *ws.Conn, req ws.Reque
 		s.sendScheduleWSError(conn, req, newScheduleStatusError(http.StatusBadRequest, "invalid_request", "invalid payload"))
 		return
 	}
+	payload.ID = firstNonBlank(payload.ScheduleID, payload.ID)
 	response, toggleErr := s.toggleSchedule(payload)
 	s.sendScheduleWSResponse(conn, req, response, toggleErr)
 }
@@ -567,6 +597,7 @@ func (s *Server) wsScheduleExecutions(_ context.Context, conn *ws.Conn, req ws.R
 		s.sendScheduleWSError(conn, req, newScheduleStatusError(http.StatusBadRequest, "invalid_request", "invalid payload"))
 		return
 	}
+	payload.ID = firstNonBlank(payload.ScheduleID, payload.ID)
 	response, listErr := s.listScheduleExecutions(payload)
 	s.sendScheduleWSResponse(conn, req, response, listErr)
 }

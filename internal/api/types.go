@@ -338,13 +338,15 @@ type CreateAgentRequest struct {
 
 type UpdateAgentRequest struct {
 	Key          string         `json:"key"`
+	AgentKey     string         `json:"agentKey,omitempty"`
 	Definition   map[string]any `json:"definition"`
 	SoulPrompt   *string        `json:"soulPrompt,omitempty"`
 	AgentsPrompt *string        `json:"agentsPrompt,omitempty"`
 }
 
 type DeleteAgentRequest struct {
-	Key string `json:"key"`
+	Key      string `json:"key"`
+	AgentKey string `json:"agentKey,omitempty"`
 }
 
 type AgentEditorOptionsResponse struct {
@@ -566,6 +568,17 @@ type DeleteChatRequest struct {
 type DeleteChatResponse struct {
 	ChatID  string `json:"chatId"`
 	Deleted bool   `json:"deleted"`
+}
+
+type RenameChatRequest struct {
+	ChatID   string `json:"chatId,omitempty"`
+	ChatName string `json:"chatName"`
+}
+
+type RenameChatResponse struct {
+	ChatID   string `json:"chatId"`
+	ChatName string `json:"chatName"`
+	Updated  bool   `json:"updated"`
 }
 
 type ArchiveChatRequest struct {

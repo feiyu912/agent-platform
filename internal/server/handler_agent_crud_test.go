@@ -19,7 +19,7 @@ import (
 func TestAgentHTTPCRUDAndEditableDetail(t *testing.T) {
 	fixture := newTestFixture(t)
 
-	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent-create", map[string]any{
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
 		"key": "editable-agent",
 		"definition": map[string]any{
 			"key":         "editable-agent",
@@ -63,7 +63,7 @@ func TestAgentHTTPCRUDAndEditableDetail(t *testing.T) {
 
 	updatedDefinition := detail.Definition
 	updatedDefinition["description"] = "updated test agent"
-	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent-update", map[string]any{
+	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/update", map[string]any{
 		"key":          "editable-agent",
 		"definition":   updatedDefinition,
 		"agentsPrompt": "Agents v2",
@@ -72,7 +72,7 @@ func TestAgentHTTPCRUDAndEditableDetail(t *testing.T) {
 		t.Fatalf("unexpected update response %#v", updated)
 	}
 
-	deleted := postAgentJSON[map[string]any](t, fixture.server, "/api/agent-delete", map[string]any{"key": "editable-agent"})
+	deleted := postAgentJSON[map[string]any](t, fixture.server, "/api/agent/delete", map[string]any{"key": "editable-agent"})
 	if deleted["key"] != "editable-agent" || deleted["deleted"] != true {
 		t.Fatalf("unexpected delete response %#v", deleted)
 	}
@@ -86,7 +86,7 @@ func TestAgentHTTPCRUDAndEditableDetail(t *testing.T) {
 func TestAgentProxyCRUDAllowsProxyConfigWithoutModelConfig(t *testing.T) {
 	fixture := newTestFixture(t)
 
-	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent-create", map[string]any{
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
 		"key": "proxy-agent",
 		"definition": map[string]any{
 			"key":         "proxy-agent",
@@ -114,7 +114,7 @@ func TestAgentEditorOptionsHTTP(t *testing.T) {
 	fixture := newTestFixture(t)
 
 	rec := httptest.NewRecorder()
-	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agent-editor-options", nil))
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agent/editor-options", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("options returned %d: %s", rec.Code, rec.Body.String())
 	}
@@ -147,7 +147,7 @@ func TestAgentCRUDSafetyErrors(t *testing.T) {
 	}{
 		{
 			name: "duplicate",
-			path: "/api/agent-create",
+			path: "/api/agent/create",
 			body: map[string]any{
 				"key": "mock-agent",
 				"definition": map[string]any{
@@ -160,7 +160,7 @@ func TestAgentCRUDSafetyErrors(t *testing.T) {
 		},
 		{
 			name: "missing key",
-			path: "/api/agent-create",
+			path: "/api/agent/create",
 			body: map[string]any{
 				"definition": map[string]any{"key": "", "name": "Missing"},
 			},
@@ -168,7 +168,7 @@ func TestAgentCRUDSafetyErrors(t *testing.T) {
 		},
 		{
 			name: "path traversal",
-			path: "/api/agent-create",
+			path: "/api/agent/create",
 			body: map[string]any{
 				"key": "../bad",
 				"definition": map[string]any{
@@ -181,7 +181,7 @@ func TestAgentCRUDSafetyErrors(t *testing.T) {
 		},
 		{
 			name: "mismatched definition key",
-			path: "/api/agent-create",
+			path: "/api/agent/create",
 			body: map[string]any{
 				"key": "safe-key",
 				"definition": map[string]any{
@@ -194,7 +194,7 @@ func TestAgentCRUDSafetyErrors(t *testing.T) {
 		},
 		{
 			name: "proxy missing base url",
-			path: "/api/agent-create",
+			path: "/api/agent/create",
 			body: map[string]any{
 				"key": "bad-proxy",
 				"definition": map[string]any{
@@ -209,7 +209,7 @@ func TestAgentCRUDSafetyErrors(t *testing.T) {
 		},
 		{
 			name:   "delete missing",
-			path:   "/api/agent-delete",
+			path:   "/api/agent/delete",
 			body:   map[string]any{"key": "missing-agent"},
 			status: http.StatusNotFound,
 		},
@@ -254,7 +254,7 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 
 	if err := conn.WriteJSON(ws.RequestFrame{
 		Frame: ws.FrameRequest,
-		Type:  "/api/agent-editor-options",
+		Type:  "/api/agent/editor-options",
 		ID:    "agent-options",
 	}); err != nil {
 		t.Fatalf("write options request: %v", err)
@@ -273,7 +273,7 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 
 	if err := conn.WriteJSON(ws.RequestFrame{
 		Frame: ws.FrameRequest,
-		Type:  "/api/agent-create",
+		Type:  "/api/agent/create",
 		ID:    "create-agent",
 		Payload: ws.MarshalPayload(map[string]any{
 			"key": "ws-agent",
@@ -304,7 +304,7 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 
 	if err := conn.WriteJSON(ws.RequestFrame{
 		Frame:   ws.FrameRequest,
-		Type:    "/api/agent-delete",
+		Type:    "/api/agent/delete",
 		ID:      "delete-agent",
 		Payload: ws.MarshalPayload(map[string]any{"key": "ws-agent"}),
 	}); err != nil {

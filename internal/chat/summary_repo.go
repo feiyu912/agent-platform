@@ -54,6 +54,32 @@ func (s *FileStore) Summary(chatID string) (*Summary, error) {
 	return s.loadSummary(chatID)
 }
 
+func (s *FileStore) RenameChat(chatID string, chatName string) (Summary, error) {
+	chatID = strings.TrimSpace(chatID)
+	chatName = strings.TrimSpace(chatName)
+	if chatID == "" || chatName == "" {
+		return Summary{}, ErrChatNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result, err := s.db.Exec("UPDATE CHATS SET CHAT_NAME_=?, UPDATED_AT_=? WHERE CHAT_ID_=?", chatName, time.Now().UnixMilli(), chatID)
+	if err != nil {
+		return Summary{}, err
+	}
+	if rows, err := result.RowsAffected(); err == nil && rows == 0 {
+		return Summary{}, ErrChatNotFound
+	}
+	summary, err := s.loadSummary(chatID)
+	if err != nil {
+		return Summary{}, err
+	}
+	if summary == nil {
+		return Summary{}, ErrChatNotFound
+	}
+	return *summary, nil
+}
+
 func (s *FileStore) UpdateAgentKey(chatID string, agentKey string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

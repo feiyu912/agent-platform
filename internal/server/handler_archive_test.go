@@ -22,7 +22,7 @@ func TestHandleChatArchiveArchivesChatAndBroadcasts(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"chatIds":["chat-http-archive"]}`)
 	rec := httptest.NewRecorder()
-	server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/chat-archive", body))
+	server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/chat/archive", body))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -59,7 +59,7 @@ func TestHandleChatArchiveReportsActiveRunConflictPerItem(t *testing.T) {
 	seedArchiveHandlerChat(t, active, "chat-active")
 
 	rec := httptest.NewRecorder()
-	server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/chat-archive", bytes.NewBufferString(`{"chatIds":["chat-active"]}`)))
+	server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/chat/archive", bytes.NewBufferString(`{"chatIds":["chat-active"]}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}

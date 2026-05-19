@@ -53,7 +53,7 @@ func TestHandleMemoryScopesReturnsEditableScopes(t *testing.T) {
 		UpdatedAt:  210,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/scopes?agentKey=mock-agent&userKey=alice", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/scope/list?agentKey=mock-agent&userKey=alice", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryScopes(rec, req)
 
@@ -144,7 +144,7 @@ func TestHandleMemoryContextPreviewReturnsInjectedMemory(t *testing.T) {
 		UpdatedAt:  210,
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/api/memory/context/preview", bytes.NewBufferString(`{"chatId":"chat-preview","message":"desktop builtin 发布流程"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/memory/context-preview", bytes.NewBufferString(`{"chatId":"chat-preview","message":"desktop builtin 发布流程"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	server.ServeHTTP(rec, req)
@@ -207,7 +207,7 @@ func TestHandleMemoryScopeReturnsMarkdownAndRecords(t *testing.T) {
 		UpdatedAt:  200,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/scope?agentKey=mock-agent&scopeType=user&scopeKey=user:alice", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/scope/detail?agentKey=mock-agent&scopeType=user&scopeKey=user:alice", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryScope(rec, req)
 
@@ -286,7 +286,7 @@ func TestHandleMemoryScopeSaveUpdatesAndCreatesFacts(t *testing.T) {
 	  "markdown":"# USER\n\n- [mem_user_1] 偏好中文输出\n  category: general\n  importance: 9\n  confidence: 0.95\n  tags: preference\n  content: 偏好中文输出，术语保持准确。\n\n- [new] 默认先给结论再解释\n  category: response_style\n  importance: 7\n  confidence: 0.9\n  tags: style\n  content: 回答时先给结论，再展开解释。\n",
 	  "archiveMissing":true
 	}`
-	req := httptest.NewRequest(http.MethodPut, "/api/memory/scope", bytes.NewBufferString(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/memory/scope/save", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	server.handleMemoryScopeSave(rec, req)
@@ -356,7 +356,7 @@ func TestHandleMemoryRecordsFiltersResults(t *testing.T) {
 		UpdatedAt:  now,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/records?agentKey=mock-agent&kind=fact", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/record/list?agentKey=mock-agent&kind=fact", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryRecords(rec, req)
 
@@ -415,7 +415,7 @@ func TestMemoryWSRecordsMirrorsHTTP(t *testing.T) {
 
 	if err := conn.WriteJSON(ws.RequestFrame{
 		Frame: ws.FrameRequest,
-		Type:  "/api/memory/records",
+		Type:  "/api/memory/record/list",
 		ID:    "records",
 		Payload: ws.MarshalPayload(map[string]any{
 			"agentKey": "mock-agent",
@@ -464,7 +464,7 @@ func TestMemoryWSRecordAndMeta(t *testing.T) {
 
 	if err := conn.WriteJSON(ws.RequestFrame{
 		Frame: ws.FrameRequest,
-		Type:  "/api/memory/record",
+		Type:  "/api/memory/record/detail",
 		ID:    "record",
 		Payload: ws.MarshalPayload(map[string]any{
 			"agentKey": "mock-agent",
@@ -528,7 +528,7 @@ func TestHandleMemoryRecordReturnsRawFields(t *testing.T) {
 		UpdatedAt:  now,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/memory/record?agentKey=mock-agent&id=mem_fact_1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/memory/record/detail?agentKey=mock-agent&id=mem_fact_1", nil)
 	rec := httptest.NewRecorder()
 	server.handleMemoryRecord(rec, req)
 

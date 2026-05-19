@@ -14,6 +14,7 @@ var ErrRunNotFound = errors.New("run not found")
 
 type Store interface {
 	EnsureChat(chatID string, agentKey string, teamID string, firstMessage string) (Summary, bool, error)
+	RenameChat(chatID string, chatName string) (Summary, error)
 	UpdateAgentKey(chatID string, agentKey string) error
 	SetSourceChannel(chatID string, sourceChannel string) error
 	SourceChannel(chatID string) (string, error)

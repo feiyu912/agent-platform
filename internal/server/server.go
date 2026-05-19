@@ -478,10 +478,10 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/agents", s.method(http.MethodGet, s.handleAgents))
 	s.router.HandleFunc("/api/channels", s.method(http.MethodGet, s.handleChannels))
 	s.router.HandleFunc("/api/agent", s.method(http.MethodGet, s.handleAgent))
-	s.router.HandleFunc("/api/agent-create", s.method(http.MethodPost, s.handleAgentCreate))
-	s.router.HandleFunc("/api/agent-update", s.method(http.MethodPost, s.handleAgentUpdate))
-	s.router.HandleFunc("/api/agent-delete", s.method(http.MethodPost, s.handleAgentDelete))
-	s.router.HandleFunc("/api/agent-editor-options", s.method(http.MethodGet, s.handleAgentEditorOptions))
+	s.router.HandleFunc("/api/agent/create", s.method(http.MethodPost, s.handleAgentCreate))
+	s.router.HandleFunc("/api/agent/update", s.method(http.MethodPost, s.handleAgentUpdate))
+	s.router.HandleFunc("/api/agent/delete", s.method(http.MethodPost, s.handleAgentDelete))
+	s.router.HandleFunc("/api/agent/editor-options", s.method(http.MethodGet, s.handleAgentEditorOptions))
 	s.router.HandleFunc("/api/teams", s.method(http.MethodGet, s.handleTeams))
 	s.router.HandleFunc("/api/skills", s.method(http.MethodGet, s.handleSkills))
 	s.router.HandleFunc("/api/skill-candidates", s.method(http.MethodGet, s.handleSkillCandidates))
@@ -493,20 +493,21 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/search", s.method(http.MethodPost, s.handleGlobalSearch))
 	s.router.HandleFunc("/api/read", s.method(http.MethodPost, s.handleRead))
 	s.router.HandleFunc("/api/feedback", s.method(http.MethodPost, s.handleFeedback))
-	s.router.HandleFunc("/api/chat-delete", s.method(http.MethodPost, s.handleChatDelete))
-	s.router.HandleFunc("/api/chat-archive", s.method(http.MethodPost, s.handleChatArchive))
+	s.router.HandleFunc("/api/chat/delete", s.method(http.MethodPost, s.handleChatDelete))
+	s.router.HandleFunc("/api/chat/rename", s.method(http.MethodPost, s.handleChatRename))
+	s.router.HandleFunc("/api/chat/archive", s.method(http.MethodPost, s.handleChatArchive))
 	s.router.HandleFunc("/api/archives", s.method(http.MethodGet, s.handleArchives))
 	s.router.HandleFunc("/api/archive", s.method(http.MethodGet, s.handleArchive))
-	s.router.HandleFunc("/api/archive-search", s.method(http.MethodPost, s.handleArchiveSearch))
-	s.router.HandleFunc("/api/archive-delete", s.method(http.MethodPost, s.handleArchiveDelete))
+	s.router.HandleFunc("/api/archive/search", s.method(http.MethodPost, s.handleArchiveSearch))
+	s.router.HandleFunc("/api/archive/delete", s.method(http.MethodPost, s.handleArchiveDelete))
 	s.router.HandleFunc("/api/chat-export", s.method(http.MethodGet, s.handleChatExport))
 	s.router.HandleFunc("/api/schedules", s.method(http.MethodPost, s.handleSchedules))
 	s.router.HandleFunc("/api/schedule", s.method(http.MethodPost, s.handleSchedule))
-	s.router.HandleFunc("/api/schedule-create", s.method(http.MethodPost, s.handleScheduleCreate))
-	s.router.HandleFunc("/api/schedule-update", s.method(http.MethodPost, s.handleScheduleUpdate))
-	s.router.HandleFunc("/api/schedule-delete", s.method(http.MethodPost, s.handleScheduleDelete))
-	s.router.HandleFunc("/api/schedule-toggle", s.method(http.MethodPost, s.handleScheduleToggle))
-	s.router.HandleFunc("/api/schedule-executions", s.method(http.MethodPost, s.handleScheduleExecutions))
+	s.router.HandleFunc("/api/schedule/create", s.method(http.MethodPost, s.handleScheduleCreate))
+	s.router.HandleFunc("/api/schedule/update", s.method(http.MethodPost, s.handleScheduleUpdate))
+	s.router.HandleFunc("/api/schedule/delete", s.method(http.MethodPost, s.handleScheduleDelete))
+	s.router.HandleFunc("/api/schedule/toggle", s.method(http.MethodPost, s.handleScheduleToggle))
+	s.router.HandleFunc("/api/schedule/executions", s.method(http.MethodPost, s.handleScheduleExecutions))
 	s.router.HandleFunc("/api/query", s.method(http.MethodPost, s.handleQuery))
 	s.router.HandleFunc("/api/attach", s.method(http.MethodGet, s.handleAttach))
 	s.router.HandleFunc("/api/submit", s.method(http.MethodPost, s.handleSubmit))
@@ -515,13 +516,14 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/api/remember", s.method(http.MethodPost, s.handleRemember))
 	s.router.HandleFunc("/api/learn", s.method(http.MethodPost, s.handleLearn))
 	s.router.HandleFunc("/api/memory/meta", s.method(http.MethodGet, s.handleMemoryMeta))
-	s.router.HandleFunc("/api/memory/context/preview", s.method(http.MethodPost, s.handleMemoryContextPreview))
-	s.router.HandleFunc("/api/memory/scopes", s.method(http.MethodGet, s.handleMemoryScopes))
-	s.router.HandleFunc("/api/memory/scope", s.handleMemoryScopeRoute)
+	s.router.HandleFunc("/api/memory/context-preview", s.method(http.MethodPost, s.handleMemoryContextPreview))
+	s.router.HandleFunc("/api/memory/scope/list", s.method(http.MethodGet, s.handleMemoryScopes))
+	s.router.HandleFunc("/api/memory/scope/detail", s.method(http.MethodGet, s.handleMemoryScope))
+	s.router.HandleFunc("/api/memory/scope/save", s.method(http.MethodPost, s.handleMemoryScopeSave))
 	s.router.HandleFunc("/api/memory/scope/validate", s.method(http.MethodPost, s.handleMemoryScopeValidate))
-	s.router.HandleFunc("/api/memory/records", s.method(http.MethodGet, s.handleMemoryRecords))
+	s.router.HandleFunc("/api/memory/record/list", s.method(http.MethodGet, s.handleMemoryRecords))
 	s.router.HandleFunc("/api/memory/history", s.method(http.MethodGet, s.handleMemoryHistory))
-	s.router.HandleFunc("/api/memory/record", s.method(http.MethodGet, s.handleMemoryRecord))
+	s.router.HandleFunc("/api/memory/record/detail", s.method(http.MethodGet, s.handleMemoryRecord))
 	s.router.HandleFunc("/api/memory/record/timeline", s.method(http.MethodGet, s.handleMemoryRecordTimeline))
 	s.router.HandleFunc("/api/viewport", s.method(http.MethodGet, s.handleViewport))
 	s.router.HandleFunc("/api/resource", s.method(http.MethodGet, s.handleResource))
@@ -731,6 +733,21 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 func decodeJSON(r *http.Request, target any) error {
 	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(target)
+}
+
+func decodeOptionalJSON(r *http.Request, target any) error {
+	if r.Body == nil {
+		return nil
+	}
+	defer r.Body.Close()
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return nil
+	}
+	return json.Unmarshal(data, target)
 }
 
 func defaultRole(role string) string {

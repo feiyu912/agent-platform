@@ -86,6 +86,7 @@ type ScheduleQueryRequest struct {
 
 type UpdateScheduleRequest struct {
 	ID            string                `json:"id"`
+	ScheduleID    string                `json:"scheduleId,omitempty"`
 	Name          *string               `json:"name,omitempty"`
 	Description   *string               `json:"description,omitempty"`
 	Cron          *string               `json:"cron,omitempty"`
@@ -98,16 +99,19 @@ type UpdateScheduleRequest struct {
 }
 
 type ToggleScheduleRequest struct {
-	ID      string `json:"id"`
-	Enabled bool   `json:"enabled"`
+	ID         string `json:"id"`
+	ScheduleID string `json:"scheduleId,omitempty"`
+	Enabled    bool   `json:"enabled"`
 }
 
 type DeleteScheduleRequest struct {
-	ID string `json:"id"`
+	ID         string `json:"id"`
+	ScheduleID string `json:"scheduleId,omitempty"`
 }
 
 type ScheduleExecutionsRequest struct {
-	ID     string `json:"id"`
-	Limit  int    `json:"limit,omitempty"`
-	Offset int    `json:"offset,omitempty"`
+	ID         string `json:"id"`
+	ScheduleID string `json:"scheduleId,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+	Offset     int    `json:"offset,omitempty"`
 }

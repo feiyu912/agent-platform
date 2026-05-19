@@ -71,7 +71,7 @@ func newScheduleTestServer(t *testing.T, websocket bool) scheduleTestServer {
 func TestScheduleHTTPCRUDAndExecutionHistory(t *testing.T) {
 	fixture := newScheduleTestServer(t, false)
 
-	create := postScheduleJSON[api.ScheduleDetailResponse](t, fixture.server, "/api/schedule-create", map[string]any{
+	create := postScheduleJSON[api.ScheduleDetailResponse](t, fixture.server, "/api/schedule/create", map[string]any{
 		"name":        "Daily Demo",
 		"description": "Demo schedule",
 		"cron":        "17 9 * * *",
@@ -98,7 +98,7 @@ func TestScheduleHTTPCRUDAndExecutionHistory(t *testing.T) {
 		t.Fatalf("unexpected list response %#v", list)
 	}
 
-	update := postScheduleJSON[api.ScheduleDetailResponse](t, fixture.server, "/api/schedule-update", map[string]any{
+	update := postScheduleJSON[api.ScheduleDetailResponse](t, fixture.server, "/api/schedule/update", map[string]any{
 		"id":          create.ID,
 		"description": "Updated schedule",
 		"query": map[string]any{
@@ -109,7 +109,7 @@ func TestScheduleHTTPCRUDAndExecutionHistory(t *testing.T) {
 		t.Fatalf("unexpected update response %#v", update)
 	}
 
-	toggled := postScheduleJSON[api.ScheduleDetailResponse](t, fixture.server, "/api/schedule-toggle", map[string]any{
+	toggled := postScheduleJSON[api.ScheduleDetailResponse](t, fixture.server, "/api/schedule/toggle", map[string]any{
 		"id":      create.ID,
 		"enabled": false,
 	})
@@ -117,12 +117,12 @@ func TestScheduleHTTPCRUDAndExecutionHistory(t *testing.T) {
 		t.Fatalf("unexpected toggle response %#v", toggled)
 	}
 
-	deleted := postScheduleJSON[map[string]any](t, fixture.server, "/api/schedule-delete", map[string]any{"id": create.ID})
+	deleted := postScheduleJSON[map[string]any](t, fixture.server, "/api/schedule/delete", map[string]any{"id": create.ID})
 	if deleted["id"] != create.ID || deleted["deleted"] != true {
 		t.Fatalf("unexpected delete response %#v", deleted)
 	}
 
-	history := postScheduleJSON[api.ScheduleExecutionListResponse](t, fixture.server, "/api/schedule-executions", map[string]any{"id": create.ID})
+	history := postScheduleJSON[api.ScheduleExecutionListResponse](t, fixture.server, "/api/schedule/executions", map[string]any{"id": create.ID})
 	if history.Total != 1 || len(history.Items) != 1 || history.Items[0].ID != executionID {
 		t.Fatalf("unexpected history response %#v", history)
 	}
@@ -143,7 +143,7 @@ func TestScheduleWSRoutesMirrorHTTP(t *testing.T) {
 
 	if err := conn.WriteJSON(ws.RequestFrame{
 		Frame: ws.FrameRequest,
-		Type:  "/api/schedule-create",
+		Type:  "/api/schedule/create",
 		ID:    "create",
 		Payload: ws.MarshalPayload(map[string]any{
 			"name":        "WS Demo",

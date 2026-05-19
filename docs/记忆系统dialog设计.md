@@ -71,7 +71,7 @@
 
 ### 1. 获取 scope 列表
 
-`GET /api/memory/scopes?agentKey=default_agent`
+`GET /api/memory/scope/list?agentKey=default_agent`
 
 用途：
 返回当前 agent 下可编辑的 scope 摘要。
@@ -124,7 +124,7 @@
 
 ### 2. 获取单个 scope 详情
 
-`GET /api/memory/scope?agentKey=default_agent&scopeType=user`
+`GET /api/memory/scope/detail?agentKey=default_agent&scopeType=user`
 
 用途：
 返回当前 scope 的 markdown 视图和对应结构化记录。
@@ -169,7 +169,7 @@
 
 ### 3. 保存 scope 视图
 
-`PUT /api/memory/scope`
+`POST /api/memory/scope/save`
 
 用途：
 保存当前 scope 的编辑结果。支持 `markdown` 和 `records` 两种模式。
@@ -378,7 +378,7 @@
 
 ### 6. 预览当前问题会注入的 memory context
 
-`POST /api/memory/context/preview`
+`POST /api/memory/context-preview`
 
 用途：
 输入当前对话框里的用户问题，返回如果发起真实 query 会注入上下文的 memory 文本、分层明细和选择决策。该接口用于排查 memory recall，不发起模型调用。
@@ -469,7 +469,7 @@
 
 ### 7. 查询记录列表
 
-`GET /api/memory/records?agentKey=default_agent&kind=fact&scopeType=user&status=active&limit=20&cursor=`
+`GET /api/memory/record/list?agentKey=default_agent&kind=fact&scopeType=user&status=active&limit=20&cursor=`
 
 用途：
 查询统一记录视图。
@@ -523,7 +523,7 @@
 
 ### 8. 获取单条记录详情
 
-`GET /api/memory/record?agentKey=default_agent&id=mem_201`
+`GET /api/memory/record/detail?agentKey=default_agent&id=mem_201`
 
 用途：
 返回完整字段和来源表信息。
@@ -746,12 +746,12 @@
 
 为了尽快落地，第一阶段建议只做这些：
 
-- `GET /api/memory/scopes`
-- `GET /api/memory/scope`
-- `PUT /api/memory/scope`
+- `GET /api/memory/scope/list`
+- `GET /api/memory/scope/detail`
+- `POST /api/memory/scope/save`
 - `GET /api/memory/meta`
-- `POST /api/memory/context/preview`
-- `GET /api/memory/records`
+- `POST /api/memory/context-preview`
+- `GET /api/memory/record/list`
 - `GET /api/memory/record`
 
 这样已经能覆盖：

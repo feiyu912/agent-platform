@@ -74,16 +74,28 @@ func (s *Server) handleAgentUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
 	}
+	key, err := queryOrBodyIDAny(r, []string{"agentKey", "key"}, req.AgentKey, req.Key)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
+		return
+	}
+	req.Key = key
 	response, err := s.updateAgent(r.Context(), req)
 	s.writeAgentHTTPResponse(w, response, err)
 }
 
 func (s *Server) handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 	var req api.DeleteAgentRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeOptionalJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
 		return
 	}
+	key, err := queryOrBodyIDAny(r, []string{"agentKey", "key"}, req.AgentKey, req.Key)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
+		return
+	}
+	req.Key = key
 	response, err := s.deleteAgent(r.Context(), req)
 	s.writeAgentHTTPResponse(w, response, err)
 }
@@ -143,7 +155,7 @@ func (s *Server) updateAgent(ctx context.Context, req api.UpdateAgentRequest) (a
 	if err != nil {
 		return api.AgentDetailResponse{}, err
 	}
-	key := strings.TrimSpace(req.Key)
+	key := firstNonBlank(req.Key, req.AgentKey)
 	if _, err := editor.UpdateEditableAgent(key, req.Definition, req.SoulPrompt, req.AgentsPrompt); err != nil {
 		return api.AgentDetailResponse{}, mapAgentEditError(err)
 	}
@@ -155,7 +167,7 @@ func (s *Server) deleteAgent(ctx context.Context, req api.DeleteAgentRequest) (m
 	if err != nil {
 		return nil, err
 	}
-	key := strings.TrimSpace(req.Key)
+	key := firstNonBlank(req.Key, req.AgentKey)
 	if err := editor.DeleteEditableAgent(key); err != nil {
 		return nil, mapAgentEditError(err)
 	}
@@ -304,6 +316,7 @@ func (s *Server) wsAgentUpdate(ctx context.Context, conn *ws.Conn, req ws.Reques
 		s.sendAgentWSError(conn, req, newAgentStatusError(http.StatusBadRequest, "invalid_request", "invalid payload"))
 		return
 	}
+	payload.Key = firstNonBlank(payload.AgentKey, payload.Key)
 	response, updateErr := s.updateAgent(ctx, payload)
 	s.sendAgentWSResponse(conn, req, response, updateErr)
 }
@@ -314,6 +327,7 @@ func (s *Server) wsAgentDelete(ctx context.Context, conn *ws.Conn, req ws.Reques
 		s.sendAgentWSError(conn, req, newAgentStatusError(http.StatusBadRequest, "invalid_request", "invalid payload"))
 		return
 	}
+	payload.Key = firstNonBlank(payload.AgentKey, payload.Key)
 	response, deleteErr := s.deleteAgent(ctx, payload)
 	s.sendAgentWSResponse(conn, req, response, deleteErr)
 }

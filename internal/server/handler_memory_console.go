@@ -368,7 +368,7 @@ func (s *Server) handleMemoryRecord(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, api.Failure(http.StatusServiceUnavailable, "memory system is disabled"))
 		return
 	}
-	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	id := firstNonBlank(r.URL.Query().Get("recordId"), r.URL.Query().Get("id"))
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "id is required"))
 		return
@@ -569,35 +569,32 @@ func (s *Server) wsMemoryContextPreview(ctx context.Context, conn *ws.Conn, req 
 	sendMemoryWSResponse(conn, req, response)
 }
 
-func (s *Server) wsMemoryScope(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
+func (s *Server) wsMemoryScopeDetail(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
 	payload, err := ws.DecodePayload[struct {
-		AgentKey       string                       `json:"agentKey"`
-		ScopeType      string                       `json:"scopeType"`
-		ScopeKey       string                       `json:"scopeKey"`
-		TeamID         string                       `json:"teamId"`
-		UserKey        string                       `json:"userKey"`
-		Mode           string                       `json:"mode"`
-		Markdown       string                       `json:"markdown"`
-		Records        []api.MemoryScopeRecordInput `json:"records"`
-		ArchiveMissing bool                         `json:"archiveMissing"`
+		AgentKey  string `json:"agentKey"`
+		ScopeType string `json:"scopeType"`
+		ScopeKey  string `json:"scopeKey"`
+		TeamID    string `json:"teamId"`
+		UserKey   string `json:"userKey"`
 	}](req)
 	if err != nil {
 		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
 		return
 	}
-	if strings.TrimSpace(payload.Mode) != "" || payload.Markdown != "" || payload.Records != nil || payload.ArchiveMissing {
-		s.wsMemoryScopeSave(ctx, conn, req, api.MemoryScopeSaveRequest{
-			AgentKey:       payload.AgentKey,
-			ScopeType:      payload.ScopeType,
-			ScopeKey:       payload.ScopeKey,
-			Mode:           payload.Mode,
-			Markdown:       payload.Markdown,
-			Records:        payload.Records,
-			ArchiveMissing: payload.ArchiveMissing,
-		}, payload.TeamID, payload.UserKey)
+	s.wsMemoryScopeGet(ctx, conn, req, payload.AgentKey, payload.ScopeType, payload.ScopeKey, payload.TeamID, payload.UserKey)
+}
+
+func (s *Server) wsMemoryScopeSaveRoute(ctx context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	payload, err := ws.DecodePayload[struct {
+		api.MemoryScopeSaveRequest
+		TeamID  string `json:"teamId"`
+		UserKey string `json:"userKey"`
+	}](req)
+	if err != nil {
+		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
 		return
 	}
-	s.wsMemoryScopeGet(ctx, conn, req, payload.AgentKey, payload.ScopeType, payload.ScopeKey, payload.TeamID, payload.UserKey)
+	s.wsMemoryScopeSave(ctx, conn, req, payload.MemoryScopeSaveRequest, payload.TeamID, payload.UserKey)
 }
 
 func (s *Server) wsMemoryScopeGet(ctx context.Context, conn *ws.Conn, req ws.RequestFrame, agentKey string, scopeType string, scopeKey string, teamID string, userKey string) {
@@ -791,12 +788,13 @@ func (s *Server) wsMemoryRecord(_ context.Context, conn *ws.Conn, req ws.Request
 	payload, err := ws.DecodePayload[struct {
 		AgentKey string `json:"agentKey"`
 		ID       string `json:"id"`
+		RecordID string `json:"recordId"`
 	}](req)
 	if err != nil {
 		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "invalid payload")
 		return
 	}
-	id := strings.TrimSpace(payload.ID)
+	id := firstNonBlank(payload.RecordID, payload.ID)
 	if id == "" {
 		sendMemoryWSError(conn, req, http.StatusBadRequest, "invalid_request", "id is required")
 		return

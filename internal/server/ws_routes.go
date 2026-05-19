@@ -77,10 +77,10 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/agents", s.wsAgents)
 	handler.RegisterRoute("/api/channels", s.wsChannels)
 	handler.RegisterRoute("/api/agent", s.wsAgent)
-	handler.RegisterRoute("/api/agent-create", s.wsAgentCreate)
-	handler.RegisterRoute("/api/agent-update", s.wsAgentUpdate)
-	handler.RegisterRoute("/api/agent-delete", s.wsAgentDelete)
-	handler.RegisterRoute("/api/agent-editor-options", s.wsAgentEditorOptions)
+	handler.RegisterRoute("/api/agent/create", s.wsAgentCreate)
+	handler.RegisterRoute("/api/agent/update", s.wsAgentUpdate)
+	handler.RegisterRoute("/api/agent/delete", s.wsAgentDelete)
+	handler.RegisterRoute("/api/agent/editor-options", s.wsAgentEditorOptions)
 	handler.RegisterRoute("/api/teams", s.wsTeams)
 	handler.RegisterRoute("/api/skills", s.wsSkills)
 	handler.RegisterRoute("/api/tools", s.wsTools)
@@ -89,19 +89,20 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/chat", s.wsChat)
 	handler.RegisterRoute("/api/read", s.wsRead)
 	handler.RegisterRoute("/api/feedback", s.wsFeedback)
-	handler.RegisterRoute("/api/chat-delete", s.wsChatDelete)
-	handler.RegisterRoute("/api/chat-archive", s.wsChatArchive)
+	handler.RegisterRoute("/api/chat/delete", s.wsChatDelete)
+	handler.RegisterRoute("/api/chat/rename", s.wsChatRename)
+	handler.RegisterRoute("/api/chat/archive", s.wsChatArchive)
 	handler.RegisterRoute("/api/archives", s.wsArchives)
 	handler.RegisterRoute("/api/archive", s.wsArchive)
-	handler.RegisterRoute("/api/archive-search", s.wsArchiveSearch)
-	handler.RegisterRoute("/api/archive-delete", s.wsArchiveDelete)
+	handler.RegisterRoute("/api/archive/search", s.wsArchiveSearch)
+	handler.RegisterRoute("/api/archive/delete", s.wsArchiveDelete)
 	handler.RegisterRoute("/api/schedules", s.wsSchedules)
 	handler.RegisterRoute("/api/schedule", s.wsSchedule)
-	handler.RegisterRoute("/api/schedule-create", s.wsScheduleCreate)
-	handler.RegisterRoute("/api/schedule-update", s.wsScheduleUpdate)
-	handler.RegisterRoute("/api/schedule-delete", s.wsScheduleDelete)
-	handler.RegisterRoute("/api/schedule-toggle", s.wsScheduleToggle)
-	handler.RegisterRoute("/api/schedule-executions", s.wsScheduleExecutions)
+	handler.RegisterRoute("/api/schedule/create", s.wsScheduleCreate)
+	handler.RegisterRoute("/api/schedule/update", s.wsScheduleUpdate)
+	handler.RegisterRoute("/api/schedule/delete", s.wsScheduleDelete)
+	handler.RegisterRoute("/api/schedule/toggle", s.wsScheduleToggle)
+	handler.RegisterRoute("/api/schedule/executions", s.wsScheduleExecutions)
 	handler.RegisterRoute("/api/search", s.wsGlobalSearch)
 	handler.RegisterRoute("/api/query", s.wsQuery)
 	handler.RegisterRoute("/api/attach", s.wsAttach)
@@ -111,12 +112,13 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/remember", s.wsRemember)
 	handler.RegisterRoute("/api/learn", s.wsLearn)
 	handler.RegisterRoute("/api/memory/meta", s.wsMemoryMeta)
-	handler.RegisterRoute("/api/memory/context/preview", s.wsMemoryContextPreview)
-	handler.RegisterRoute("/api/memory/scopes", s.wsMemoryScopes)
-	handler.RegisterRoute("/api/memory/scope", s.wsMemoryScope)
+	handler.RegisterRoute("/api/memory/context-preview", s.wsMemoryContextPreview)
+	handler.RegisterRoute("/api/memory/scope/list", s.wsMemoryScopes)
+	handler.RegisterRoute("/api/memory/scope/detail", s.wsMemoryScopeDetail)
+	handler.RegisterRoute("/api/memory/scope/save", s.wsMemoryScopeSaveRoute)
 	handler.RegisterRoute("/api/memory/scope/validate", s.wsMemoryScopeValidate)
-	handler.RegisterRoute("/api/memory/records", s.wsMemoryRecords)
-	handler.RegisterRoute("/api/memory/record", s.wsMemoryRecord)
+	handler.RegisterRoute("/api/memory/record/list", s.wsMemoryRecords)
+	handler.RegisterRoute("/api/memory/record/detail", s.wsMemoryRecord)
 	handler.RegisterRoute("/api/viewport", s.wsViewport)
 	handler.RegisterRoute("/api/resource", s.wsResource)
 	handler.RegisterRoute("/api/upload", s.wsDownload)
@@ -422,6 +424,36 @@ func (s *Server) wsChatDelete(_ context.Context, conn *ws.Conn, req ws.RequestFr
 	}
 	s.broadcast("chat.deleted", map[string]any{"chatId": chatID})
 	conn.SendResponse(req.Type, req.ID, 0, "success", api.DeleteChatResponse{ChatID: chatID, Deleted: true})
+	conn.CompleteRequest(req.ID)
+}
+
+func (s *Server) wsChatRename(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
+	payload, err := ws.DecodePayload[api.RenameChatRequest](req)
+	if err != nil {
+		conn.SendError(req.ID, "invalid_request", 400, "invalid payload", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	chatID := strings.TrimSpace(payload.ChatID)
+	chatName := strings.TrimSpace(payload.ChatName)
+	if !chat.ValidChatID(chatID) || chatName == "" {
+		conn.SendError(req.ID, "invalid_request", 400, "chatId and chatName are required", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	summary, renameErr := s.deps.Chats.RenameChat(chatID, chatName)
+	if errors.Is(renameErr, chat.ErrChatNotFound) {
+		conn.SendError(req.ID, "not_found", 404, "chat not found", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	if renameErr != nil {
+		conn.SendError(req.ID, "internal_error", 500, renameErr.Error(), nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	s.broadcast("chat.renamed", map[string]any{"chatId": summary.ChatID, "chatName": summary.ChatName, "agentKey": summary.AgentKey})
+	conn.SendResponse(req.Type, req.ID, 0, "success", api.RenameChatResponse{ChatID: summary.ChatID, ChatName: summary.ChatName, Updated: true})
 	conn.CompleteRequest(req.ID)
 }
 
