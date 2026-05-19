@@ -3,7 +3,9 @@ package stream
 import "strings"
 
 // SseEventNormalizer filters and transforms SSE events before they reach the client.
-// Tools marked clientVisible=false have their tool.* events suppressed.
+// Tools marked clientVisible=false have only their tool.* events suppressed; capability
+// events produced by those tools, such as awaiting.*, artifact.publish, and memory.*
+// remain visible.
 type SseEventNormalizer struct {
 	hiddenToolNames map[string]bool
 	hiddenToolIDs   map[string]bool
@@ -18,7 +20,7 @@ func NewNormalizer() *SseEventNormalizer {
 
 // RegisterHiddenTools marks tool names as non-client-visible.
 // Their tool.start/tool.args/tool.end/tool.snapshot/tool.result SSE events
-// will be suppressed, matching Java SseEventNormalizer.shouldHideToolEvent.
+// will be suppressed.
 func (n *SseEventNormalizer) RegisterHiddenTools(names ...string) {
 	for _, name := range names {
 		if strings.TrimSpace(name) != "" {
@@ -50,17 +52,6 @@ func (n *SseEventNormalizer) shouldDrop(event StreamEvent) bool {
 	// Suppress tool events for clientVisible=false tools.
 	eventType := event.Type
 	toolID, _ := event.Payload["toolId"].(string)
-	awaitID, _ := event.Payload["awaitingId"].(string)
-
-	if eventType == "awaiting.ask" {
-		return awaitID != "" && n.hiddenToolIDs[awaitID]
-	}
-	if eventType == "request.submit" {
-		return awaitID != "" && n.hiddenToolIDs[awaitID]
-	}
-	if eventType == "awaiting.answer" {
-		return awaitID != "" && n.hiddenToolIDs[awaitID]
-	}
 	if !strings.HasPrefix(eventType, "tool.") {
 		return false
 	}

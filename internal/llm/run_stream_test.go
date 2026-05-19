@@ -451,7 +451,7 @@ func TestPreToolInvocationDeltasUsesHitlTimeoutForFrontendAwaiting(t *testing.T)
 		Meta: map[string]any{
 			"kind":          "frontend",
 			"sourceType":    "local",
-			"clientVisible": true,
+			"clientVisible": false,
 		},
 	}
 	stream := &llmRunStream{

@@ -2219,13 +2219,13 @@ func TestStepWriterOmitsSystemsWhenNoPendingSystemInits(t *testing.T) {
 	}
 }
 
-func TestStepWriterDropsAwaitingWithoutMessages(t *testing.T) {
+func TestStepWriterPersistsAwaitingWithoutMessages(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
 	}
 
-	writer := NewStepWriter(store, "chat-awaiting-drop", "run-awaiting-drop", "react", false)
+	writer := NewStepWriter(store, "chat-awaiting-standalone", "run-awaiting-standalone", "react", false)
 	writer.OnEvent(stream.EventData{
 		Type:      "awaiting.ask",
 		Timestamp: 3001,
@@ -2241,12 +2241,20 @@ func TestStepWriterDropsAwaitingWithoutMessages(t *testing.T) {
 		t.Fatalf("expected pending awaiting to be cleared, got %#v", writer.pendingAwaiting)
 	}
 
-	lines, err := readJSONLines(store.chatJSONLPath("chat-awaiting-drop"))
-	if err != nil && !os.IsNotExist(err) {
+	lines, err := readJSONLines(store.chatJSONLPath("chat-awaiting-standalone"))
+	if err != nil {
 		t.Fatalf("read chat jsonl: %v", err)
 	}
-	if len(lines) != 0 {
-		t.Fatalf("did not expect persisted lines for dropped awaiting, got %#v", lines)
+	if len(lines) != 1 {
+		t.Fatalf("expected one line for standalone awaiting, got %#v", lines)
+	}
+	awaiting, _ := lines[0]["awaiting"].([]any)
+	if len(awaiting) != 1 {
+		t.Fatalf("expected standalone awaiting on step line, got %#v", lines[0])
+	}
+	item, _ := awaiting[0].(map[string]any)
+	if item["type"] != "awaiting.ask" || item["awaitingId"] != "tool-1" {
+		t.Fatalf("unexpected standalone awaiting item %#v", item)
 	}
 }
 

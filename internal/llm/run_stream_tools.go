@@ -802,9 +802,6 @@ func (s *llmRunStream) preToolInvocationDeltas(toolID string, toolName string, p
 	if !strings.EqualFold(strings.TrimSpace(toolKind), "frontend") {
 		return nil
 	}
-	if clientVisible, ok := tool.Meta["clientVisible"].(bool); ok && !clientVisible {
-		return nil
-	}
 	if s.engine.frontend == nil {
 		return nil
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -467,18 +466,6 @@ func (w *StepWriter) captureTaskDebugData(buffer *taskStepBuffer, eventType stri
 
 func (w *StepWriter) flushCurrentStep() {
 	if len(w.messages) == 0 && len(w.pendingAwaiting) == 0 {
-		w.pendingApproval = nil
-		w.pendingUsage = nil
-		w.pendingContextWindowMax = 0
-		w.pendingEstimated = 0
-		w.pendingPreCallData = nil
-		w.pendingSystemRef = nil
-		return
-	}
-
-	if len(w.messages) == 0 && len(w.pendingAwaiting) > 0 {
-		log.Printf("[chat] dropping pending awaiting without messages (chatId=%s runId=%s count=%d)", w.chatID, w.runID, len(w.pendingAwaiting))
-		w.pendingAwaiting = nil
 		w.pendingApproval = nil
 		w.pendingUsage = nil
 		w.pendingContextWindowMax = 0

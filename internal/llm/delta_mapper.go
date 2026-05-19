@@ -301,9 +301,6 @@ func (m *DeltaMapper) buildFrontendToolAwaitAsk(toolID string, toolName string, 
 	if !strings.EqualFold(strings.TrimSpace(kind), "frontend") {
 		return nil, false
 	}
-	if !m.isClientVisibleTool(toolName) {
-		return nil, false
-	}
 	handler, ok := m.frontend.Handler(toolName)
 	if !ok {
 		return nil, false
@@ -371,18 +368,4 @@ func (m *DeltaMapper) resolveToolMetadata(toolName string) (string, string, stri
 	default:
 		return "", tool.Label, tool.Description
 	}
-}
-
-func (m *DeltaMapper) isClientVisibleTool(toolName string) bool {
-	if m.toolRegistry == nil {
-		return true
-	}
-	tool, ok := m.toolRegistry.Tool(toolName)
-	if !ok {
-		return true
-	}
-	if clientVisible, ok := tool.Meta["clientVisible"].(bool); ok {
-		return clientVisible
-	}
-	return true
 }

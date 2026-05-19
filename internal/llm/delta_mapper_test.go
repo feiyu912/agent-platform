@@ -155,7 +155,7 @@ func newQuestionDeltaMapper() *DeltaMapper {
 			Name: "ask_user_question",
 			Meta: map[string]any{
 				"kind":          "frontend",
-				"clientVisible": true,
+				"clientVisible": false,
 			},
 		},
 	}

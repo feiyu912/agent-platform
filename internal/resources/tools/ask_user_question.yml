@@ -4,7 +4,7 @@ description: Show multiple questions to the user, supporting text, number, passw
 type: function
 viewportType: builtin
 viewportKey: question_dialog
-clientVisible: true
+clientVisible: false
 submitResultFormat: qa
 inputSchema:
   type: object
