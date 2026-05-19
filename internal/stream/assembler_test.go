@@ -60,12 +60,66 @@ func TestAssemblerBootstrapSkipsChatStartForExistingChat(t *testing.T) {
 	assertStampedTypes(t, bootstrap, "request.query", "run.start")
 }
 
-func TestAssemblerBootstrapIncludesMemoryContextWhenPresent(t *testing.T) {
+func TestAssemblerBootstrapIncludesOptionalQueryContext(t *testing.T) {
 	assembler := NewAssembler(StreamRequest{
 		RequestID: "req_3",
 		RunID:     "run_3",
 		ChatID:    "chat_3",
 		AgentKey:  "agent_3",
+		Message:   "hello",
+		Role:      "user",
+		References: []map[string]any{{
+			"id":   "ref_1",
+			"type": "file",
+			"name": "notes.txt",
+		}},
+		Params: map[string]any{
+			"channel": "desktop",
+			"nested":  map[string]any{"enabled": true},
+		},
+	})
+
+	bootstrap := assembler.Bootstrap()
+	assertStampedTypes(t, bootstrap, "request.query", "run.start")
+	requestQuery := bootstrap[0].ToData()
+	if _, ok := requestQuery["references"]; !ok {
+		t.Fatalf("expected request.query references, got %#v", requestQuery)
+	}
+	params, _ := requestQuery["params"].(map[string]any)
+	if params["channel"] != "desktop" {
+		t.Fatalf("expected request.query params, got %#v", requestQuery)
+	}
+}
+
+func TestAssemblerBootstrapOmitsEmptyQueryContext(t *testing.T) {
+	assembler := NewAssembler(StreamRequest{
+		RequestID:  "req_4",
+		RunID:      "run_4",
+		ChatID:     "chat_4",
+		AgentKey:   "agent_4",
+		Message:    "hello",
+		Role:       "user",
+		References: []map[string]any{},
+		Params:     map[string]any{},
+	})
+
+	bootstrap := assembler.Bootstrap()
+	assertStampedTypes(t, bootstrap, "request.query", "run.start")
+	requestQuery := bootstrap[0].ToData()
+	if _, ok := requestQuery["references"]; ok {
+		t.Fatalf("expected empty references to be omitted, got %#v", requestQuery)
+	}
+	if _, ok := requestQuery["params"]; ok {
+		t.Fatalf("expected empty params to be omitted, got %#v", requestQuery)
+	}
+}
+
+func TestAssemblerBootstrapIncludesMemoryContextWhenPresent(t *testing.T) {
+	assembler := NewAssembler(StreamRequest{
+		RequestID: "req_5",
+		RunID:     "run_5",
+		ChatID:    "chat_5",
+		AgentKey:  "agent_5",
 		Message:   "hello",
 		Role:      "user",
 		MemoryUsageSummary: map[string]any{

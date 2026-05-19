@@ -156,6 +156,85 @@ func TestQueryUsesProvidedRunIDAndPersistsItEverywhere(t *testing.T) {
 	}
 }
 
+func TestQueryRequestQueryIncludesParamsAndReferences(t *testing.T) {
+	fixture := newTestFixture(t)
+	server := fixture.server
+
+	body := bytes.NewBufferString(`{
+		"message":"include request context",
+		"params":{"channel":"desktop","nested":{"enabled":true}},
+		"references":[{"id":"ref_1","type":"file","name":"notes.txt","mimeType":"text/plain","url":"file:///tmp/notes.txt"}]
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/query", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	messages := decodeSSEMessages(t, rec.Body.String())
+	if len(messages) < 1 || messages[0]["type"] != "request.query" {
+		t.Fatalf("expected first sse message to be request.query, got %#v", messages)
+	}
+	assertRequestQueryContext(t, messages[0])
+
+	chatsRec := httptest.NewRecorder()
+	server.ServeHTTP(chatsRec, httptest.NewRequest(http.MethodGet, "/api/chats", nil))
+	var chatsResp api.ApiResponse[[]api.ChatSummaryResponse]
+	if err := json.Unmarshal(chatsRec.Body.Bytes(), &chatsResp); err != nil {
+		t.Fatalf("decode chats response: %v", err)
+	}
+	if len(chatsResp.Data) != 1 {
+		t.Fatalf("expected 1 chat, got %#v", chatsResp.Data)
+	}
+
+	chatReq := httptest.NewRequest(http.MethodGet, "/api/chat?chatId="+chatsResp.Data[0].ChatID+"&includeRawMessages=true", nil)
+	chatRec := httptest.NewRecorder()
+	server.ServeHTTP(chatRec, chatReq)
+	var chatResp api.ApiResponse[api.ChatDetailResponse]
+	if err := json.Unmarshal(chatRec.Body.Bytes(), &chatResp); err != nil {
+		t.Fatalf("decode chat response: %v", err)
+	}
+	foundRequest := false
+	for _, event := range chatResp.Data.Events {
+		if event.Type != "request.query" {
+			continue
+		}
+		foundRequest = true
+		assertRequestQueryContext(t, event.Map())
+	}
+	if !foundRequest {
+		t.Fatalf("expected persisted request.query event, got %#v", chatResp.Data.Events)
+	}
+}
+
+func assertRequestQueryContext(t *testing.T, message map[string]any) {
+	t.Helper()
+	params, ok := message["params"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected request.query params object, got %#v", message)
+	}
+	if params["channel"] != "desktop" {
+		t.Fatalf("expected request.query params.channel desktop, got %#v", params)
+	}
+	nested, ok := params["nested"].(map[string]any)
+	if !ok || nested["enabled"] != true {
+		t.Fatalf("expected request.query params.nested.enabled true, got %#v", params)
+	}
+	references, ok := message["references"].([]any)
+	if !ok || len(references) != 1 {
+		t.Fatalf("expected request.query single reference, got %#v", message)
+	}
+	reference, ok := references[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected request.query reference object, got %#v", references[0])
+	}
+	if reference["id"] != "ref_1" || reference["type"] != "file" || reference["name"] != "notes.txt" {
+		t.Fatalf("unexpected request.query reference, got %#v", reference)
+	}
+}
+
 func TestQueryGeneratesBase36RunIDWhenMissing(t *testing.T) {
 	fixture := newTestFixture(t)
 

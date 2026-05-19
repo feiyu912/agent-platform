@@ -1,6 +1,9 @@
 package stream
 
-import "sync/atomic"
+import (
+	"reflect"
+	"sync/atomic"
+)
 
 type StreamRequest struct {
 	RequestID          string
@@ -10,6 +13,8 @@ type StreamRequest struct {
 	AgentKey           string
 	Message            string
 	Role               string
+	References         any
+	Params             map[string]any
 	Created            bool
 	MemoryUsageSummary map[string]any
 }
@@ -36,15 +41,22 @@ func (a *StreamEventAssembler) RegisterHiddenTools(names ...string) {
 }
 
 func (a *StreamEventAssembler) Bootstrap() []StreamEvent {
+	queryPayload := map[string]any{
+		"requestId": a.request.RequestID,
+		"runId":     a.request.RunID,
+		"chatId":    a.request.ChatID,
+		"agentKey":  a.request.AgentKey,
+		"role":      a.request.Role,
+		"message":   a.request.Message,
+	}
+	if !isEmptyValue(a.request.References) {
+		queryPayload["references"] = a.request.References
+	}
+	if len(a.request.Params) > 0 {
+		queryPayload["params"] = a.request.Params
+	}
 	events := []StreamEvent{
-		NewEvent("request.query", map[string]any{
-			"requestId": a.request.RequestID,
-			"runId":     a.request.RunID,
-			"chatId":    a.request.ChatID,
-			"agentKey":  a.request.AgentKey,
-			"role":      a.request.Role,
-			"message":   a.request.Message,
-		}),
+		NewEvent("request.query", queryPayload),
 	}
 	if a.request.Created {
 		events = append(events, NewEvent("chat.start", map[string]any{
@@ -61,6 +73,19 @@ func (a *StreamEventAssembler) Bootstrap() []StreamEvent {
 		"agentKey": a.request.AgentKey,
 	}))
 	return a.stamp(a.normalizer.Normalize(events))
+}
+
+func isEmptyValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	default:
+		return false
+	}
 }
 
 func (a *StreamEventAssembler) Consume(input StreamInput) []StreamEvent {

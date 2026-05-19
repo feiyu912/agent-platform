@@ -427,6 +427,8 @@ func (s *Server) newAssemblerAndMapper(prepared preparedQuery) (*stream.StreamEv
 		AgentKey:           prepared.req.AgentKey,
 		Message:            prepared.req.Message,
 		Role:               defaultRole(prepared.req.Role),
+		References:         prepared.req.References,
+		Params:             prepared.req.Params,
 		Created:            prepared.created,
 		MemoryUsageSummary: memoryUsageEventPayload(prepared.memoryUsageSummary, prepared.req.ChatID, prepared.req.RunID, prepared.req.AgentKey),
 	})
