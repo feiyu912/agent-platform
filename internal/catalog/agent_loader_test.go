@@ -242,6 +242,58 @@ func TestParseAgentFileRuntimeConfigWinsOverSandboxConfig(t *testing.T) {
 	}
 }
 
+func TestParseAgentFileSupportsCoderWorkspace(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "project")
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: coder\n" +
+		"name: Coder\n" +
+		"type: coder\n" +
+		"workspaceConfig:\n" +
+		"  root: " + filepath.ToSlash(workspace) + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	if def.Type != AgentTypeCoder {
+		t.Fatalf("type = %q, want %q", def.Type, AgentTypeCoder)
+	}
+	if def.Workspace.Root != filepath.Clean(workspace) {
+		t.Fatalf("workspace root = %q, want %q", def.Workspace.Root, filepath.Clean(workspace))
+	}
+}
+
+func TestParseAgentFileRejectsCoderWithoutWorkspace(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	if err := os.WriteFile(path, []byte("key: coder\ntype: CODER\n"), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "workspaceConfig.root is required") {
+		t.Fatalf("expected workspace requirement error, got %v", err)
+	}
+}
+
+func TestParseAgentFileRejectsUnknownType(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	if err := os.WriteFile(path, []byte("key: agent\ntype: REVIEWER\n"), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "unsupported agent type") {
+		t.Fatalf("expected unsupported type error, got %v", err)
+	}
+}
+
 func TestParseAgentFileRejectsInvalidRuntimeEnv(t *testing.T) {
 	tests := []struct {
 		name        string

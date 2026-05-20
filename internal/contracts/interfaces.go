@@ -74,6 +74,7 @@ type QuerySession struct {
 	AgentName             string
 	AgentRole             string
 	AgentDescription      string
+	AgentType             string
 	ModelKey              string
 	ToolNames             []string
 	Mode                  string
@@ -113,6 +114,7 @@ type QuerySession struct {
 	RuntimeExtraMounts     []SandboxExtraMount
 	AgentHasRuntimeSandbox bool
 	AgentHasMemoryConfig   bool
+	WorkspaceRoot          string
 	SkillHookDirs          []string
 	// RuntimeEnvOverrides carries agent/skill-level env defaults for both sandbox and host bash execution.
 	RuntimeEnvOverrides map[string]string

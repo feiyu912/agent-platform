@@ -20,11 +20,14 @@ func (s *llmRunStream) approvalHITLResult(invocation *preparedToolInvocation) hi
 	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		return fileAccessInterceptResult(*plan)
 	}
-	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
+	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.fileWritePlanNeedsApproval(*plan) {
 		return fileWriteInterceptResult(*plan)
 	}
 	if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
 		return bashSecurityInterceptResult(invocation, review)
+	}
+	if result := s.lookupWorkspaceHITL(invocation); result.Intercepted {
+		return result
 	}
 	return s.lookupPrecheckedHITL(invocation)
 }
@@ -98,6 +101,21 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 			invocations = append(invocations, invocation)
 			continue
 		}
+		if result := s.lookupWorkspaceHITL(invocation); result.Intercepted {
+			if !strings.EqualFold(result.Rule.ViewportType, "builtin") {
+				continue
+			}
+			if s.isRuleWhitelisted(result.Rule.RuleKey) {
+				s.applyHITLDecision(invocation, result, "", "approve_rule_run", "", true)
+				continue
+			}
+			if s.shouldAutoApproveHITL(result) {
+				continue
+			}
+			approvals = append(approvals, s.buildApprovalAskItem(invocation))
+			invocations = append(invocations, invocation)
+			continue
+		}
 		if s.checker == nil {
 			continue
 		}
@@ -151,7 +169,7 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 }
 
 func (s *llmRunStream) lookupPrecheckedHITL(invocation *preparedToolInvocation) hitl.InterceptResult {
-	if invocation == nil {
+	if invocation == nil || s.checker == nil {
 		return hitl.InterceptResult{}
 	}
 	if invocation.precheckedHITL != nil {
@@ -166,6 +184,30 @@ func (s *llmRunStream) lookupPrecheckedHITL(invocation *preparedToolInvocation) 
 	if result.Intercepted {
 		cloned := result
 		invocation.precheckedHITL = &cloned
+	}
+	return result
+}
+
+func (s *llmRunStream) lookupWorkspaceHITL(invocation *preparedToolInvocation) hitl.InterceptResult {
+	if invocation == nil || !isBashTool(invocation.toolName) || strings.TrimSpace(s.session.WorkspaceRoot) == "" {
+		return hitl.InterceptResult{}
+	}
+	if invocation.workspaceHITL != nil {
+		return *invocation.workspaceHITL
+	}
+	hitlLevel := 0
+	if s.execCtx != nil {
+		hitlLevel = s.execCtx.HITLLevel
+	}
+	result := hitl.CheckWorkspaceAccess(hitl.WorkspaceCheckInput{
+		Command:       mapStringArg(invocation.args, "command"),
+		Cwd:           mapStringArg(invocation.args, "cwd"),
+		WorkspaceRoot: s.session.WorkspaceRoot,
+		ChatLevel:     hitlLevel,
+	})
+	if result.Intercepted {
+		cloned := result
+		invocation.workspaceHITL = &cloned
 	}
 	return result
 }

@@ -277,6 +277,15 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		Wonders:     normalizeWonderStrings(root["wonders"]),
 		Mode:        strings.ToUpper(defaultString(stringNode(root["mode"]), "ONESHOT")),
 	}
+	agentType, err := normalizeAgentType(stringNode(root["type"]))
+	if err != nil {
+		return AgentDefinition{}, nil, err
+	}
+	def.Type = agentType
+	def.Workspace = parseAgentWorkspaceConfig(root["workspaceConfig"])
+	if err := validateAgentTypeWorkspace(def.Type, def.Workspace); err != nil {
+		return AgentDefinition{}, nil, err
+	}
 	modelConfig := mapNode(root["modelConfig"])
 	def.ModelKey = stringNode(modelConfig["modelKey"])
 	toolConfig := mapNode(root["toolConfig"])

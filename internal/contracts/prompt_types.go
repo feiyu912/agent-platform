@@ -44,6 +44,7 @@ Skill Dispatch Rules:
 
 type RuntimeRequestContext struct {
 	AgentKey       string
+	AgentType      string
 	TeamID         string
 	Role           string
 	ChatName       string
@@ -95,6 +96,7 @@ type SandboxDigest struct {
 
 type LocalPaths struct {
 	RuntimeHome        string
+	WorkspaceDir       string
 	WorkingDirectory   string
 	RootDir            string
 	PanDir             string

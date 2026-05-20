@@ -14,6 +14,7 @@ import (
 	"agent-platform/internal/bashsec"
 	"agent-platform/internal/config"
 	. "agent-platform/internal/contracts"
+	"agent-platform/internal/filetools"
 )
 
 func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
@@ -38,6 +39,11 @@ func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[strin
 		return ToolExecutionResult{Output: "Bash command whitelist is empty", Error: "command_whitelist_empty", ExitCode: -1}, nil
 	}
 	workingDir := defaultStringArg(args, "cwd", t.cfg.Bash.WorkingDirectory)
+	if execCtx != nil && strings.TrimSpace(stringArg(args, "cwd")) == "" {
+		if workspaceRoot := filetools.SessionWorkspaceRoot(execCtx.Session); workspaceRoot != "" {
+			workingDir = workspaceRoot
+		}
+	}
 	if workingDir == "" {
 		workingDir = "."
 	}

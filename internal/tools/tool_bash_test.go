@@ -100,6 +100,31 @@ func TestInvokeHostBashSuccessReturnsPlainStdout(t *testing.T) {
 	}
 }
 
+func TestInvokeHostBashDefaultsCwdToSessionWorkspace(t *testing.T) {
+	root := t.TempDir()
+	executor := &RuntimeToolExecutor{
+		cfg: config.Config{
+			Bash: config.BashConfig{
+				WorkingDirectory: root,
+				AllowedCommands:  []string{"pwd"},
+				ShellExecutable:  "bash",
+				ShellTimeoutMs:   30000,
+				MaxCommandChars:  16000,
+			},
+		},
+	}
+	execCtx := &contracts.ExecutionContext{Session: contracts.QuerySession{WorkspaceRoot: root}}
+
+	result, err := executor.invokeHostBash(context.Background(), map[string]any{"command": "pwd"}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeHostBash returned error: %v", err)
+	}
+	want, _ := filepath.EvalSymlinks(root)
+	if strings.TrimSpace(result.Output) != want {
+		t.Fatalf("expected pwd in workspace %q, got %q", want, result.Output)
+	}
+}
+
 func TestInvokeHostBashFailureReturnsStructuredJSON(t *testing.T) {
 	root := t.TempDir()
 	executor := &RuntimeToolExecutor{

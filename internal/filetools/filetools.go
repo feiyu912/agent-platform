@@ -94,7 +94,14 @@ func ConfigWithSessionReadRoots(cfg config.FileToolsConfig, mode AccessMode, ses
 		return cfg
 	}
 	local := session.RuntimeContext.LocalPaths
+	workspaceRoot := sessionWorkspaceRoot(session)
+	if workspaceRoot != "" {
+		cfg.WorkingDirectory = workspaceRoot
+	}
 	roots := append([]string(nil), cfg.AllowedReadPaths...)
+	if workspaceRoot != "" {
+		roots = []string{workspaceRoot}
+	}
 	for _, root := range []string{
 		local.AgentDir,
 		local.SkillsDir,
@@ -108,6 +115,69 @@ func ConfigWithSessionReadRoots(cfg config.FileToolsConfig, mode AccessMode, ses
 	}
 	cfg.AllowedReadPaths = uniqueNonEmptyStrings(roots)
 	return cfg
+}
+
+func ConfigWithSessionWriteRoots(cfg config.FileToolsConfig, session QuerySession) config.FileToolsConfig {
+	workspaceRoot := sessionWorkspaceRoot(session)
+	if workspaceRoot == "" {
+		return cfg
+	}
+	cfg.WorkingDirectory = workspaceRoot
+	cfg.AllowedWritePaths = []string{workspaceRoot}
+	return cfg
+}
+
+func PathInSessionWorkspace(session QuerySession, path string) bool {
+	workspaceRoot := SessionWorkspaceRoot(session)
+	if workspaceRoot == "" || strings.TrimSpace(path) == "" {
+		return false
+	}
+	workspaceRoot, ok := normalizeExistingOrFuturePath(workspaceRoot)
+	if !ok {
+		return false
+	}
+	candidate := expandHome(path)
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(workspaceRoot, candidate)
+	}
+	candidate, ok = normalizeExistingOrFuturePath(candidate)
+	if !ok {
+		return false
+	}
+	return candidate == workspaceRoot || strings.HasPrefix(candidate, workspaceRoot+string(os.PathSeparator))
+}
+
+func sessionWorkspaceRoot(session QuerySession) string {
+	return SessionWorkspaceRoot(session)
+}
+
+func SessionWorkspaceRoot(session QuerySession) string {
+	root := strings.TrimSpace(session.WorkspaceRoot)
+	if root == "" {
+		root = strings.TrimSpace(session.RuntimeContext.LocalPaths.WorkspaceDir)
+	}
+	if root == "" {
+		return ""
+	}
+	root = filepath.Clean(expandHome(root))
+	if !filepath.IsAbs(root) {
+		return ""
+	}
+	return root
+}
+
+func normalizeExistingOrFuturePath(path string) (string, bool) {
+	path = filepath.Clean(expandHome(strings.TrimSpace(path)))
+	if path == "" {
+		return "", false
+	}
+	if evaluated, err := evaluatePath(path); err == nil {
+		return evaluated, true
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		return filepath.Clean(abs), true
+	}
+	return "", false
 }
 
 func BuildWritePlan(cfg config.FileToolsConfig, args map[string]any) (WritePlan, error) {

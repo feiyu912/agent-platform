@@ -57,13 +57,14 @@ type runtimeRequestContextInput struct {
 func (s *Server) buildRuntimeRequestContext(input runtimeRequestContextInput) (contracts.RuntimeRequestContext, error) {
 	context := contracts.RuntimeRequestContext{
 		AgentKey:     input.agentKey,
+		AgentType:    strings.TrimSpace(input.definition.Type),
 		TeamID:       input.teamID,
 		Role:         input.role,
 		ChatName:     input.chatName,
 		LocalMode:    s.deps.Config.IsLocalMode(),
 		Scene:        input.scene,
 		References:   append([]api.Reference(nil), input.references...),
-		LocalPaths:   resolveLocalPaths(s.deps.Config.Paths, input.chatID, input.definition.AgentDir),
+		LocalPaths:   resolveLocalPaths(s.deps.Config.Paths, input.chatID, input.definition.AgentDir, input.definition.Workspace.Root),
 		SandboxPaths: resolveSandboxPaths(s.deps.Config, input.definition, input.chatID),
 		AgentDigests: buildAgentDigests(s.deps.Registry),
 	}
@@ -182,9 +183,13 @@ func buildSkillCatalogPrompt(def catalog.AgentDefinition, marketDir string, appe
 	return strings.Join(sections, "\n\n")
 }
 
-func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string) contracts.LocalPaths {
+func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string, workspaceRoot string) contracts.LocalPaths {
 	runtimeHome := filepath.Dir(filepath.Clean(paths.AgentsDir))
 	workingDirectory, _ := os.Getwd()
+	workspaceRoot = cleanOrEmpty(workspaceRoot)
+	if workspaceRoot != "" {
+		workingDirectory = workspaceRoot
+	}
 	attachmentsDir := existingChatAttachmentsDir(paths, chatID)
 	agentDir = cleanOrEmpty(agentDir)
 	agentSkillsDir := ""
@@ -193,6 +198,7 @@ func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string)
 	}
 	return contracts.LocalPaths{
 		RuntimeHome:        runtimeHome,
+		WorkspaceDir:       workspaceRoot,
 		WorkingDirectory:   cleanOrEmpty(workingDirectory),
 		RootDir:            cleanOrEmpty(paths.RootDir),
 		PanDir:             cleanOrEmpty(paths.PanDir),

@@ -139,6 +139,26 @@ func TestBuildAgentDetailMetaIncludesSandboxForRuntimeEnvironment(t *testing.T) 
 	}
 }
 
+func TestBuildAgentDetailResponseIncludesTypeAndWorkspace(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "project")
+	s := &Server{}
+	response := s.buildAgentDetailResponse(catalog.AgentDefinition{
+		Key:  "coder",
+		Name: "Coder",
+		Type: catalog.AgentTypeCoder,
+		Workspace: catalog.AgentWorkspaceConfig{
+			Root: workspace,
+		},
+	})
+	if response.Type != catalog.AgentTypeCoder {
+		t.Fatalf("type = %q, want %q", response.Type, catalog.AgentTypeCoder)
+	}
+	workspaceMeta, ok := response.Meta["workspace"].(map[string]any)
+	if !ok || workspaceMeta["root"] != workspace {
+		t.Fatalf("expected workspace meta root, got %#v", response.Meta)
+	}
+}
+
 func TestAgentEndpointRequiresAgentKey(t *testing.T) {
 	fixture := newTestFixture(t)
 	rec := httptest.NewRecorder()

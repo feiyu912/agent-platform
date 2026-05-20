@@ -307,6 +307,55 @@ func TestInvokeWriteRequiresApprovalByDefault(t *testing.T) {
 	}
 }
 
+func TestInvokeWriteInsideSessionWorkspaceBypassesWriteApproval(t *testing.T) {
+	root := t.TempDir()
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{Session: contracts.QuerySession{
+		WorkspaceRoot: root,
+		RuntimeContext: contracts.RuntimeRequestContext{
+			LocalPaths: contracts.LocalPaths{WorkspaceDir: root},
+		},
+	}}
+
+	result, err := executor.invokeWrite(map[string]any{
+		"file_path":   "owner.md",
+		"content":     "hello",
+		"description": "写入 workspace 文件",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected write success, got %#v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "owner.md"))
+	if err != nil {
+		t.Fatalf("read written file: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("unexpected content: %q", string(data))
+	}
+}
+
+func TestInvokeWriteOutsideSessionWorkspaceRequiresPathApproval(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{Session: contracts.QuerySession{WorkspaceRoot: root}}
+
+	result, err := executor.invokeWrite(map[string]any{
+		"file_path":   filepath.Join(outside, "owner.md"),
+		"content":     "hello",
+		"description": "写入 workspace 外文件",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.ExitCode == 0 || result.Structured["error"] != "file_write_path_approval_required" {
+		t.Fatalf("expected outside workspace path approval, got %#v", result)
+	}
+}
+
 func TestInvokeWriteConsumesExactApprovalAndCreatesParents(t *testing.T) {
 	root := t.TempDir()
 	executor := fileToolExecutor(root, true)

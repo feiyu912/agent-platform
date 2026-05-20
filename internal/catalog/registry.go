@@ -33,6 +33,7 @@ type AgentDefinition struct {
 	Icon           any
 	Description    string
 	Role           string
+	Type           string
 	Wonders        []string
 	ModelKey       string
 	Mode           string
@@ -40,6 +41,7 @@ type AgentDefinition struct {
 	Skills         []string
 	Controls       []map[string]any
 	Runtime        map[string]any
+	Workspace      AgentWorkspaceConfig
 	ReactMaxSteps  int
 	ContextTags    []string
 	Budget         map[string]any
@@ -62,6 +64,10 @@ type AgentDefinition struct {
 	StaticMemoryPrompt string
 	MemoryEnabled      bool
 	MemoryConfig       AgentMemoryConfig
+}
+
+type AgentWorkspaceConfig struct {
+	Root string
 }
 
 type AgentMemoryConfig struct {
@@ -237,12 +243,21 @@ func (r *FileRegistry) Agents(tag string) []api.AgentSummary {
 			Icon:        def.Icon,
 			Description: def.Description,
 			Role:        def.Role,
+			Type:        def.Type,
 			Meta: map[string]any{
 				"model":  def.ModelKey,
 				"mode":   def.Mode,
 				"tools":  append([]string(nil), def.Tools...),
 				"skills": append([]string(nil), def.Skills...),
 			},
+		}
+		if strings.TrimSpace(def.Type) != "" {
+			summary.Meta["type"] = def.Type
+		}
+		if strings.TrimSpace(def.Workspace.Root) != "" {
+			summary.Meta["workspace"] = map[string]any{
+				"root": def.Workspace.Root,
+			}
 		}
 		if def.ProxyConfig != nil {
 			summary.Meta["proxy"] = map[string]any{

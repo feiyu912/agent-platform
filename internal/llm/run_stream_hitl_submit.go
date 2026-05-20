@@ -153,11 +153,14 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 	if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		return s.executeApprovedFileAccessInvocation(invocation, *plan)
 	}
-	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
+	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.fileWritePlanNeedsApproval(*plan) {
 		return s.executeApprovedFileWriteInvocation(invocation, *plan)
 	}
 	if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
 		return s.executeApprovedBashSecurityInvocation(invocation, review)
+	}
+	if result := s.lookupWorkspaceHITL(invocation); result.Intercepted {
+		return s.executeApprovedBashInvocation(invocation, result)
 	}
 	return s.executeOriginalBash(invocation)
 }
@@ -251,6 +254,8 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 		command = plan.CommandText
 	} else if plan := s.lookupFileWritePlan(invocation); plan != nil {
 		command = plan.CommandText
+	} else if result := s.lookupWorkspaceHITL(invocation); result.Intercepted && strings.TrimSpace(result.MatchedCommand) != "" {
+		command = result.MatchedCommand + " (" + mapStringArg(invocation.args, "command") + ")"
 	}
 	description := approvalDescription(invocation)
 	if combinedWriteApproval {
@@ -265,6 +270,8 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 		} else {
 			description = "write超出允许目录"
 		}
+	} else if result := s.lookupWorkspaceHITL(invocation); result.Intercepted {
+		description = "命令访问超出 workspace"
 	}
 	item := map[string]any{
 		"id":                  invocation.toolID,
@@ -279,10 +286,12 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 		result = fileWriteInterceptResult(*combinedWritePlan)
 	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
 		result = fileAccessInterceptResult(*plan)
-	} else if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
+	} else if plan := s.lookupFileWritePlan(invocation); plan != nil && s.fileWritePlanNeedsApproval(*plan) {
 		result = fileWriteInterceptResult(*plan)
 	} else if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
 		result = bashSecurityInterceptResult(invocation, review)
+	} else if workspace := s.lookupWorkspaceHITL(invocation); workspace.Intercepted {
+		result = workspace
 	} else if invocation != nil && invocation.precheckedHITL != nil {
 		result = *invocation.precheckedHITL
 	} else if s.checker != nil {

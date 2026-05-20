@@ -295,6 +295,7 @@ type AgentSummary struct {
 	Icon        any                   `json:"icon,omitempty"`
 	Description string                `json:"description,omitempty"`
 	Role        string                `json:"role,omitempty"`
+	Type        string                `json:"type,omitempty"`
 	Stats       AgentChatStats        `json:"stats"`
 	Chats       []ChatSummaryResponse `json:"chats,omitempty"`
 	Meta        map[string]any        `json:"meta,omitempty"`
@@ -311,6 +312,7 @@ type AgentDetailResponse struct {
 	Icon         any              `json:"icon,omitempty"`
 	Description  string           `json:"description,omitempty"`
 	Role         string           `json:"role,omitempty"`
+	Type         string           `json:"type,omitempty"`
 	Wonders      []string         `json:"wonders,omitempty"`
 	Model        string           `json:"model"`
 	Mode         string           `json:"mode"`

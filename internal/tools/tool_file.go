@@ -143,18 +143,20 @@ func (t *RuntimeToolExecutor) invokeRead(args map[string]any, execCtx *Execution
 }
 
 func (t *RuntimeToolExecutor) invokeWrite(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
-	access, err := filetools.BuildAccessPlan(t.cfg.FileTools, filetools.WriteAccess, stringArg(args, "file_path"))
+	accessCfg := t.sessionFileToolsConfig(filetools.WriteAccess, execCtx)
+	access, err := filetools.BuildAccessPlan(accessCfg, filetools.WriteAccess, stringArg(args, "file_path"))
 	if err != nil {
 		return fileToolError("file_write_invalid_plan", err.Error()), nil
 	}
 	if !access.AllowedByWhitelist && !filetools.ConsumeAccessApproval(execCtx, access) {
 		return fileAccessApprovalRequired("file_write_path_approval_required", "write超出允许目录", access), nil
 	}
-	plan, err := filetools.BuildWritePlan(t.cfg.FileTools, args)
+	plan, err := filetools.BuildWritePlan(accessCfg, args)
 	if err != nil {
 		return fileToolError("file_write_invalid_plan", err.Error()), nil
 	}
-	if t.cfg.FileTools.RequireWriteApproval && !filetools.ConsumeWriteApproval(execCtx, plan) {
+	requiresWriteApproval := t.cfg.FileTools.RequireWriteApproval && !writeAllowedBySessionWorkspace(execCtx, plan.FilePath)
+	if requiresWriteApproval && !filetools.ConsumeWriteApproval(execCtx, plan) {
 		result := structuredResultWithExit(map[string]any{
 			"error":       "file_write_approval_required",
 			"message":     "file write requires user approval",
@@ -205,7 +207,17 @@ func (t *RuntimeToolExecutor) sessionFileToolsConfig(mode filetools.AccessMode, 
 	if execCtx == nil {
 		return t.cfg.FileTools
 	}
+	if mode == filetools.WriteAccess {
+		return filetools.ConfigWithSessionWriteRoots(t.cfg.FileTools, execCtx.Session)
+	}
 	return filetools.ConfigWithSessionReadRoots(t.cfg.FileTools, mode, execCtx.Session)
+}
+
+func writeAllowedBySessionWorkspace(execCtx *ExecutionContext, path string) bool {
+	if execCtx == nil {
+		return false
+	}
+	return filetools.PathInSessionWorkspace(execCtx.Session, path)
 }
 
 func readImageFile(path string, info os.FileInfo) (map[string]any, bool, ToolExecutionResult) {

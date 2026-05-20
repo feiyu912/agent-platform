@@ -11,6 +11,7 @@ inputSchema:
       description: Required. Chrome DevTools Protocol method name to execute through the Desktop CDP Bridge. Use a Domain.method value such as Target.getTargets, Runtime.evaluate, or Page.captureScreenshot. Do not pass HTTP gateway endpoints such as /json/version, /json, or /json/list as method values.
       enum:
         - Target.getTargets
+        - Target.getCurrentTarget
         - Page.bringToFront
         - Page.enable
         - Page.navigate

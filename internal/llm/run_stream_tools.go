@@ -8,6 +8,7 @@ import (
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/bashsec"
+	"agent-platform/internal/config"
 	. "agent-platform/internal/contracts"
 	"agent-platform/internal/filetools"
 )
@@ -191,7 +192,7 @@ func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolIn
 		invocation.fileAccessPlan = accessPlan
 	}
 	if isWriteTool(invocation.toolName) && s.engine.cfg.FileTools.RequireWriteApproval {
-		if plan, err := filetools.BuildWritePlan(s.engine.cfg.FileTools, invocation.args); err == nil {
+		if plan, err := filetools.BuildWritePlan(s.sessionFileToolsConfig(filetools.WriteAccess), invocation.args); err == nil && s.fileWritePlanNeedsApproval(plan) {
 			invocation.fileWritePlan = &plan
 		}
 	}
@@ -299,7 +300,7 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 		s.skipPostToolHook = true
 		return s.emitFileAccessApprovalDeltas(invocation, *accessPlan)
 	}
-	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval {
+	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.fileWritePlanNeedsApproval(*plan) {
 		if strings.TrimSpace(invocation.approvalDecision) != "" {
 			return s.executeApprovedFileWriteInvocation(invocation, *plan)
 		}
@@ -327,6 +328,22 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 		}
 		s.skipPostToolHook = true
 		return s.emitBashSecurityApprovalDeltas(invocation, review)
+	}
+	if result := s.lookupWorkspaceHITL(invocation); result.Intercepted {
+		if strings.EqualFold(result.Rule.ViewportType, "builtin") {
+			if strings.TrimSpace(invocation.approvalDecision) != "" {
+				return s.executeApprovedBashInvocation(invocation, result)
+			}
+			if s.isRuleWhitelisted(result.Rule.RuleKey) {
+				s.applyHITLDecision(invocation, result, "", "approve_rule_run", "", true)
+				return s.executeApprovedBashInvocation(invocation, result)
+			}
+			if s.shouldAutoApproveHITL(result) {
+				return s.executeOriginalBash(invocation)
+			}
+		}
+		s.skipPostToolHook = true
+		return s.emitHITLConfirmDeltas(invocation, result)
 	}
 	if invocation.precheckedHITL != nil && invocation.precheckedHITL.Intercepted {
 		result := *invocation.precheckedHITL
@@ -462,7 +479,7 @@ func (s *llmRunStream) lookupFileWritePlan(invocation *preparedToolInvocation) *
 	if invocation.fileWritePlan != nil {
 		return invocation.fileWritePlan
 	}
-	plan, err := filetools.BuildWritePlan(s.engine.cfg.FileTools, invocation.args)
+	plan, err := filetools.BuildWritePlan(s.sessionFileToolsConfig(filetools.WriteAccess), invocation.args)
 	if err != nil {
 		return nil
 	}
@@ -478,10 +495,7 @@ func (s *llmRunStream) buildFileAccessPlan(invocation *preparedToolInvocation) (
 	if !ok {
 		return nil, false
 	}
-	cfg := s.engine.cfg.FileTools
-	if mode == filetools.ReadAccess {
-		cfg = filetools.ConfigWithSessionReadRoots(cfg, mode, s.fileAccessSession())
-	}
+	cfg := s.sessionFileToolsConfig(mode)
 	plan, err := filetools.BuildAccessPlan(cfg, mode, rawPath)
 	if err != nil {
 		return nil, false
@@ -529,14 +543,27 @@ func (s *llmRunStream) combinedFileWriteApprovalPlans(invocation *preparedToolIn
 	if accessPlan == nil || accessPlan.Mode != filetools.WriteAccess || !s.fileAccessPlanNeedsApproval(*accessPlan) {
 		return nil, nil, false
 	}
-	if !s.engine.cfg.FileTools.RequireWriteApproval {
-		return nil, nil, false
-	}
 	writePlan := s.lookupFileWritePlan(invocation)
-	if writePlan == nil || filetools.HasWriteApproval(s.execCtx, *writePlan) {
+	if writePlan == nil || !s.fileWritePlanNeedsApproval(*writePlan) || filetools.HasWriteApproval(s.execCtx, *writePlan) {
 		return nil, nil, false
 	}
 	return accessPlan, writePlan, true
+}
+
+func (s *llmRunStream) sessionFileToolsConfig(mode filetools.AccessMode) config.FileToolsConfig {
+	cfg := s.engine.cfg.FileTools
+	session := s.fileAccessSession()
+	if mode == filetools.WriteAccess {
+		return filetools.ConfigWithSessionWriteRoots(cfg, session)
+	}
+	return filetools.ConfigWithSessionReadRoots(cfg, mode, session)
+}
+
+func (s *llmRunStream) fileWritePlanNeedsApproval(plan filetools.WritePlan) bool {
+	if !s.engine.cfg.FileTools.RequireWriteApproval {
+		return false
+	}
+	return !filetools.PathInSessionWorkspace(s.fileAccessSession(), plan.FilePath)
 }
 
 func (s *llmRunStream) fileAccessPlanNeedsApproval(plan filetools.AccessPlan) bool {
@@ -616,7 +643,7 @@ func (s *llmRunStream) executeApprovedFileAccessInvocation(invocation *preparedT
 }
 
 func (s *llmRunStream) executeAfterFileAccessApproval(invocation *preparedToolInvocation) error {
-	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.engine.cfg.FileTools.RequireWriteApproval && !filetools.HasWriteApproval(s.execCtx, *plan) {
+	if plan := s.lookupFileWritePlan(invocation); plan != nil && s.fileWritePlanNeedsApproval(*plan) && !filetools.HasWriteApproval(s.execCtx, *plan) {
 		return s.emitFileWriteApprovalDeltas(invocation, *plan)
 	}
 	return s.executeOriginalBash(invocation)

@@ -105,7 +105,7 @@ func TestResolveLocalPathsIncludesAgentAndRegistryPaths(t *testing.T) {
 		t.Fatalf("create chat attachments dir: %v", err)
 	}
 
-	paths := resolveLocalPaths(cfg.Paths, "chat-1", agentDir)
+	paths := resolveLocalPaths(cfg.Paths, "chat-1", agentDir, "")
 	if paths.AgentDir != agentDir {
 		t.Fatalf("agent dir = %q", paths.AgentDir)
 	}
@@ -148,7 +148,7 @@ func TestResolveLocalPathsOmitsMissingChatAttachmentsDir(t *testing.T) {
 	t.Parallel()
 
 	cfg := testPromptContextConfig(t)
-	paths := resolveLocalPaths(cfg.Paths, "chat-missing", "")
+	paths := resolveLocalPaths(cfg.Paths, "chat-missing", "", "")
 	if paths.ChatAttachmentsDir != "" {
 		t.Fatalf("chat attachments dir = %q, want empty", paths.ChatAttachmentsDir)
 	}

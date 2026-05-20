@@ -216,7 +216,7 @@ func appendSandboxContextPaths(lines *[]string, paths SandboxPaths, localMode bo
 }
 
 func appendLocalContextPaths(lines *[]string, paths LocalPaths) {
-	workspaceDir := firstNonBlank(paths.ChatAttachmentsDir, paths.WorkingDirectory)
+	workspaceDir := firstNonBlank(paths.WorkspaceDir, paths.ChatAttachmentsDir, paths.WorkingDirectory)
 	appendContextDir(lines, "workspace_dir", workspaceDir, "当前工作目录")
 	appendContextDir(lines, "root_dir", paths.RootDir, "root 目录")
 	appendContextDir(lines, "skills_dir", paths.SkillsDir, "当前 agent 私有技能目录")
