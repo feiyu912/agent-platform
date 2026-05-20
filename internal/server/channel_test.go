@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/catalog"
@@ -136,8 +137,8 @@ func TestPrepareQueryRejectsDisallowedAgentOnChannel(t *testing.T) {
 	}
 }
 
-func TestHandleAgentsFiltersByChannelAndHandleChannelsShowsConnected(t *testing.T) {
-	server, _ := newServerForChannelTests(t)
+func TestHandleAgentsIgnoresChannelAndHandleChannelsShowsConnected(t *testing.T) {
+	server, chats := newServerForChannelTests(t)
 	server.deps.Channels = channelpkg.NewRegistry([]config.ChannelConfig{
 		{
 			ID:           "wecom",
@@ -169,11 +170,57 @@ func TestHandleAgentsFiltersByChannelAndHandleChannelsShowsConnected(t *testing.
 	if err := json.Unmarshal(rec.Body.Bytes(), &agentsResp); err != nil {
 		t.Fatalf("decode agents response: %v", err)
 	}
-	if len(agentsResp.Data) != 2 {
-		t.Fatalf("expected 2 filtered agents, got %#v", agentsResp.Data)
+	if len(agentsResp.Data) != 4 {
+		t.Fatalf("expected 4 unfiltered agents, got %#v", agentsResp.Data)
 	}
-	if got := []string{agentsResp.Data[0].Key, agentsResp.Data[1].Key}; !reflect.DeepEqual(got, []string{"assistant", "code-helper"}) {
-		t.Fatalf("unexpected filtered agent keys: %#v", got)
+	if got := []string{agentsResp.Data[0].Key, agentsResp.Data[1].Key, agentsResp.Data[2].Key, agentsResp.Data[3].Key}; !reflect.DeepEqual(got, []string{"assistant", "code-helper", "customer-service", "team-agent"}) {
+		t.Fatalf("unexpected agent keys: %#v", got)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/agents?tag=does-not-filter", nil)
+	server.handleAgents(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("handleAgents with ignored tag code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &agentsResp); err != nil {
+		t.Fatalf("decode agents response: %v", err)
+	}
+	if len(agentsResp.Data) != 4 {
+		t.Fatalf("expected tag to be ignored, got %#v", agentsResp.Data)
+	}
+
+	if _, _, err := chats.EnsureChat("chat-a-old", "assistant", "", "old"); err != nil {
+		t.Fatalf("ensure old chat: %v", err)
+	}
+	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-a-old", RunID: "loyw3v20", UpdatedAtMillis: 1000}); err != nil {
+		t.Fatalf("complete old chat: %v", err)
+	}
+	if _, _, err := chats.EnsureChat("chat-a-new", "assistant", "", "new"); err != nil {
+		t.Fatalf("ensure new chat: %v", err)
+	}
+	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-a-new", RunID: "loyw3v28", UpdatedAtMillis: time.Now().UnixMilli()}); err != nil {
+		t.Fatalf("complete new chat: %v", err)
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/agents?includeChats=1", nil)
+	server.handleAgents(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("handleAgents includeChats code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &agentsResp); err != nil {
+		t.Fatalf("decode agents response: %v", err)
+	}
+	if len(agentsResp.Data[0].Chats) != 1 || agentsResp.Data[0].Chats[0].ChatID != "chat-a-new" {
+		t.Fatalf("expected most recent assistant chat, got %#v", agentsResp.Data[0].Chats)
+	}
+
+	for _, path := range []string{"/api/agents?includeChats=abc", "/api/agents?includeChats=-1", "/api/agents?includeChats=51"} {
+		rec = httptest.NewRecorder()
+		server.handleAgents(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected bad request for %s, got %d body=%s", path, rec.Code, rec.Body.String())
+		}
 	}
 
 	rec = httptest.NewRecorder()

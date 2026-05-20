@@ -16,7 +16,7 @@ import (
 	gws "github.com/gorilla/websocket"
 )
 
-func TestWebSocketChannelsAndAgentsRespectChannelConfig(t *testing.T) {
+func TestWebSocketChannelsAndAgentsIgnoreChannelFilter(t *testing.T) {
 	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
 		writeProviderSSE(t, w, `[DONE]`)
 	}, testFixtureOptions{
@@ -104,8 +104,26 @@ func TestWebSocketChannelsAndAgentsRespectChannelConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode agents data: %v", err)
 	}
-	if len(agentsData) != 2 || agentsData[0].Key != "assistant" || agentsData[1].Key != "code-helper" {
-		t.Fatalf("unexpected filtered agents payload: %#v", agentsData)
+	if len(agentsData) != 3 || agentsData[0].Key != "assistant" || agentsData[1].Key != "code-helper" || agentsData[2].Key != "customer-service" {
+		t.Fatalf("unexpected agents payload: %#v", agentsData)
+	}
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/agents",
+		ID:    "req_agents_invalid",
+		Payload: ws.MarshalPayload(map[string]any{
+			"includeChats": 51,
+		}),
+	}); err != nil {
+		t.Fatalf("write invalid agents request: %v", err)
+	}
+	var invalidFrame ws.ResponseFrame
+	if err := conn.ReadJSON(&invalidFrame); err != nil {
+		t.Fatalf("read invalid agents frame: %v", err)
+	}
+	if invalidFrame.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid includeChats to fail, got %#v", invalidFrame)
 	}
 }
 

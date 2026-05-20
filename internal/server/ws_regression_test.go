@@ -294,17 +294,23 @@ func TestListAgentSummariesIncludesChatStats(t *testing.T) {
 	if _, _, err := chats.EnsureChat("chat-b1", "agent-b", "", "hello"); err != nil {
 		t.Fatalf("ensure chat-b1: %v", err)
 	}
-	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-a1", RunID: "loyw3v28", UpdatedAtMillis: time.Now().UnixMilli()}); err != nil {
+	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-a2", RunID: "loyw3v20", UpdatedAtMillis: 1000}); err != nil {
+		t.Fatalf("complete chat-a2: %v", err)
+	}
+	if _, err := chats.MarkRead("chat-a2", "loyw3v20"); err != nil {
+		t.Fatalf("mark chat-a2 read: %v", err)
+	}
+	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-a1", RunID: "loyw3v28", UpdatedAtMillis: 3000}); err != nil {
 		t.Fatalf("complete chat-a1: %v", err)
 	}
-	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-b1", RunID: "loyw3v2s", UpdatedAtMillis: time.Now().UnixMilli()}); err != nil {
+	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-b1", RunID: "loyw3v2s", UpdatedAtMillis: 2000}); err != nil {
 		t.Fatalf("complete chat-b1: %v", err)
 	}
 	if _, err := chats.MarkRead("chat-b1", "loyw3v2s"); err != nil {
 		t.Fatalf("mark chat-b1 read: %v", err)
 	}
 
-	items, err := server.listAgentSummaries("", "")
+	items, err := server.listAgentSummaries(0)
 	if err != nil {
 		t.Fatalf("list agent summaries: %v", err)
 	}
@@ -320,6 +326,21 @@ func TestListAgentSummariesIncludesChatStats(t *testing.T) {
 	}
 	if got := statsByKey["agent-b"]; got.TotalCount != 1 || got.UnreadCount != 0 {
 		t.Fatalf("unexpected agent-b stats: %#v", got)
+	}
+
+	items, err = server.listAgentSummaries(1)
+	if err != nil {
+		t.Fatalf("list agent summaries with chats: %v", err)
+	}
+	chatsByKey := map[string][]api.ChatSummaryResponse{}
+	for _, item := range items {
+		chatsByKey[item.Key] = item.Chats
+	}
+	if got := chatsByKey["agent-a"]; len(got) != 1 || got[0].ChatID != "chat-a1" {
+		t.Fatalf("unexpected agent-a chats: %#v", got)
+	}
+	if got := chatsByKey["agent-b"]; len(got) != 1 || got[0].ChatID != "chat-b1" {
+		t.Fatalf("unexpected agent-b chats: %#v", got)
 	}
 }
 

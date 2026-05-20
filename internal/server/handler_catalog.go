@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"agent-platform/internal/api"
@@ -31,12 +32,39 @@ func newAgentStatusError(status int, code string, message string) error {
 }
 
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
-	items, err := s.listAgentSummaries(r.URL.Query().Get("tag"), r.URL.Query().Get("channel"))
+	includeChats, ok := parseIncludeChats(w, r.URL.Query().Get("includeChats"))
+	if !ok {
+		return
+	}
+	items, err := s.listAgentSummaries(includeChats)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
 		return
 	}
 	writeJSON(w, http.StatusOK, api.Success(items))
+}
+
+const maxAgentSummaryIncludeChats = 50
+
+func parseIncludeChats(w http.ResponseWriter, raw string) (int, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, true
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "includeChats must be an integer"))
+		return 0, false
+	}
+	if value < 0 {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "includeChats must be greater than or equal to 0"))
+		return 0, false
+	}
+	if value > maxAgentSummaryIncludeChats {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "includeChats must be less than or equal to 50"))
+		return 0, false
+	}
+	return value, true
 }
 
 func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {

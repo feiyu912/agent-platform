@@ -16,6 +16,10 @@ func (s *Server) listChatSummaries(lastRunID string, agentKey string) ([]api.Cha
 	if err != nil {
 		return nil, err
 	}
+	return mapChatSummaries(items), nil
+}
+
+func mapChatSummaries(items []chat.Summary) []api.ChatSummaryResponse {
 	response := make([]api.ChatSummaryResponse, 0, len(items))
 	for _, item := range items {
 		resp := api.ChatSummaryResponse{
@@ -46,7 +50,7 @@ func (s *Server) listChatSummaries(lastRunID string, agentKey string) ([]api.Cha
 		}
 		response = append(response, resp)
 	}
-	return response, nil
+	return response
 }
 
 func (s *Server) loadChatDetail(ctx context.Context, chatID string, includeRawMessages bool) (api.ChatDetailResponse, error) {

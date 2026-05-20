@@ -70,6 +70,7 @@ make run
 
 ```bash
 curl http://127.0.0.1:11949/api/agents
+curl "http://127.0.0.1:11949/api/agents?includeChats=5"
 curl "http://127.0.0.1:11949/api/agent?agentKey=default_agent"
 curl http://127.0.0.1:11949/api/chats
 ```

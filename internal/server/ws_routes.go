@@ -127,15 +127,19 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 
 func (s *Server) wsAgents(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
 	payload, err := ws.DecodePayload[struct {
-		Tag     string `json:"tag"`
-		Channel string `json:"channel"`
+		IncludeChats int `json:"includeChats"`
 	}](req)
 	if err != nil {
 		conn.SendError(req.ID, "invalid_request", 400, "invalid payload", nil)
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	items, listErr := s.listAgentSummaries(payload.Tag, payload.Channel)
+	if payload.IncludeChats < 0 || payload.IncludeChats > maxAgentSummaryIncludeChats {
+		conn.SendError(req.ID, "invalid_request", 400, "includeChats must be between 0 and 50", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	items, listErr := s.listAgentSummaries(payload.IncludeChats)
 	if listErr != nil {
 		conn.SendError(req.ID, "internal_error", 500, listErr.Error(), nil)
 		conn.CompleteRequest(req.ID)

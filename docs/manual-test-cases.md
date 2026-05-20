@@ -15,6 +15,10 @@ curl -X GET "$BASE_URL/api/agents"
 ```
 
 ```bash
+curl -X GET "$BASE_URL/api/agents?includeChats=5"
+```
+
+```bash
 curl -X GET "$BASE_URL/api/agent?agentKey=default_agent"
 ```
 

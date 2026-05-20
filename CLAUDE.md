@@ -217,7 +217,7 @@ runtimeConfig:
 
 主要接口：
 
-- `GET /api/agents`：返回目录驱动的 agent 列表，支持 `tag`
+- `GET /api/agents`：返回目录驱动的 agent 列表；可选 `includeChats=N` 为每个 agent 附带最近 N 条 active chat 摘要（最大 50，不包含 archived chats）
 - `GET /api/agent?agentKey=...`：返回单个 agent 详情，包含 model / tool / skill / sandbox 元数据
 - `GET /api/teams`：返回目录驱动的 team 列表
 - `GET /api/skills`：返回目录驱动的 skill 列表，支持 `tag`

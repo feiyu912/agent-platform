@@ -35,6 +35,7 @@ type Store interface {
 	LoadRawMessages(chatID string, k int) ([]map[string]any, error)
 	OnRunCompleted(completion RunCompletion) error
 	ListChats(lastRunID string, agentKey string) ([]Summary, error)
+	RecentChatsByAgent(agentKey string, limit int) ([]Summary, error)
 	ListRuns(chatID string) ([]RunSummary, error)
 	LoadChat(chatID string) (Detail, error)
 	LoadRunTrace(chatID string, runID string) (RunTrace, error)

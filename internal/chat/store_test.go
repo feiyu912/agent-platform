@@ -645,6 +645,50 @@ func TestFileStoreAgentChatStatsAggregatesUnreadCounts(t *testing.T) {
 	}
 }
 
+func TestFileStoreRecentChatsByAgentFiltersLimitsAndSorts(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	for _, seed := range []struct {
+		chatID  string
+		agent   string
+		runID   string
+		updated int64
+	}{
+		{chatID: "chat-a-old", agent: "agent-a", runID: "loyw3v20", updated: 1000},
+		{chatID: "chat-a-new", agent: "agent-a", runID: "loyw3v28", updated: 3000},
+		{chatID: "chat-a-mid", agent: "agent-a", runID: "loyw3v24", updated: 2000},
+		{chatID: "chat-b-new", agent: "agent-b", runID: "loyw3v2s", updated: 4000},
+	} {
+		if _, _, err := store.EnsureChat(seed.chatID, seed.agent, "", seed.chatID); err != nil {
+			t.Fatalf("ensure %s: %v", seed.chatID, err)
+		}
+		if err := store.OnRunCompleted(RunCompletion{ChatID: seed.chatID, RunID: seed.runID, UpdatedAtMillis: seed.updated}); err != nil {
+			t.Fatalf("complete %s: %v", seed.chatID, err)
+		}
+	}
+
+	items, err := store.RecentChatsByAgent("agent-a", 2)
+	if err != nil {
+		t.Fatalf("recent chats: %v", err)
+	}
+	if len(items) != 2 || items[0].ChatID != "chat-a-new" || items[1].ChatID != "chat-a-mid" {
+		t.Fatalf("unexpected recent chats: %#v", items)
+	}
+	if items[0].AgentKey != "agent-a" || items[1].AgentKey != "agent-a" {
+		t.Fatalf("unexpected agent filtering: %#v", items)
+	}
+
+	empty, err := store.RecentChatsByAgent("agent-a", 0)
+	if err != nil {
+		t.Fatalf("recent chats limit 0: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("expected no chats for limit 0, got %#v", empty)
+	}
+}
+
 func TestFileStoreListChatsUsesParsedRunIDCursor(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

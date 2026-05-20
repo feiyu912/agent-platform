@@ -234,3 +234,35 @@ func (s *FileStore) ListChats(lastRunID string, agentKey string) ([]Summary, err
 	}
 	return items, rows.Err()
 }
+
+func (s *FileStore) RecentChatsByAgent(agentKey string, limit int) ([]Summary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := s.db.Query("SELECT CHAT_ID_, CHAT_NAME_, AGENT_KEY_, COALESCE(TEAM_ID_,''), COALESCE(SOURCE_CHANNEL_,''), CREATED_AT_, UPDATED_AT_, LAST_RUN_ID_, LAST_RUN_CONTENT_, READ_RUN_ID_, READ_AT_, USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, AWAITING_ID_, AWAITING_RUN_ID_, AWAITING_MODE_, AWAITING_CREATED_AT_ FROM CHATS WHERE AGENT_KEY_=? ORDER BY UPDATED_AT_ DESC, CHAT_ID_ DESC LIMIT ?", agentKey, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]Summary, 0, limit)
+	for rows.Next() {
+		var sum Summary
+		var usage UsageData
+		var pendingAwaitingID, pendingRunID, pendingMode string
+		var pendingCreatedAt int64
+		if err := rows.Scan(&sum.ChatID, &sum.ChatName, &sum.AgentKey, &sum.TeamID, &sum.SourceChannel, &sum.CreatedAt, &sum.UpdatedAt, &sum.LastRunID, &sum.LastRunContent, &sum.Read.ReadRunID, &sum.Read.ReadAt, &usage.PromptTokens, &usage.CompletionTokens, &usage.TotalTokens, &pendingAwaitingID, &pendingRunID, &pendingMode, &pendingCreatedAt); err != nil {
+			return nil, err
+		}
+		if usage.TotalTokens > 0 {
+			sum.Usage = &usage
+		}
+		applyDerivedReadState(&sum)
+		sum.PendingAwaiting = pendingAwaitingFromRow(pendingAwaitingID, pendingRunID, pendingMode, pendingCreatedAt)
+		items = append(items, sum)
+	}
+	return items, rows.Err()
+}
