@@ -197,7 +197,7 @@ func (p *openAIProtocol) ConsumeChunk(s *llmRunStream, _ string, rawChunk string
 				if !s.allowToolUse {
 					continue
 				}
-				s.pending = append(s.pending, deltas...)
+				s.appendToolCallDeltas(deltas)
 			}
 		}
 		if strings.TrimSpace(choice.FinishReason) != "" {

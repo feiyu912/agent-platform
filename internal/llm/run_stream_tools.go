@@ -415,82 +415,10 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 		})
 	}
 	if isPlanningWriteTool(invocation.toolName) && result.ExitCode == 0 {
-		appendPlanningDeltas(&s.pending, s.session, result, s.execCtx)
+		s.appendFinalPlanningDeltas(invocation.toolID, result)
 	}
 	appendPublishedArtifactDelta(&s.pending, s.session, result.Structured["publishedArtifacts"])
 	return nil
-}
-
-func appendPlanningDeltas(pending *[]AgentDelta, session QuerySession, result ToolExecutionResult, execCtx *ExecutionContext) {
-	if pending == nil {
-		return
-	}
-	state := (*PlanningRuntimeState)(nil)
-	if execCtx != nil {
-		state = execCtx.PlanningState
-	}
-	planningID := strings.TrimSpace(AnyStringNode(result.Structured["planningId"]))
-	planningFile := strings.TrimSpace(AnyStringNode(result.Structured["planningFile"]))
-	title := strings.TrimSpace(AnyStringNode(result.Structured["title"]))
-	status := strings.TrimSpace(AnyStringNode(result.Structured["status"]))
-	markdown := strings.TrimSpace(AnyStringNode(result.Structured["markdown"]))
-	if state != nil {
-		if planningID == "" {
-			planningID = state.PlanningID
-		}
-		if planningFile == "" {
-			planningFile = state.PlanningFile
-		}
-		if title == "" {
-			title = state.Title
-		}
-		if status == "" {
-			status = state.Status
-		}
-		if markdown == "" {
-			markdown = state.Markdown
-		}
-	}
-	if planningID == "" || markdown == "" {
-		return
-	}
-	if status == "" {
-		status = "ready"
-	}
-	*pending = append(*pending,
-		DeltaPlanningStart{
-			PlanningID:   planningID,
-			PlanningFile: planningFile,
-			ChatID:       session.ChatID,
-			RunID:        session.RunID,
-			RequestID:    session.RequestID,
-			AgentKey:     session.AgentKey,
-			Title:        title,
-			Status:       "started",
-		},
-		DeltaPlanningDelta{
-			PlanningID:   planningID,
-			PlanningFile: planningFile,
-			ChatID:       session.ChatID,
-			RunID:        session.RunID,
-			RequestID:    session.RequestID,
-			AgentKey:     session.AgentKey,
-			Title:        title,
-			Status:       "writing",
-			Delta:        markdown,
-		},
-		DeltaPlanningEnd{
-			PlanningID:   planningID,
-			PlanningFile: planningFile,
-			ChatID:       session.ChatID,
-			RunID:        session.RunID,
-			RequestID:    session.RequestID,
-			AgentKey:     session.AgentKey,
-			Title:        title,
-			Status:       status,
-			Markdown:     markdown,
-		},
-	)
 }
 
 func appendPublishedArtifactDelta(pending *[]AgentDelta, session QuerySession, raw any) {

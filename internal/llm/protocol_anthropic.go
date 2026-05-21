@@ -101,7 +101,7 @@ func (p *anthropicProtocol) ConsumeChunk(s *llmRunStream, eventName string, rawC
 			if !s.allowToolUse {
 				return false, nil
 			}
-			s.pending = append(s.pending, deltas...)
+			s.appendToolCallDeltas(deltas)
 		}
 	case "content_block_delta":
 		index := AnyIntNode(payload["index"])
@@ -120,7 +120,7 @@ func (p *anthropicProtocol) ConsumeChunk(s *llmRunStream, eventName string, rawC
 			if !s.allowToolUse {
 				return false, nil
 			}
-			s.pending = append(s.pending, deltas...)
+			s.appendToolCallDeltas(deltas)
 		case "signature_delta":
 			return false, nil
 		}

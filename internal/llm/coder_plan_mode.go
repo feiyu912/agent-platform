@@ -174,7 +174,7 @@ func (s *coderPlanningStream) planningPrompt() string {
 	if desc := s.buildExecuteToolDescriptions(); desc != "" {
 		prompt += "\n\n" + desc
 	}
-	return prompt + "\n\nCreate a standard Markdown execution plan for the user's request. You MUST call planning_write before the planning phase finishes. The plan must include Summary, Key Changes, Plan, Test Plan, and Assumptions."
+	return prompt + "\n\nCreate a standard Markdown execution plan for the user's request. You MUST call planning_write before the planning phase finishes. The plan must include Summary, Key Changes, Plan, Test Plan, and Assumptions. When calling planning_write, emit arguments in this field order: title, summary, keyChanges, steps, testPlan, assumptions."
 }
 
 func (s *coderPlanningStream) afterStageEOF() error {

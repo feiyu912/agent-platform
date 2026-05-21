@@ -944,6 +944,9 @@ func TestWebSocketCoderPlanningEmitsLifecycleEvents(t *testing.T) {
 	eventTypes, runID, awaitingID := collectWebSocketEventsUntilPlanningApproval(t, conn, requestID)
 	assertStringSliceContains(t, eventTypes, "planning.start", "planning.delta", "planning.end", "awaiting.ask")
 	assertStringSliceExcludes(t, eventTypes, "planning.snapshot")
+	if got := countStrings(eventTypes, "planning.delta"); got <= 1 {
+		t.Fatalf("expected multiple websocket planning.delta events, got %d in %#v", got, eventTypes)
+	}
 
 	submitBody := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"approve"}]}`
 	submitRec, err := http.Post(server.URL+"/api/submit", "application/json", bytes.NewBufferString(submitBody))
@@ -1232,6 +1235,16 @@ func collectWebSocketStreamEventTypes(t *testing.T, conn *gws.Conn, requestID st
 	}
 	t.Fatalf("timed out waiting for websocket stream completion for %s", requestID)
 	return nil
+}
+
+func countStrings(values []string, target string) int {
+	count := 0
+	for _, value := range values {
+		if value == target {
+			count++
+		}
+	}
+	return count
 }
 
 func waitForWebSocketFrame(t *testing.T, conn *gws.Conn, match func([]byte) bool) []byte {

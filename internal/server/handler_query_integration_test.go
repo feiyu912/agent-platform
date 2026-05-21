@@ -958,6 +958,9 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 			t.Fatalf("expected %s before confirmation, got %s", eventType, streamBody.String())
 		}
 	}
+	if got := strings.Count(streamBody.String(), `"type":"planning.delta"`); got <= 1 {
+		t.Fatalf("expected multiple planning.delta events before confirmation, got %d in %s", got, streamBody.String())
+	}
 	if strings.Contains(streamBody.String(), `"type":"planning.snapshot"`) {
 		t.Fatalf("did not expect live planning.snapshot, got %s", streamBody.String())
 	}
@@ -988,6 +991,9 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	}
 	if strings.Contains(body, `"type":"planning.snapshot"`) {
 		t.Fatalf("did not expect live planning.snapshot, got %s", body)
+	}
+	if got := strings.Count(body, `"type":"planning.delta"`); got <= 1 {
+		t.Fatalf("expected multiple live planning.delta events, got %d in %s", got, body)
 	}
 	if !strings.Contains(body, "execution completed") || !strings.Contains(body, "confirmed plan completed") {
 		t.Fatalf("expected confirmed execution to complete, got %s", body)

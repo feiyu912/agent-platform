@@ -59,6 +59,7 @@ type llmRunStream struct {
 	pendingHITLNotices []hitlNoticeEntry
 	skipPostToolHook   bool
 	onApprovalSummary  func(chat.StepApproval)
+	planningWrites     map[string]*planningWriteStreamState
 
 	lastCallPromptTokens           int
 	lastCallCompletionTokens       int
