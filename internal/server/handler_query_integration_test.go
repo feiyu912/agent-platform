@@ -1087,8 +1087,15 @@ func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
 	if strings.Contains(body, `"type":"tool.start","toolName":"bash"`) || strings.Contains(body, `"type":"tool.start","toolName":"file_write"`) || strings.Contains(body, `"type":"tool.start","toolName":"file_edit"`) {
 		t.Fatalf("did not expect mutating tool calls after cancel, got %s", body)
 	}
-	if !strings.Contains(body, `"status":"canceled"`) || !strings.Contains(body, "已取消执行计划。") {
-		t.Fatalf("expected canceled plan update and message, got %s", body)
+	if !strings.Contains(body, "已取消执行计划。") {
+		t.Fatalf("expected canceled plan message, got %s", body)
+	}
+	answerIndex := strings.Index(body, `"type":"awaiting.answer"`)
+	if answerIndex < 0 {
+		t.Fatalf("expected awaiting.answer after cancel, got %s", body)
+	}
+	if planningEndIndex := strings.Index(body[answerIndex:], `"type":"planning.end"`); planningEndIndex >= 0 {
+		t.Fatalf("did not expect planning.end after awaiting.answer cancel, got %s", body)
 	}
 	if got := providerCallCount.Load(); got != 1 {
 		t.Fatalf("provider calls = %d, want 1", got)

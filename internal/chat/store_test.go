@@ -1719,7 +1719,7 @@ func TestStepWriterPlanningLifecyclePersistsSnapshotByDefault(t *testing.T) {
 	if lines[0]["_type"] != "planning" || event["type"] != "planning.snapshot" {
 		t.Fatalf("expected planning.snapshot line, got %#v", lines[0])
 	}
-	if event["markdown"] != "# Plan\n\nBody" || event["planningId"] != "plan-run-planning" {
+	if event["markdown"] != "# Plan\n\nBody" || event["planningId"] != "plan-run-planning" || event["planningFile"] != "plan-run-planning.md" {
 		t.Fatalf("unexpected planning snapshot event %#v", event)
 	}
 
@@ -1767,13 +1767,10 @@ func emitPlanningLifecycleForTest(writer *StepWriter, chatID string) {
 		Timestamp: 1001,
 		Payload: map[string]any{
 			"planningId":   "plan-run-planning",
-			"planningFile": "/tmp/plan-run-planning.md",
+			"planningFile": "plan-run-planning.md",
 			"chatId":       chatID,
 			"runId":        "run-planning",
-			"requestId":    "req-planning",
-			"agentKey":     "coder",
 			"title":        "Plan",
-			"status":       "started",
 			"updatedAt":    int64(1001),
 		},
 	})
@@ -1783,8 +1780,6 @@ func emitPlanningLifecycleForTest(writer *StepWriter, chatID string) {
 		Payload: map[string]any{
 			"planningId": "plan-run-planning",
 			"delta":      "# Plan\n\nBody",
-			"status":     "writing",
-			"updatedAt":  int64(1002),
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -1792,8 +1787,6 @@ func emitPlanningLifecycleForTest(writer *StepWriter, chatID string) {
 		Timestamp: 1003,
 		Payload: map[string]any{
 			"planningId": "plan-run-planning",
-			"status":     "ready",
-			"updatedAt":  int64(1003),
 		},
 	})
 }

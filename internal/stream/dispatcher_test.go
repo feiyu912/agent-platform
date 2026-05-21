@@ -156,18 +156,35 @@ func TestDispatcherEmitsPlanningLifecycle(t *testing.T) {
 	if got := start[0].Data().String("planningId"); got != "plan-run_1" {
 		t.Fatalf("expected planningId, got %#v", start[0].ToData())
 	}
+	startData := start[0].Data()
+	if got := startData.String("planningFile"); got != "plan-run_1.md" {
+		t.Fatalf("expected planningFile basename, got %#v", start[0].ToData())
+	}
+	for _, key := range []string{"requestId", "agentKey", "status"} {
+		if got := startData.Value(key); got != nil {
+			t.Fatalf("did not expect planning.start %s, got %#v", key, start[0].ToData())
+		}
+	}
 
 	delta := dispatcher.Dispatch(PlanningDelta{
 		PlanningID: "plan-run_1",
 		Delta:      "# Plan",
 	})
 	assertEventTypes(t, delta, "planning.delta")
+	deltaData := delta[0].Data()
+	if got := deltaData.Payload; len(got) != 2 || got["planningId"] != "plan-run_1" || got["delta"] != "# Plan" {
+		t.Fatalf("unexpected planning.delta payload %#v", deltaData.Map())
+	}
 
 	snapshot := dispatcher.Dispatch(PlanningSnapshot{
-		PlanningID: "plan-run_1",
-		Markdown:   "# Plan",
+		PlanningID:   "plan-run_1",
+		PlanningFile: "/tmp/plan-run_1.md",
+		Markdown:     "# Plan",
 	})
 	assertEventTypes(t, snapshot, "planning.snapshot")
+	if got := snapshot[0].Data().String("planningFile"); got != "plan-run_1.md" {
+		t.Fatalf("expected snapshot planningFile basename, got %#v", snapshot[0].ToData())
+	}
 
 	end := dispatcher.Dispatch(PlanningEnd{
 		PlanningID: "plan-run_1",
@@ -175,6 +192,9 @@ func TestDispatcherEmitsPlanningLifecycle(t *testing.T) {
 		Markdown:   "# Plan",
 	})
 	assertEventTypes(t, end, "planning.end")
+	if got := end[0].Data().Payload; len(got) != 1 || got["planningId"] != "plan-run_1" {
+		t.Fatalf("unexpected planning.end payload %#v", end[0].ToData())
+	}
 }
 
 func TestDispatcherIncludesTaskIDOnDebugEvents(t *testing.T) {

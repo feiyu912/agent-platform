@@ -329,17 +329,6 @@ func confirmationDecision(normalized map[string]any) string {
 func (s *coderPlanningStream) cancelUnstartedPlan(message string) {
 	if s.execCtx != nil && s.execCtx.PlanningState != nil {
 		s.execCtx.PlanningState.Status = "canceled"
-		s.pending = append(s.pending, DeltaPlanningEnd{
-			PlanningID:   s.execCtx.PlanningState.PlanningID,
-			PlanningFile: s.execCtx.PlanningState.PlanningFile,
-			ChatID:       s.session.ChatID,
-			RunID:        s.session.RunID,
-			RequestID:    s.session.RequestID,
-			AgentKey:     s.session.AgentKey,
-			Title:        s.execCtx.PlanningState.Title,
-			Status:       "canceled",
-			Markdown:     s.execCtx.PlanningState.Markdown,
-		})
 	}
 	if strings.TrimSpace(message) != "" {
 		s.pending = append(s.pending, DeltaContent{Text: message})

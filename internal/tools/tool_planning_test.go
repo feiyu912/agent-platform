@@ -41,7 +41,7 @@ func TestPlanningWriteCreatesMarkdownFile(t *testing.T) {
 		t.Fatalf("expected success, got %#v", result)
 	}
 	planningID := AnyStringNode(result.Structured["planningId"])
-	if planningID != "改造-CODER-planningMode-run_123" {
+	if planningID != "run_123_planning" {
 		t.Fatalf("unexpected planningId %q", planningID)
 	}
 	planningFile := AnyStringNode(result.Structured["planningFile"])

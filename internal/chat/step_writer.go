@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -702,9 +703,8 @@ func (w *StepWriter) planningSnapshotEvent(source stream.EventData) stream.Event
 	payload := map[string]any{}
 	if w.latestPlanning != nil {
 		payload["planningId"] = w.latestPlanning.PlanningID
-		payload["planningFile"] = w.latestPlanning.PlanningFile
+		payload["planningFile"] = planningFileDisplayName(w.latestPlanning.PlanningFile)
 		payload["title"] = w.latestPlanning.Title
-		payload["status"] = w.latestPlanning.Status
 		payload["markdown"] = w.latestPlanning.Markdown
 		payload["updatedAt"] = w.latestPlanning.UpdatedAt
 	}
@@ -718,12 +718,6 @@ func (w *StepWriter) planningSnapshotEvent(source stream.EventData) stream.Event
 	} else {
 		payload["runId"] = w.runID
 	}
-	if value := strings.TrimSpace(source.String("requestId")); value != "" {
-		payload["requestId"] = value
-	}
-	if value := strings.TrimSpace(source.String("agentKey")); value != "" {
-		payload["agentKey"] = value
-	}
 	if payload["updatedAt"] == nil || int64FromAny(payload["updatedAt"]) == 0 {
 		payload["updatedAt"] = source.Timestamp
 	}
@@ -732,6 +726,14 @@ func (w *StepWriter) planningSnapshotEvent(source stream.EventData) stream.Event
 		Timestamp: source.Timestamp,
 		Payload:   payload,
 	}
+}
+
+func planningFileDisplayName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return filepath.Base(value)
 }
 
 func (w *StepWriter) updatePlan(event stream.EventData) {

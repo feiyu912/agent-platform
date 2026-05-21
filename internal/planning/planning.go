@@ -116,7 +116,7 @@ func RenderDraftMarkdown(args map[string]any) string {
 }
 
 func PlanningID(title string, runID string) string {
-	return SafeFileStem(title) + "-" + SafeRunID(runID)
+	return SafeRunID(runID) + "_planning"
 }
 
 func PlanningFile(chatsDir string, planningID string) string {

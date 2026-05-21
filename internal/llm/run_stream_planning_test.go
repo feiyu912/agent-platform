@@ -50,8 +50,8 @@ func TestPlanningWriteArgumentsStreamPlanningDeltas(t *testing.T) {
 	})
 	stream.appendFinalPlanningDeltas("tool_plan", contracts.ToolExecutionResult{
 		Structured: map[string]any{
-			"planningId":   "Streaming-Plan-run_1",
-			"planningFile": filepath.Join(chatsDir, "plans", "Streaming-Plan-run_1.md"),
+			"planningId":   "run_1_planning",
+			"planningFile": filepath.Join(chatsDir, "plans", "run_1_planning.md"),
 			"title":        "Streaming Plan",
 			"status":       "ready",
 			"markdown":     markdown,
