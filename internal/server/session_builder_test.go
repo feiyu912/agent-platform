@@ -190,6 +190,32 @@ func TestBuildQuerySessionPlanningModeOnlyAppliesToCoder(t *testing.T) {
 		t.Fatalf("did not expect non-CODER planning mode")
 	}
 
+	disabledSession, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey: "coder-app",
+		ChatID:   "chat-disabled",
+		RunID:    "run-disabled",
+	}, chat.Summary{ChatID: "chat-disabled"}, coderDef, querySessionBuildOptions{})
+	if err != nil {
+		t.Fatalf("build disabled session: %v", err)
+	}
+	if disabledSession.PlanningMode {
+		t.Fatalf("did not expect CODER planning mode without top-level planningMode")
+	}
+
+	disabledFlag := false
+	falseSession, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey:     "coder-app",
+		ChatID:       "chat-false",
+		RunID:        "run-false",
+		PlanningMode: &disabledFlag,
+	}, chat.Summary{ChatID: "chat-false"}, coderDef, querySessionBuildOptions{})
+	if err != nil {
+		t.Fatalf("build false session: %v", err)
+	}
+	if falseSession.PlanningMode {
+		t.Fatalf("did not expect CODER planning mode with planningMode=false")
+	}
+
 	paramsSession, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
 		AgentKey: "coder-app",
 		ChatID:   "chat-params",
@@ -199,7 +225,7 @@ func TestBuildQuerySessionPlanningModeOnlyAppliesToCoder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build params session: %v", err)
 	}
-	if !paramsSession.PlanningMode {
-		t.Fatalf("expected params.planningMode compatibility fallback")
+	if paramsSession.PlanningMode {
+		t.Fatalf("did not expect params.planningMode to enable planning mode")
 	}
 }

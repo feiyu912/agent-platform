@@ -116,7 +116,7 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		ModelKey:               agentDef.ModelKey,
 		ToolNames:              buildSessionToolNames(effectiveAgentTools(agentDef), options.AllowInvokeAgents),
 		Mode:                   agentDef.Mode,
-		PlanningMode:           requestPlanningModeEnabled(req) && strings.EqualFold(agentDef.Type, catalog.AgentTypeCoder),
+		PlanningMode:           req.PlanningMode != nil && *req.PlanningMode && strings.EqualFold(agentDef.Type, catalog.AgentTypeCoder),
 		ReactMaxSteps:          agentDef.ReactMaxSteps,
 		TeamID:                 req.TeamID,
 		Created:                options.Created,

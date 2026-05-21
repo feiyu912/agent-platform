@@ -808,9 +808,6 @@ func (s *Server) buildAgentDetailMeta(def catalog.AgentDefinition) (string, map[
 	if strings.TrimSpace(def.Type) != "" {
 		meta["type"] = def.Type
 	}
-	if strings.EqualFold(def.Type, catalog.AgentTypeCoder) {
-		meta["planningModeSupported"] = true
-	}
 	if strings.TrimSpace(def.Workspace.Root) != "" {
 		meta["workspace"] = map[string]any{
 			"root": def.Workspace.Root,

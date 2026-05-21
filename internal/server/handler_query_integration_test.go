@@ -968,6 +968,9 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 		}
 	}
 	body := streamBody.String()
+	if !strings.Contains(body, `"type":"request.query"`) || !strings.Contains(body, `"planningMode":true`) {
+		t.Fatalf("expected live request.query planningMode=true, got %s", body)
+	}
 	planIndex := strings.Index(body, `"type":"plan.update"`)
 	confirmIndex := strings.Index(body, `是否按此计划执行？`)
 	taskStartIndex := strings.Index(body, `"type":"task.start"`)
@@ -983,6 +986,7 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	if got := providerCallCount.Load(); got != 6 {
 		t.Fatalf("provider calls = %d, want 6", got)
 	}
+	assertPersistedPlanningModeRequestQuery(t, fixture.server)
 }
 
 func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
@@ -1131,6 +1135,32 @@ func submitFrontendAnswer(t *testing.T, server http.Handler, runID string, await
 	if !response.Data.Accepted || response.Data.Status != "accepted" {
 		t.Fatalf("expected accepted submit, got %#v", response.Data)
 	}
+}
+
+func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) {
+	t.Helper()
+	chatsRec := httptest.NewRecorder()
+	server.ServeHTTP(chatsRec, httptest.NewRequest(http.MethodGet, "/api/chats", nil))
+	var chatsResp api.ApiResponse[[]api.ChatSummaryResponse]
+	if err := json.Unmarshal(chatsRec.Body.Bytes(), &chatsResp); err != nil {
+		t.Fatalf("decode chats response: %v", err)
+	}
+	if len(chatsResp.Data) != 1 {
+		t.Fatalf("expected one chat, got %#v", chatsResp.Data)
+	}
+
+	chatRec := httptest.NewRecorder()
+	server.ServeHTTP(chatRec, httptest.NewRequest(http.MethodGet, "/api/chat?chatId="+chatsResp.Data[0].ChatID, nil))
+	var chatResp api.ApiResponse[api.ChatDetailResponse]
+	if err := json.Unmarshal(chatRec.Body.Bytes(), &chatResp); err != nil {
+		t.Fatalf("decode chat response: %v", err)
+	}
+	for _, event := range chatResp.Data.Events {
+		if event.Type == "request.query" && event.Value("planningMode") == true {
+			return
+		}
+	}
+	t.Fatalf("expected persisted request.query planningMode=true, got %#v", chatResp.Data.Events)
 }
 
 func TestQueryPersistsToolSnapshotWhenStreamToolPayloadEventsDisabled(t *testing.T) {

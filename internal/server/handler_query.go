@@ -28,16 +28,6 @@ func isHiddenRequest(req api.QueryRequest) bool {
 	return req.Hidden != nil && *req.Hidden
 }
 
-func requestPlanningModeEnabled(req api.QueryRequest) bool {
-	if req.PlanningMode != nil {
-		return *req.PlanningMode
-	}
-	if req.Params == nil {
-		return false
-	}
-	return contracts.AnyBoolNode(req.Params["planningMode"])
-}
-
 type preparedQuery struct {
 	req                api.QueryRequest
 	summary            chat.Summary
@@ -441,6 +431,7 @@ func (s *Server) newAssemblerAndMapper(prepared preparedQuery) (*stream.StreamEv
 		Role:               defaultRole(prepared.req.Role),
 		References:         prepared.req.References,
 		Params:             prepared.req.Params,
+		PlanningMode:       prepared.session.PlanningMode,
 		Created:            prepared.created,
 		MemoryUsageSummary: memoryUsageEventPayload(prepared.memoryUsageSummary, prepared.req.ChatID, prepared.req.RunID, prepared.req.AgentKey),
 	})

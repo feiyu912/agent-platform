@@ -91,6 +91,24 @@ func TestAssemblerBootstrapIncludesOptionalQueryContext(t *testing.T) {
 	}
 }
 
+func TestAssemblerBootstrapIncludesPlanningModeWhenEnabled(t *testing.T) {
+	assembler := NewAssembler(StreamRequest{
+		RequestID:    "req_plan",
+		RunID:        "run_plan",
+		ChatID:       "chat_plan",
+		AgentKey:     "coder",
+		Message:      "plan first",
+		Role:         "user",
+		PlanningMode: true,
+	})
+
+	bootstrap := assembler.Bootstrap()
+	requestQuery := bootstrap[0].ToData()
+	if requestQuery["planningMode"] != true {
+		t.Fatalf("expected request.query planningMode=true, got %#v", requestQuery)
+	}
+}
+
 func TestAssemblerBootstrapOmitsEmptyQueryContext(t *testing.T) {
 	assembler := NewAssembler(StreamRequest{
 		RequestID:  "req_4",
@@ -111,6 +129,9 @@ func TestAssemblerBootstrapOmitsEmptyQueryContext(t *testing.T) {
 	}
 	if _, ok := requestQuery["params"]; ok {
 		t.Fatalf("expected empty params to be omitted, got %#v", requestQuery)
+	}
+	if _, ok := requestQuery["planningMode"]; ok {
+		t.Fatalf("expected planningMode to be omitted when disabled, got %#v", requestQuery)
 	}
 }
 

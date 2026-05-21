@@ -157,8 +157,8 @@ func TestBuildAgentDetailResponseIncludesTypeAndWorkspace(t *testing.T) {
 	if !ok || workspaceMeta["root"] != workspace {
 		t.Fatalf("expected workspace meta root, got %#v", response.Meta)
 	}
-	if response.Meta["planningModeSupported"] != true {
-		t.Fatalf("expected planningModeSupported meta, got %#v", response.Meta)
+	if _, ok := response.Meta["planningModeSupported"]; ok {
+		t.Fatalf("did not expect planningModeSupported meta, got %#v", response.Meta)
 	}
 	if len(response.Controls) != 0 {
 		t.Fatalf("expected no implicit planningMode control, got %#v", response.Controls)

@@ -142,14 +142,13 @@ type SubmitResponse struct {
 }
 
 type SteerRequest struct {
-	RequestID    string `json:"requestId,omitempty"`
-	ChatID       string `json:"chatId,omitempty"`
-	RunID        string `json:"runId"`
-	SteerID      string `json:"steerId,omitempty"`
-	AgentKey     string `json:"agentKey,omitempty"`
-	TeamID       string `json:"teamId,omitempty"`
-	Message      string `json:"message"`
-	PlanningMode *bool  `json:"planningMode,omitempty"`
+	RequestID string `json:"requestId,omitempty"`
+	ChatID    string `json:"chatId,omitempty"`
+	RunID     string `json:"runId"`
+	SteerID   string `json:"steerId,omitempty"`
+	AgentKey  string `json:"agentKey,omitempty"`
+	TeamID    string `json:"teamId,omitempty"`
+	Message   string `json:"message"`
 }
 
 type SteerResponse struct {
@@ -161,13 +160,12 @@ type SteerResponse struct {
 }
 
 type InterruptRequest struct {
-	RequestID    string `json:"requestId,omitempty"`
-	ChatID       string `json:"chatId,omitempty"`
-	RunID        string `json:"runId"`
-	AgentKey     string `json:"agentKey,omitempty"`
-	TeamID       string `json:"teamId,omitempty"`
-	Message      string `json:"message,omitempty"`
-	PlanningMode *bool  `json:"planningMode,omitempty"`
+	RequestID string `json:"requestId,omitempty"`
+	ChatID    string `json:"chatId,omitempty"`
+	RunID     string `json:"runId"`
+	AgentKey  string `json:"agentKey,omitempty"`
+	TeamID    string `json:"teamId,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type InterruptResponse struct {
