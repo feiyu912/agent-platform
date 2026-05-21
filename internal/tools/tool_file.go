@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -142,7 +143,7 @@ func (t *RuntimeToolExecutor) invokeRead(args map[string]any, execCtx *Execution
 	return structuredResult(payload), nil
 }
 
-func (t *RuntimeToolExecutor) invokeWrite(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
+func (t *RuntimeToolExecutor) invokeWrite(ctx context.Context, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
 	accessCfg := t.sessionFileToolsConfig(filetools.WriteAccess, execCtx)
 	access, err := filetools.BuildAccessPlan(accessCfg, filetools.WriteAccess, stringArg(args, "file_path"))
 	if err != nil {
@@ -200,10 +201,17 @@ func (t *RuntimeToolExecutor) invokeWrite(args map[string]any, execCtx *Executio
 			recordReadSnapshot(execCtx, plan.FilePath, info, after, 0, 0)
 		}
 	}
+	t.appendFileChangeHookResults(ctx, execCtx, payload, FileChangeEvent{
+		WorkspaceRoot: fileChangeWorkspaceRoot(execCtx),
+		FilePath:      plan.FilePath,
+		Operation:     "write",
+		ContentSHA256: after,
+		Content:       append([]byte(nil), plan.Content...),
+	})
 	return structuredResult(payload), nil
 }
 
-func (t *RuntimeToolExecutor) invokeEdit(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
+func (t *RuntimeToolExecutor) invokeEdit(ctx context.Context, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
 	accessCfg := t.sessionFileToolsConfig(filetools.WriteAccess, execCtx)
 	access, err := filetools.BuildAccessPlan(accessCfg, filetools.WriteAccess, stringArg(args, "file_path"))
 	if err != nil {
@@ -323,7 +331,43 @@ func (t *RuntimeToolExecutor) invokeEdit(args map[string]any, execCtx *Execution
 			recordReadSnapshot(execCtx, plan.FilePath, info, after, 0, 0)
 		}
 	}
+	t.appendFileChangeHookResults(ctx, execCtx, payload, FileChangeEvent{
+		WorkspaceRoot: fileChangeWorkspaceRoot(execCtx),
+		FilePath:      plan.FilePath,
+		Operation:     "edit",
+		ContentSHA256: after,
+		Content:       append([]byte(nil), updatedBytes...),
+	})
 	return structuredResult(payload), nil
+}
+
+func (t *RuntimeToolExecutor) appendFileChangeHookResults(ctx context.Context, execCtx *ExecutionContext, payload map[string]any, event FileChangeEvent) {
+	if t == nil || len(t.fileChangeHooks) == 0 || execCtx == nil {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(execCtx.Session.Mode), "CODER") {
+		return
+	}
+	if strings.TrimSpace(event.WorkspaceRoot) == "" {
+		return
+	}
+	results := make([]FileChangeHookResult, 0, len(t.fileChangeHooks))
+	for _, hook := range t.fileChangeHooks {
+		if hook == nil {
+			continue
+		}
+		results = append(results, hook.AfterFileChange(ctx, event))
+	}
+	if len(results) > 0 {
+		payload["hooks"] = results
+	}
+}
+
+func fileChangeWorkspaceRoot(execCtx *ExecutionContext) string {
+	if execCtx == nil {
+		return ""
+	}
+	return filetools.SessionWorkspaceRoot(execCtx.Session)
 }
 
 func (t *RuntimeToolExecutor) sessionFileToolsConfig(mode filetools.AccessMode, execCtx *ExecutionContext) config.FileToolsConfig {

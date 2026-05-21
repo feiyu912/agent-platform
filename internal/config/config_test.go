@@ -565,6 +565,16 @@ func TestFileToolsConfigDefaultsDoNotInheritBashPaths(t *testing.T) {
 				if !cfg.FileTools.RequireReadBeforeWrite {
 					t.Fatalf("expected read-before-write enabled by default")
 				}
+				lsp := cfg.FileTools.Hooks.AfterFileChange.LSPDiagnostics
+				if !lsp.Enabled || lsp.TimeoutMs != 3000 {
+					t.Fatalf("unexpected default lsp diagnostics hook: %#v", lsp)
+				}
+				if strings.Join(lsp.Languages, ",") != "go,typescript,javascript,python,rust" {
+					t.Fatalf("unexpected default lsp languages: %#v", lsp.Languages)
+				}
+				if lsp.Servers["go"].Command != "gopls" {
+					t.Fatalf("unexpected default go lsp server: %#v", lsp.Servers["go"])
+				}
 			})
 		})
 	})
@@ -605,6 +615,44 @@ func TestFileToolsConfigYAMLOverrides(t *testing.T) {
 			}
 			if cfg.FileTools.RequireReadBeforeWrite {
 				t.Fatalf("expected read-before-write disabled from yaml")
+			}
+		})
+	})
+}
+
+func TestFileToolsConfigLSPHookYAMLOverrides(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"hooks:\n" +
+			"  after-file-change:\n" +
+			"    lsp-diagnostics:\n" +
+			"      enabled: false\n" +
+			"      timeout-ms: 42\n" +
+			"      languages: [\"go\", \"python\"]\n" +
+			"      servers:\n" +
+			"        go:\n" +
+			"          command: custom-gopls\n" +
+			"          args: [\"serve\"]\n"
+		withProjectFileContents(t, filepath.Join("configs", "file-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			lsp := cfg.FileTools.Hooks.AfterFileChange.LSPDiagnostics
+			if lsp.Enabled {
+				t.Fatalf("expected lsp diagnostics hook disabled from yaml")
+			}
+			if lsp.TimeoutMs != 42 {
+				t.Fatalf("unexpected timeout: %d", lsp.TimeoutMs)
+			}
+			if strings.Join(lsp.Languages, ",") != "go,python" {
+				t.Fatalf("unexpected languages: %#v", lsp.Languages)
+			}
+			if got := lsp.Servers["go"]; got.Command != "custom-gopls" || strings.Join(got.Args, ",") != "serve" {
+				t.Fatalf("unexpected go server: %#v", got)
+			}
+			if got := lsp.Servers["typescript"]; got.Command != "typescript-language-server" {
+				t.Fatalf("expected default typescript server to remain, got %#v", got)
 			}
 		})
 	})

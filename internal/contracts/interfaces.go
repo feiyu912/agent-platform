@@ -39,6 +39,47 @@ type ToolExecutor interface {
 	Invoke(ctx context.Context, toolName string, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error)
 }
 
+type FileChangeHook interface {
+	AfterFileChange(ctx context.Context, event FileChangeEvent) FileChangeHookResult
+}
+
+type FileChangeEvent struct {
+	WorkspaceRoot string
+	FilePath      string
+	Operation     string
+	LanguageID    string
+	ContentSHA256 string
+	Content       []byte
+}
+
+type FileChangeHookResult struct {
+	Name        string          `json:"name,omitempty"`
+	Status      string          `json:"status,omitempty"`
+	LanguageID  string          `json:"languageId,omitempty"`
+	FilePath    string          `json:"filePath,omitempty"`
+	Diagnostics []LSPDiagnostic `json:"diagnostics,omitempty"`
+	Reason      string          `json:"reason,omitempty"`
+	Message     string          `json:"message,omitempty"`
+}
+
+type LSPDiagnostic struct {
+	Severity string   `json:"severity,omitempty"`
+	Message  string   `json:"message,omitempty"`
+	Source   string   `json:"source,omitempty"`
+	Code     string   `json:"code,omitempty"`
+	Range    LSPRange `json:"range"`
+}
+
+type LSPRange struct {
+	Start LSPPosition `json:"start"`
+	End   LSPPosition `json:"end"`
+}
+
+type LSPPosition struct {
+	Line      int `json:"line"`
+	Character int `json:"character"`
+}
+
 type ActionInvoker interface {
 	Invoke(ctx context.Context, actionName string, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error)
 }

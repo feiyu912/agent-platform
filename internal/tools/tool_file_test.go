@@ -291,7 +291,7 @@ func TestInvokeWriteRequiresApprovalByDefault(t *testing.T) {
 	root := t.TempDir()
 	executor := fileToolExecutor(root, true)
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"content":     "hello",
 		"description": "写入 owner 文档",
@@ -317,7 +317,7 @@ func TestInvokeWriteInsideSessionWorkspaceBypassesWriteApproval(t *testing.T) {
 		},
 	}}
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"content":     "hello",
 		"description": "写入 workspace 文件",
@@ -343,7 +343,7 @@ func TestInvokeWriteOutsideSessionWorkspaceRequiresPathApproval(t *testing.T) {
 	executor := fileToolExecutor(root, true)
 	execCtx := &contracts.ExecutionContext{Session: contracts.QuerySession{WorkspaceRoot: root}}
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   filepath.Join(outside, "owner.md"),
 		"content":     "hello",
 		"description": "写入 workspace 外文件",
@@ -371,7 +371,7 @@ func TestInvokeWriteConsumesExactApprovalAndCreatesParents(t *testing.T) {
 	execCtx := &contracts.ExecutionContext{}
 	filetools.RegisterExactWriteApproval(execCtx, plan.Fingerprint)
 
-	result, err := executor.invokeWrite(args, execCtx)
+	result, err := executor.invokeWrite(context.Background(), args, execCtx)
 	if err != nil {
 		t.Fatalf("invokeWrite: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestInvokeWriteUsesPrefixApproval(t *testing.T) {
 	execCtx := &contracts.ExecutionContext{}
 	filetools.RegisterRuleWriteApproval(execCtx, plan.RuleKey)
 
-	result, err := executor.invokeWrite(args, execCtx)
+	result, err := executor.invokeWrite(context.Background(), args, execCtx)
 	if err != nil {
 		t.Fatalf("invokeWrite: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestInvokeWritePathEscapeRequiresApproval(t *testing.T) {
 	}
 	executor := fileToolExecutor(root, false)
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   filepath.Join("link", "owner.md"),
 		"content":     "hello",
 		"description": "写入 owner 文档",
@@ -451,7 +451,7 @@ func TestInvokeWriteDoesNotUseSessionReadRootsForPathApproval(t *testing.T) {
 		},
 	}}
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   filepath.Join(agentDir, "AGENTS.md"),
 		"content":     "new",
 		"description": "写入 agent 文档",
@@ -480,7 +480,7 @@ func TestInvokeWriteConsumesExactPathApprovalBeforeWriting(t *testing.T) {
 	execCtx := &contracts.ExecutionContext{}
 	filetools.RegisterExactAccessApproval(execCtx, plan.Fingerprint)
 
-	result, err := executor.invokeWrite(args, execCtx)
+	result, err := executor.invokeWrite(context.Background(), args, execCtx)
 	if err != nil {
 		t.Fatalf("invokeWrite: %v", err)
 	}
@@ -511,7 +511,7 @@ func TestInvokeWriteUsesRulePathApprovalBeforeWriting(t *testing.T) {
 	execCtx := &contracts.ExecutionContext{}
 	filetools.RegisterRuleAccessApproval(execCtx, plan.RuleKey)
 
-	result, err := executor.invokeWrite(args, execCtx)
+	result, err := executor.invokeWrite(context.Background(), args, execCtx)
 	if err != nil {
 		t.Fatalf("invokeWrite: %v", err)
 	}
@@ -540,6 +540,137 @@ func fileToolExecutor(root string, requireApproval bool) *RuntimeToolExecutor {
 	}
 }
 
+type recordingFileChangeHook struct {
+	events []contracts.FileChangeEvent
+	result contracts.FileChangeHookResult
+}
+
+func (h *recordingFileChangeHook) AfterFileChange(_ context.Context, event contracts.FileChangeEvent) contracts.FileChangeHookResult {
+	h.events = append(h.events, event)
+	return h.result
+}
+
+func TestInvokeWriteRunsFileChangeHookForCoderWorkspace(t *testing.T) {
+	root := t.TempDir()
+	hook := &recordingFileChangeHook{result: contracts.FileChangeHookResult{
+		Name:       "lsp_diagnostics",
+		Status:     "ok",
+		LanguageID: "go",
+		FilePath:   filepath.Join(root, "main.go"),
+		Diagnostics: []contracts.LSPDiagnostic{{
+			Severity: "error",
+			Message:  "bad package",
+		}},
+	}}
+	executor := fileToolExecutor(root, false).WithFileChangeHooks(hook)
+	execCtx := &contracts.ExecutionContext{Session: contracts.QuerySession{
+		Mode:          "CODER",
+		WorkspaceRoot: root,
+	}}
+
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
+		"file_path":   "main.go",
+		"content":     "package main\n",
+		"description": "写入 Go 文件",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected write success, got %#v", result)
+	}
+	if len(hook.events) != 1 {
+		t.Fatalf("expected one hook event, got %#v", hook.events)
+	}
+	event := hook.events[0]
+	if event.Operation != "write" || event.WorkspaceRoot != root || filepath.Base(event.FilePath) != "main.go" || string(event.Content) != "package main" {
+		t.Fatalf("unexpected hook event: %#v", event)
+	}
+	hooks, ok := result.Structured["hooks"].([]contracts.FileChangeHookResult)
+	if !ok || len(hooks) != 1 || hooks[0].Status != "ok" || len(hooks[0].Diagnostics) != 1 {
+		t.Fatalf("unexpected hook payload: %#v", result.Structured["hooks"])
+	}
+}
+
+func TestInvokeEditRunsFileChangeHookForCoderWorkspace(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "main.go")
+	if err := os.WriteFile(path, []byte("package bad\n"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	hook := &recordingFileChangeHook{result: contracts.FileChangeHookResult{Name: "lsp_diagnostics", Status: "ok"}}
+	executor := fileToolExecutor(root, false).WithFileChangeHooks(hook)
+	execCtx := &contracts.ExecutionContext{Session: contracts.QuerySession{
+		Mode:          "CODER",
+		WorkspaceRoot: root,
+	}}
+	if _, err := executor.invokeRead(map[string]any{"file_path": "main.go", "add_line_numbers": false}, execCtx); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	result, err := executor.invokeEdit(context.Background(), map[string]any{
+		"file_path":   "main.go",
+		"old_string":  "bad",
+		"new_string":  "main",
+		"description": "编辑 Go 文件",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeEdit: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected edit success, got %#v", result)
+	}
+	if len(hook.events) != 1 || hook.events[0].Operation != "edit" || string(hook.events[0].Content) != "package main\n" {
+		t.Fatalf("unexpected hook events: %#v", hook.events)
+	}
+}
+
+func TestFileChangeHookSkipsNonCoderMissingWorkspaceAndFailedWrite(t *testing.T) {
+	root := t.TempDir()
+	hook := &recordingFileChangeHook{result: contracts.FileChangeHookResult{Name: "lsp_diagnostics", Status: "ok"}}
+	executor := fileToolExecutor(root, false).WithFileChangeHooks(hook)
+
+	if _, err := executor.invokeWrite(context.Background(), map[string]any{
+		"file_path":   "notes.txt",
+		"content":     "hello",
+		"description": "写入普通文件",
+	}, &contracts.ExecutionContext{Session: contracts.QuerySession{Mode: "REACT", WorkspaceRoot: root}}); err != nil {
+		t.Fatalf("invokeWrite non coder: %v", err)
+	}
+	if len(hook.events) != 0 {
+		t.Fatalf("expected non-CODER write to skip hooks, got %#v", hook.events)
+	}
+
+	if _, err := executor.invokeWrite(context.Background(), map[string]any{
+		"file_path":   "notes2.txt",
+		"content":     "hello",
+		"description": "写入普通文件",
+	}, &contracts.ExecutionContext{Session: contracts.QuerySession{Mode: "CODER"}}); err != nil {
+		t.Fatalf("invokeWrite missing workspace: %v", err)
+	}
+	if len(hook.events) != 0 {
+		t.Fatalf("expected missing workspace to skip hooks, got %#v", hook.events)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "existing.txt"), []byte("old"), 0o644); err != nil {
+		t.Fatalf("write existing fixture: %v", err)
+	}
+	failed, err := executor.invokeWrite(context.Background(), map[string]any{
+		"file_path":   "existing.txt",
+		"content":     "new",
+		"description": "写入已有文件",
+	}, &contracts.ExecutionContext{Session: contracts.QuerySession{Mode: "CODER", WorkspaceRoot: root}})
+	if err != nil {
+		t.Fatalf("invokeWrite failed write: %v", err)
+	}
+	if failed.ExitCode == 0 {
+		t.Fatalf("expected failed write, got %#v", failed)
+	}
+	if len(hook.events) != 0 {
+		t.Fatalf("expected failed write to skip hooks, got %#v", hook.events)
+	}
+}
+
 func TestInvokeWriteRejectsExistingFileThatWasNotRead(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "owner.md"), []byte("old"), 0o644); err != nil {
@@ -547,7 +678,7 @@ func TestInvokeWriteRejectsExistingFileThatWasNotRead(t *testing.T) {
 	}
 	executor := fileToolExecutor(root, false)
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"content":     "new",
 		"description": "写入 owner 文档",
@@ -576,7 +707,7 @@ func TestInvokeWriteRejectsFileModifiedSinceRead(t *testing.T) {
 		t.Fatalf("external write: %v", err)
 	}
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"content":     "new",
 		"description": "写入 owner 文档",
@@ -600,7 +731,7 @@ func TestInvokeWriteAllowsReadThenWriteAndRefreshesSnapshot(t *testing.T) {
 	if _, err := executor.invokeRead(map[string]any{"file_path": "owner.md", "add_line_numbers": false}, execCtx); err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"content":     "new",
 		"description": "写入 owner 文档",
@@ -632,7 +763,7 @@ func TestInvokeWriteAllowsConsecutiveWritesAfterSnapshotRefresh(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 	for _, content := range []string{"one", "two"} {
-		result, err := executor.invokeWrite(map[string]any{
+		result, err := executor.invokeWrite(context.Background(), map[string]any{
 			"file_path":   "owner.md",
 			"content":     content,
 			"description": "写入 owner 文档",
@@ -658,7 +789,7 @@ func TestInvokeWriteCanDisableReadBeforeWrite(t *testing.T) {
 	executor := fileToolExecutor(root, false)
 	executor.cfg.FileTools.RequireReadBeforeWrite = false
 
-	result, err := executor.invokeWrite(map[string]any{
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"content":     "new",
 		"description": "写入 owner 文档",
@@ -701,7 +832,7 @@ func TestInvokeEditReplacesUniqueStringAndRefreshesSnapshot(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 
-	result, err := executor.invokeEdit(map[string]any{
+	result, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "world",
 		"new_string":  "agent",
@@ -734,7 +865,7 @@ func TestInvokeEditReplaceAllAndMultipleMatchRejection(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 
-	rejected, err := executor.invokeEdit(map[string]any{
+	rejected, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "one",
 		"new_string":  "two",
@@ -747,7 +878,7 @@ func TestInvokeEditReplaceAllAndMultipleMatchRejection(t *testing.T) {
 		t.Fatalf("expected multiple match rejection, got %#v", rejected.Structured)
 	}
 
-	edited, err := executor.invokeEdit(map[string]any{
+	edited, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "one",
 		"new_string":  "two",
@@ -777,7 +908,7 @@ func TestInvokeEditRejectsMissingStringAndIdenticalStrings(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 
-	missing, err := executor.invokeEdit(map[string]any{
+	missing, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "absent",
 		"new_string":  "new",
@@ -790,7 +921,7 @@ func TestInvokeEditRejectsMissingStringAndIdenticalStrings(t *testing.T) {
 		t.Fatalf("expected missing string rejection, got %#v", missing.Structured)
 	}
 
-	same, err := executor.invokeEdit(map[string]any{
+	same, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "hello",
 		"new_string":  "hello",
@@ -809,7 +940,7 @@ func TestInvokeEditCreatesNewFileWithEmptyOldString(t *testing.T) {
 	executor := fileToolExecutor(root, false)
 	execCtx := &contracts.ExecutionContext{}
 
-	result, err := executor.invokeEdit(map[string]any{
+	result, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "new.md",
 		"old_string":  "",
 		"new_string":  "hello\n",
@@ -835,7 +966,7 @@ func TestInvokeEditRequiresReadForExistingFileAndRejectsExternalChanges(t *testi
 	executor := fileToolExecutor(root, false)
 	execCtx := &contracts.ExecutionContext{}
 
-	notRead, err := executor.invokeEdit(map[string]any{
+	notRead, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "old",
 		"new_string":  "new",
@@ -855,7 +986,7 @@ func TestInvokeEditRequiresReadForExistingFileAndRejectsExternalChanges(t *testi
 	if err := os.WriteFile(path, []byte("external\n"), 0o644); err != nil {
 		t.Fatalf("external write: %v", err)
 	}
-	modified, err := executor.invokeEdit(map[string]any{
+	modified, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "external",
 		"new_string":  "new",
@@ -892,7 +1023,7 @@ func TestInvokeEditConsumesApprovalAndPreservesCRLF(t *testing.T) {
 	}
 	filetools.RegisterExactWriteApproval(execCtx, plan.Fingerprint)
 
-	result, err := executor.invokeEdit(args, execCtx)
+	result, err := executor.invokeEdit(context.Background(), args, execCtx)
 	if err != nil {
 		t.Fatalf("invokeEdit: %v", err)
 	}
@@ -924,7 +1055,7 @@ func TestInvokeEditInsideSessionWorkspaceBypassesWriteApproval(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 
-	result, err := executor.invokeEdit(map[string]any{
+	result, err := executor.invokeEdit(context.Background(), map[string]any{
 		"file_path":   "owner.md",
 		"old_string":  "old",
 		"new_string":  "new",

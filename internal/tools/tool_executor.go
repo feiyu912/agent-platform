@@ -26,6 +26,7 @@ type RuntimeToolExecutor struct {
 	memory          memory.Store
 	skillCandidates skills.CandidateStore
 	artifactPusher  ArtifactPusher
+	fileChangeHooks []FileChangeHook
 	defs            []api.ToolDetailResponse
 }
 
@@ -63,6 +64,13 @@ func (t *RuntimeToolExecutor) WithArtifactPusher(pusher ArtifactPusher) *Runtime
 	return t
 }
 
+func (t *RuntimeToolExecutor) WithFileChangeHooks(hooks ...FileChangeHook) *RuntimeToolExecutor {
+	if t != nil {
+		t.fileChangeHooks = append([]FileChangeHook(nil), hooks...)
+	}
+	return t
+}
+
 func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
 	if execCtx != nil && execCtx.ReadFileState == nil {
 		execCtx.ReadFileState = map[string]ReadFileSnapshot{}
@@ -79,9 +87,9 @@ func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args 
 	case "file_read":
 		return t.invokeRead(args, execCtx)
 	case "file_write":
-		return t.invokeWrite(args, execCtx)
+		return t.invokeWrite(ctx, args, execCtx)
 	case "file_edit":
-		return t.invokeEdit(args, execCtx)
+		return t.invokeEdit(ctx, args, execCtx)
 	case "file_grep":
 		return t.invokeGrep(ctx, args, execCtx)
 	case "plan_add_tasks":

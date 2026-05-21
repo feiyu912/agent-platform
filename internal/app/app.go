@@ -20,6 +20,7 @@ import (
 	"agent-platform/internal/frontendtools"
 	"agent-platform/internal/gateway"
 	"agent-platform/internal/llm"
+	"agent-platform/internal/lsp"
 	"agent-platform/internal/mcp"
 	"agent-platform/internal/memory"
 	"agent-platform/internal/models"
@@ -45,6 +46,7 @@ type App struct {
 	gateways           *gateway.Registry
 	wsHub              *ws.Hub
 	scheduleExecutions *schedule.ExecutionStore
+	lspManager         *lsp.Manager
 }
 
 type schedulerStopper interface {
@@ -134,6 +136,11 @@ func New(rootCtx context.Context) (*App, error) {
 	backendTools, err := tools.NewRuntimeToolExecutor(cfg, sandboxClient, chatStore, memoryStore, skillCandidateStore)
 	if err != nil {
 		return nil, fmt.Errorf("init runtime tools: %w", err)
+	}
+	var lspManager *lsp.Manager
+	if cfg.FileTools.Hooks.AfterFileChange.LSPDiagnostics.Enabled {
+		lspManager = lsp.NewManager(cfg.FileTools.Hooks.AfterFileChange.LSPDiagnostics)
+		backendTools.WithFileChangeHooks(lspManager)
 	}
 	// artifactPusher 在下面 notifications 就绪后再接入 backendTools，
 	// 这样它发出的 push frame 能走到 WS hub，转给网关做 artifact 预告。
@@ -328,6 +335,7 @@ func New(rootCtx context.Context) (*App, error) {
 		gateways:           gwRegistry,
 		wsHub:              wsHub,
 		scheduleExecutions: scheduleExecutionStore,
+		lspManager:         lspManager,
 	}, nil
 }
 
@@ -358,6 +366,11 @@ func (a *App) Close() error {
 	if a.scheduleExecutions != nil {
 		if err := a.scheduleExecutions.Close(); err != nil {
 			log.Printf("close schedule execution store: %v", err)
+		}
+	}
+	if a.lspManager != nil {
+		if err := a.lspManager.Close(); err != nil {
+			log.Printf("close lsp manager: %v", err)
 		}
 	}
 	if err := observability.CloseMemoryLogger(); err != nil {

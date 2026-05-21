@@ -24,3 +24,27 @@ require-write-approval: true
 
 # file_write / file_edit 前必须先 file_read，防止基于陈旧视图覆盖。
 require-read-before-write: true
+
+# 文件变更后自动 hook。v1 只收集 LSP diagnostics，不自动格式化或回滚写入。
+hooks:
+  after-file-change:
+    lsp-diagnostics:
+      enabled: true
+      timeout-ms: 3000
+      languages: ["go", "typescript", "javascript", "python", "rust"]
+      servers:
+        go:
+          command: gopls
+          args: []
+        typescript:
+          command: typescript-language-server
+          args: ["--stdio"]
+        javascript:
+          command: typescript-language-server
+          args: ["--stdio"]
+        python:
+          command: pyright-langserver
+          args: ["--stdio"]
+        rust:
+          command: rust-analyzer
+          args: []

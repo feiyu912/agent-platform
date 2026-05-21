@@ -263,6 +263,27 @@ type FileToolsConfig struct {
 	MaxBatchOps            int
 	RequireWriteApproval   bool
 	RequireReadBeforeWrite bool
+	Hooks                  FileToolsHooksConfig
+}
+
+type FileToolsHooksConfig struct {
+	AfterFileChange FileAfterChangeHooksConfig
+}
+
+type FileAfterChangeHooksConfig struct {
+	LSPDiagnostics LSPDiagnosticsHookConfig
+}
+
+type LSPDiagnosticsHookConfig struct {
+	Enabled   bool
+	TimeoutMs int
+	Languages []string
+	Servers   map[string]LSPServerConfig
+}
+
+type LSPServerConfig struct {
+	Command string
+	Args    []string
 }
 
 type BashHITLConfig struct {
@@ -572,6 +593,11 @@ func defaultConfig() Config {
 			MaxBatchOps:            20,
 			RequireWriteApproval:   true,
 			RequireReadBeforeWrite: true,
+			Hooks: FileToolsHooksConfig{
+				AfterFileChange: FileAfterChangeHooksConfig{
+					LSPDiagnostics: defaultLSPDiagnosticsHookConfig(),
+				},
+			},
 		},
 		BashHITL: BashHITLConfig{
 			DefaultTimeoutMs: 120000,
@@ -693,6 +719,113 @@ func (c *Config) applyFileToolsFile(path string) {
 	c.FileTools.MaxBatchOps = intValue(anyValue(values["max-batch-ops"], c.FileTools.MaxBatchOps), c.FileTools.MaxBatchOps)
 	c.FileTools.RequireWriteApproval = boolValue(anyValue(values["require-write-approval"], c.FileTools.RequireWriteApproval), c.FileTools.RequireWriteApproval)
 	c.FileTools.RequireReadBeforeWrite = boolValue(anyValue(values["require-read-before-write"], c.FileTools.RequireReadBeforeWrite), c.FileTools.RequireReadBeforeWrite)
+	c.FileTools.Hooks = parseFileToolsHooksConfig(values["hooks"], c.FileTools.Hooks)
+}
+
+func defaultLSPDiagnosticsHookConfig() LSPDiagnosticsHookConfig {
+	return LSPDiagnosticsHookConfig{
+		Enabled:   true,
+		TimeoutMs: 3000,
+		Languages: []string{"go", "typescript", "javascript", "python", "rust"},
+		Servers: map[string]LSPServerConfig{
+			"go":         {Command: "gopls"},
+			"typescript": {Command: "typescript-language-server", Args: []string{"--stdio"}},
+			"javascript": {Command: "typescript-language-server", Args: []string{"--stdio"}},
+			"python":     {Command: "pyright-langserver", Args: []string{"--stdio"}},
+			"rust":       {Command: "rust-analyzer"},
+		},
+	}
+}
+
+func parseFileToolsHooksConfig(raw any, fallback FileToolsHooksConfig) FileToolsHooksConfig {
+	values, _ := raw.(map[string]any)
+	if len(values) == 0 {
+		return fallback
+	}
+	after, _ := values["after-file-change"].(map[string]any)
+	if len(after) == 0 {
+		return fallback
+	}
+	lspValues, _ := after["lsp-diagnostics"].(map[string]any)
+	if len(lspValues) == 0 {
+		return fallback
+	}
+	cfg := fallback.AfterFileChange.LSPDiagnostics
+	cfg.Enabled = boolValue(anyValue(lspValues["enabled"], cfg.Enabled), cfg.Enabled)
+	cfg.TimeoutMs = intValue(anyValue(lspValues["timeout-ms"], cfg.TimeoutMs), cfg.TimeoutMs)
+	cfg.Languages = csvOrList(anyValue(lspValues["languages"], cfg.Languages), cfg.Languages)
+	cfg.Servers = parseLSPServerConfigs(lspValues["servers"], cfg.Servers)
+	fallback.AfterFileChange.LSPDiagnostics = cfg
+	return fallback
+}
+
+func parseLSPServerConfigs(raw any, fallback map[string]LSPServerConfig) map[string]LSPServerConfig {
+	out := cloneLSPServerConfigs(fallback)
+	values, _ := raw.(map[string]any)
+	if len(values) == 0 {
+		return out
+	}
+	for key, rawValue := range values {
+		languageID := strings.ToLower(strings.TrimSpace(key))
+		if languageID == "" {
+			continue
+		}
+		serverValues, _ := rawValue.(map[string]any)
+		if len(serverValues) == 0 {
+			continue
+		}
+		cfg := out[languageID]
+		cfg.Command = stringValue(anyValue(serverValues["command"], cfg.Command), cfg.Command)
+		cfg.Args = csvOrList(anyValue(serverValues["args"], cfg.Args), cfg.Args)
+		out[languageID] = cfg
+	}
+	return out
+}
+
+func cloneLSPServerConfigs(src map[string]LSPServerConfig) map[string]LSPServerConfig {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]LSPServerConfig, len(src))
+	for key, value := range src {
+		value.Args = append([]string(nil), value.Args...)
+		out[strings.ToLower(strings.TrimSpace(key))] = value
+	}
+	return out
+}
+
+func normalizeLSPDiagnosticsHookConfig(cfg LSPDiagnosticsHookConfig) LSPDiagnosticsHookConfig {
+	defaults := defaultLSPDiagnosticsHookConfig()
+	if cfg.TimeoutMs <= 0 {
+		cfg.TimeoutMs = defaults.TimeoutMs
+	}
+	if len(cfg.Languages) == 0 {
+		cfg.Languages = append([]string(nil), defaults.Languages...)
+	}
+	cfg.Languages = normalizeLanguageIDs(cfg.Languages)
+	if len(cfg.Servers) == 0 {
+		cfg.Servers = cloneLSPServerConfigs(defaults.Servers)
+	} else {
+		cfg.Servers = cloneLSPServerConfigs(cfg.Servers)
+	}
+	return cfg
+}
+
+func normalizeLanguageIDs(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		languageID := strings.ToLower(strings.TrimSpace(value))
+		if languageID == "" {
+			continue
+		}
+		if _, ok := seen[languageID]; ok {
+			continue
+		}
+		seen[languageID] = struct{}{}
+		out = append(out, languageID)
+	}
+	return out
 }
 
 func (c *Config) applyCORSFile(path string) {
@@ -1000,6 +1133,7 @@ func (c *Config) normalize() error {
 	if c.FileTools.MaxBatchOps <= 0 {
 		c.FileTools.MaxBatchOps = 20
 	}
+	c.FileTools.Hooks.AfterFileChange.LSPDiagnostics = normalizeLSPDiagnosticsHookConfig(c.FileTools.Hooks.AfterFileChange.LSPDiagnostics)
 
 	if err := c.normalizeChannels(); err != nil {
 		return err
@@ -1310,10 +1444,13 @@ func splitCSV(raw string) []string {
 	if raw == "" {
 		return nil
 	}
+	if strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]") {
+		raw = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(raw, "["), "]"))
+	}
 	parts := strings.Split(raw, ",")
 	items := make([]string, 0, len(parts))
 	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
+		trimmed := strings.Trim(strings.TrimSpace(part), `"'`)
 		if trimmed != "" {
 			items = append(items, trimmed)
 		}
