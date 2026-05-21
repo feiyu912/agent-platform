@@ -138,7 +138,7 @@ contextConfig:
 
 CODER 是一等 agent mode，应写作 `mode: CODER`，不要使用旧的 `type: CODER`。CODER 默认使用 `bash`、`file_read`、`file_write`、`file_edit`、`file_grep`、`datetime`，并要求 `workspaceConfig.root` 为绝对路径。
 
-请求顶层 `planningMode: true` 只对 `mode: CODER` 生效：planning 阶段仅暴露 `file_read`、`file_grep`、`datetime`、`ask_user_question`、`plan_add_tasks`；用户确认后 execution 阶段再暴露 CODER 执行工具并追加 `plan_update_task`。
+请求顶层 `planningMode: true` 只对 `mode: CODER` 生效：planning 阶段仅暴露 `file_read`、`file_grep`、`datetime`、`ask_user_question`、`planning_write`；`planning_write` 会把标准 Markdown 规划写入 `CHATS_DIR/plans/<planningId>.md` 并触发 `planning.start` / `planning.delta` / `planning.snapshot` / `planning.end` 流事件。用户确认后 execution 阶段再暴露 CODER 执行工具，不追加 `plan_update_task`。
 
 ## Static Memory 与 Runtime Memory
 

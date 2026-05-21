@@ -113,6 +113,7 @@ func (s *FileStore) LoadRunTrace(chatID string, runID string) (RunTrace, error) 
 
 func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []map[string]any) (Detail, error) {
 	var plan *PlanState
+	var planning *PlanningState
 	var artifact *ArtifactState
 
 	runs := map[string]*chatRunData{}
@@ -341,6 +342,22 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				}
 				rd.events = append(rd.events, stream.EventDataFromMap(answer))
 			}
+		case "planning":
+			event, _ := line["event"].(map[string]any)
+			if len(event) == 0 {
+				continue
+			}
+			if _, ok := event["runId"]; !ok && runID != "" {
+				event["runId"] = runID
+			}
+			if _, ok := event["chatId"]; !ok && chatID != "" {
+				event["chatId"] = chatID
+			}
+			if nextPlanning := parsePlanningFromEvent(event); nextPlanning != nil {
+				planning = nextPlanning
+			}
+			rd := ensureRun(runs, &runOrder, runID)
+			rd.events = append(rd.events, stream.EventDataFromMap(event))
 		case "event", "steer":
 			event, _ := line["event"].(map[string]any)
 			if len(event) == 0 {
@@ -434,10 +451,30 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		RawMessages: rawMessages,
 		Events:      allEvents,
 		Plan:        plan,
+		Planning:    planning,
 		Artifact:    artifact,
 	}, nil
 }
 
 func taskToolIDFromLine(line map[string]any) string {
 	return stringFromAny(line["taskToolId"])
+}
+
+func parsePlanningFromEvent(event map[string]any) *PlanningState {
+	if len(event) == 0 {
+		return nil
+	}
+	planningID := strings.TrimSpace(stringFromAny(event["planningId"]))
+	planningFile := strings.TrimSpace(stringFromAny(event["planningFile"]))
+	if planningID == "" && planningFile == "" {
+		return nil
+	}
+	return &PlanningState{
+		PlanningID:   planningID,
+		PlanningFile: planningFile,
+		Title:        strings.TrimSpace(stringFromAny(event["title"])),
+		Status:       strings.TrimSpace(stringFromAny(event["status"])),
+		Markdown:     strings.TrimSpace(stringFromAny(event["markdown"])),
+		UpdatedAt:    int64FromAny(event["updatedAt"]),
+	}
 }

@@ -138,6 +138,45 @@ func TestDispatcherClosesContentBeforeTaskComplete(t *testing.T) {
 	}
 }
 
+func TestDispatcherEmitsPlanningLifecycle(t *testing.T) {
+	dispatcher := NewDispatcher(StreamRequest{
+		RequestID: "req_1",
+		RunID:     "run_1",
+		ChatID:    "chat_1",
+		AgentKey:  "coder",
+	})
+
+	start := dispatcher.Dispatch(PlanningStart{
+		PlanningID:   "plan-run_1",
+		PlanningFile: "/tmp/plan-run_1.md",
+		Title:        "Plan",
+		Status:       "started",
+	})
+	assertEventTypes(t, start, "planning.start")
+	if got := start[0].Data().String("planningId"); got != "plan-run_1" {
+		t.Fatalf("expected planningId, got %#v", start[0].ToData())
+	}
+
+	delta := dispatcher.Dispatch(PlanningDelta{
+		PlanningID: "plan-run_1",
+		Delta:      "# Plan",
+	})
+	assertEventTypes(t, delta, "planning.delta")
+
+	snapshot := dispatcher.Dispatch(PlanningSnapshot{
+		PlanningID: "plan-run_1",
+		Markdown:   "# Plan",
+	})
+	assertEventTypes(t, snapshot, "planning.snapshot")
+
+	end := dispatcher.Dispatch(PlanningEnd{
+		PlanningID: "plan-run_1",
+		Status:     "ready",
+		Markdown:   "# Plan",
+	})
+	assertEventTypes(t, end, "planning.end")
+}
+
 func TestDispatcherIncludesTaskIDOnDebugEvents(t *testing.T) {
 	dispatcher := NewDispatcher(StreamRequest{
 		RunID:  "run_1",

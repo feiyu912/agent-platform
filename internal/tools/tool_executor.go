@@ -90,6 +90,8 @@ func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args 
 		return t.invokePlanGetTasks(execCtx)
 	case "plan_update_task":
 		return t.invokePlanUpdateTask(args, execCtx)
+	case "planning_write":
+		return t.invokePlanningWrite(args, execCtx)
 	case "bash":
 		if execCtx != nil && hasRuntimeSandbox(execCtx.Session) {
 			if !t.cfg.ContainerHub.Enabled {

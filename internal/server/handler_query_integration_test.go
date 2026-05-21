@@ -873,28 +873,30 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 		case 3:
 			assertCoderPlanningToolSet(t, toolNames)
 			writeProviderSSE(t, w,
-				providerToolCallFrame(t, "tool_plan", "plan_add_tasks", map[string]any{
-					"tasks": []map[string]any{
-						{"taskId": "task_1", "description": "Check the current time before reporting"},
+				providerToolCallFrame(t, "tool_plan", "planning_write", map[string]any{
+					"title":      "Confirm Coder Plan",
+					"summary":    "Plan first, then check the current time before reporting.",
+					"keyChanges": []string{"Use datetime after confirmation"},
+					"steps":      []string{"Check the current time before reporting"},
+					"testPlan":   []string{"Verify the stream completes"},
+					"assumptions": []string{
+						"The user confirms before execution starts",
 					},
 				}),
 				`[DONE]`,
 			)
 		case 4:
-			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_grep", "datetime", "plan_update_task")
-			assertStringSliceExcludes(t, toolNames, "plan_add_tasks", "ask_user_question")
+			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_grep", "datetime")
+			assertStringSliceExcludes(t, toolNames, "plan_add_tasks", "planning_write", "ask_user_question", "plan_update_task")
 			writeProviderSSE(t, w,
 				providerToolCallFrame(t, "tool_time", "datetime", map[string]any{}),
 				`[DONE]`,
 			)
 		case 5:
-			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_grep", "datetime", "plan_update_task")
-			assertStringSliceExcludes(t, toolNames, "plan_add_tasks", "ask_user_question")
+			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_grep", "datetime")
+			assertStringSliceExcludes(t, toolNames, "plan_add_tasks", "planning_write", "ask_user_question", "plan_update_task")
 			writeProviderSSE(t, w,
-				providerToolCallFrame(t, "tool_done", "plan_update_task", map[string]any{
-					"taskId": "task_1",
-					"status": "completed",
-				}),
+				`{"choices":[{"delta":{"content":"execution completed"},"finish_reason":"stop"}]}`,
 				`[DONE]`,
 			)
 		case 6:
@@ -951,8 +953,8 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	if strings.Contains(streamBody.String(), `"type":"task.start"`) {
 		t.Fatalf("did not expect task.start before plan confirmation, got %s", streamBody.String())
 	}
-	if !strings.Contains(streamBody.String(), `"type":"plan.update"`) {
-		t.Fatalf("expected plan.update before confirmation, got %s", streamBody.String())
+	if !strings.Contains(streamBody.String(), `"type":"planning.end"`) || !strings.Contains(streamBody.String(), `"planningFile"`) {
+		t.Fatalf("expected planning.end before confirmation, got %s", streamBody.String())
 	}
 	submitFrontendAnswer(t, fixture.server, runID, confirmAwaitingID, "执行计划")
 
@@ -970,16 +972,16 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	if !strings.Contains(body, `"type":"request.query"`) || !strings.Contains(body, `"planningMode":true`) {
 		t.Fatalf("expected live request.query planningMode=true, got %s", body)
 	}
-	planIndex := strings.Index(body, `"type":"plan.update"`)
+	planIndex := strings.Index(body, `"type":"planning.end"`)
 	confirmIndex := strings.Index(body, `是否按此计划执行？`)
-	taskStartIndex := strings.Index(body, `"type":"task.start"`)
-	if !(planIndex >= 0 && confirmIndex > planIndex && taskStartIndex > confirmIndex) {
-		t.Fatalf("expected plan.update before confirmation and task.start after confirmation, got %s", body)
+	executionIndex := strings.Index(body, `execution completed`)
+	if !(planIndex >= 0 && confirmIndex > planIndex && executionIndex > confirmIndex) {
+		t.Fatalf("expected planning.end before confirmation and execution content after confirmation, got %s", body)
 	}
 	if !strings.Contains(body, `"answer":"执行计划"`) {
 		t.Fatalf("expected confirmation answer in stream, got %s", body)
 	}
-	if !strings.Contains(body, `"type":"task.complete"`) || !strings.Contains(body, "confirmed plan completed") {
+	if !strings.Contains(body, "execution completed") || !strings.Contains(body, "confirmed plan completed") {
 		t.Fatalf("expected confirmed execution to complete, got %s", body)
 	}
 	if got := providerCallCount.Load(); got != 6 {
@@ -1000,10 +1002,13 @@ func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
 		case 1:
 			assertCoderPlanningToolSet(t, providerRequestToolNames(payload["tools"]))
 			writeProviderSSE(t, w,
-				providerToolCallFrame(t, "tool_plan", "plan_add_tasks", map[string]any{
-					"tasks": []map[string]any{
-						{"taskId": "task_1", "description": "This task must not start"},
-					},
+				providerToolCallFrame(t, "tool_plan", "planning_write", map[string]any{
+					"title":       "Cancel Coder Plan",
+					"summary":     "Plan should be canceled before execution.",
+					"keyChanges":  []string{"No execution should start"},
+					"steps":       []string{"This task must not start"},
+					"testPlan":    []string{"Ensure no mutating tool is called"},
+					"assumptions": []string{"The user cancels at confirmation"},
 				}),
 				`[DONE]`,
 			)
@@ -1103,8 +1108,8 @@ func assertCoderPlanningToolSet(t *testing.T, got []string) {
 	if len(got) != 5 {
 		t.Fatalf("coder planning tools length=%d tools=%#v", len(got), got)
 	}
-	assertStringSliceContains(t, got, "file_read", "file_grep", "datetime", "ask_user_question", "plan_add_tasks")
-	assertStringSliceExcludes(t, got, "bash", "file_write", "file_edit", "desktop_action", "desktop_cdp", "agent_invoke", "plan_update_task")
+	assertStringSliceContains(t, got, "file_read", "file_grep", "datetime", "ask_user_question", "planning_write")
+	assertStringSliceExcludes(t, got, "bash", "file_write", "file_edit", "desktop_action", "desktop_cdp", "agent_invoke", "plan_add_tasks", "plan_update_task")
 }
 
 func awaitingQuestionText(payload map[string]any) string {
@@ -1155,6 +1160,23 @@ func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) 
 	}
 	for _, event := range chatResp.Data.Events {
 		if event.Type == "request.query" && event.Value("planningMode") == true {
+			planning, _ := chatResp.Data.Planning.(map[string]any)
+			if strings.TrimSpace(stringValue(planning["planningId"])) == "" || strings.TrimSpace(stringValue(planning["planningFile"])) == "" {
+				t.Fatalf("expected persisted planning state, got %#v", chatResp.Data.Planning)
+			}
+			if !strings.Contains(stringValue(planning["markdown"]), "## Summary") {
+				t.Fatalf("expected persisted planning markdown, got %#v", planning)
+			}
+			hasPlanningEnd := false
+			for _, ev := range chatResp.Data.Events {
+				if ev.Type == "planning.end" {
+					hasPlanningEnd = true
+					break
+				}
+			}
+			if !hasPlanningEnd {
+				t.Fatalf("expected replayed planning.end event, got %#v", chatResp.Data.Events)
+			}
 			return
 		}
 	}

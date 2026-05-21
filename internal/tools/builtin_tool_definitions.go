@@ -32,6 +32,7 @@ var requiredBuiltinToolNames = []string{
 	"plan_add_tasks",
 	"plan_get_tasks",
 	"plan_update_task",
+	"planning_write",
 	"bash_sandbox",
 	"ask_user_question",
 	"agent_invoke",

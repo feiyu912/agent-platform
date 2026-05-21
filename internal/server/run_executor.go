@@ -206,6 +206,9 @@ func isClientVisibleEvent(eventType string, streamCfg config.StreamConfig) bool 
 	if (eventType == "tool.args" || eventType == "tool.result") && !streamCfg.IncludeToolPayloadEvents {
 		return false
 	}
+	if eventType == "planning.snapshot" {
+		return true
+	}
 	return !strings.HasSuffix(eventType, ".snapshot")
 }
 

@@ -1,0 +1,42 @@
+name: planning_write
+label: 写入规划
+description: Write the CODER planning-mode Markdown plan. This tool is only available during CODER planning mode and must be called exactly once when the plan is ready for user confirmation.
+type: function
+clientVisible: false
+inputSchema:
+  type: object
+  properties:
+    title:
+      type: string
+      description: Required. Short title for the plan.
+    summary:
+      type: string
+      description: Required. Brief summary of the goal and intended outcome.
+    keyChanges:
+      type: array
+      description: Required. Important implementation changes or interface changes.
+      items:
+        type: string
+    steps:
+      type: array
+      description: Required. Ordered implementation steps.
+      items:
+        type: string
+    testPlan:
+      type: array
+      description: Required. Test cases and verification commands.
+      items:
+        type: string
+    assumptions:
+      type: array
+      description: Required. Assumptions, defaults, and out-of-scope notes.
+      items:
+        type: string
+  required:
+    - title
+    - summary
+    - keyChanges
+    - steps
+    - testPlan
+    - assumptions
+  additionalProperties: false

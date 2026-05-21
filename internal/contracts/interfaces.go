@@ -157,6 +157,7 @@ type ExecutionContext struct {
 	StageSettings     PlanExecuteSettings
 	RunLoopState      RunLoopState
 	PlanState         *PlanRuntimeState
+	PlanningState     *PlanningRuntimeState
 	ToolOverrides     map[string]api.ToolDetailResponse
 	// RuntimeEnvOverrides is reused by host bash as agent/skill-level env defaults.
 	RuntimeEnvOverrides map[string]string
@@ -288,6 +289,15 @@ type PlanRuntimeState struct {
 	PlanID       string
 	Tasks        []PlanTask
 	ActiveTaskID string
+}
+
+type PlanningRuntimeState struct {
+	PlanningID   string
+	PlanningFile string
+	Title        string
+	Markdown     string
+	Status       string
+	UpdatedAt    int64
 }
 
 type NoopToolExecutor struct{}

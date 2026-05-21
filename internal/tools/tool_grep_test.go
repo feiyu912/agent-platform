@@ -244,6 +244,42 @@ func TestFindBundledRipgrep(t *testing.T) {
 	}
 }
 
+func TestFindRipgrepPathPrefersBundledRipgrep(t *testing.T) {
+	root := t.TempDir()
+	binaryDir := filepath.Join(root, "backend")
+	binDir := filepath.Join(binaryDir, "bin")
+	pathDir := filepath.Join(root, "path")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundled bin dir: %v", err)
+	}
+	if err := os.MkdirAll(pathDir, 0o755); err != nil {
+		t.Fatalf("mkdir path dir: %v", err)
+	}
+	name := "rg"
+	if filepath.Ext(os.Args[0]) == ".exe" {
+		name = "rg.exe"
+	}
+	bundledPath := filepath.Join(binDir, name)
+	pathRg := filepath.Join(pathDir, name)
+	mustWriteFile(t, bundledPath, "#!/bin/sh\n")
+	mustWriteFile(t, pathRg, "#!/bin/sh\n")
+	if err := os.Chmod(bundledPath, 0o755); err != nil {
+		t.Fatalf("chmod bundled rg: %v", err)
+	}
+	if err := os.Chmod(pathRg, 0o755); err != nil {
+		t.Fatalf("chmod path rg: %v", err)
+	}
+	t.Setenv("PATH", pathDir)
+
+	got, err := findRipgrepPath(binaryDir, "rg")
+	if err != nil {
+		t.Fatalf("findRipgrepPath: %v", err)
+	}
+	if got != bundledPath {
+		t.Fatalf("expected bundled rg %s, got %s", bundledPath, got)
+	}
+}
+
 func requireRipgrep(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("rg"); err != nil {

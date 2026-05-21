@@ -164,14 +164,23 @@ func (t *RuntimeToolExecutor) invokeGrep(ctx context.Context, args map[string]an
 }
 
 func resolveRipgrepPath() (string, error) {
-	if path, err := exec.LookPath("rg"); err == nil {
-		return path, nil
-	}
 	exePath, err := os.Executable()
 	if err != nil {
-		return "", err
+		return findRipgrepPath("", "rg")
 	}
-	return findBundledRipgrep(filepath.Dir(exePath))
+	return findRipgrepPath(filepath.Dir(exePath), "rg")
+}
+
+func findRipgrepPath(binaryDir string, pathCommand string) (string, error) {
+	if strings.TrimSpace(binaryDir) != "" {
+		if path, err := findBundledRipgrep(binaryDir); err == nil {
+			return path, nil
+		}
+	}
+	if path, err := exec.LookPath(pathCommand); err == nil {
+		return path, nil
+	}
+	return "", exec.ErrNotFound
 }
 
 func findBundledRipgrep(binaryDir string) (string, error) {

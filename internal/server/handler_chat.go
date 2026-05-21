@@ -88,6 +88,9 @@ func (s *Server) loadChatDetail(ctx context.Context, chatID string, includeRawMe
 	if detail.Plan != nil {
 		response.Plan = detail.Plan
 	}
+	if detail.Planning != nil {
+		response.Planning = detail.Planning
+	}
 	if detail.Artifact != nil {
 		response.Artifact = detail.Artifact
 	}

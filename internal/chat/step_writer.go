@@ -38,6 +38,7 @@ type StepWriter struct {
 
 	messages       []StoredMessage
 	latestPlan     *PlanState
+	latestPlanning *PlanningState
 	latestArtifact *ArtifactState
 	taskBuffers    map[string]*taskStepBuffer
 	closedTaskIDs  map[string]bool
@@ -266,6 +267,10 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 
 	case "plan.create", "plan.update":
 		w.updatePlan(event)
+
+	case "planning.start", "planning.delta", "planning.snapshot", "planning.end":
+		w.updatePlanning(event)
+		w.appendTypedEventLine(event, "planning")
 
 	case "task.start":
 		w.flushCurrentStep()
@@ -694,6 +699,33 @@ func (w *StepWriter) updatePlan(event stream.EventData) {
 		})
 	}
 	w.latestPlan = plan
+}
+
+func (w *StepWriter) updatePlanning(event stream.EventData) {
+	if w.latestPlanning == nil {
+		w.latestPlanning = &PlanningState{}
+	}
+	if value := strings.TrimSpace(event.String("planningId")); value != "" {
+		w.latestPlanning.PlanningID = value
+	}
+	if value := strings.TrimSpace(event.String("planningFile")); value != "" {
+		w.latestPlanning.PlanningFile = value
+	}
+	if value := strings.TrimSpace(event.String("title")); value != "" {
+		w.latestPlanning.Title = value
+	}
+	if value := strings.TrimSpace(event.String("status")); value != "" {
+		w.latestPlanning.Status = value
+	}
+	if value := strings.TrimSpace(event.String("markdown")); value != "" {
+		w.latestPlanning.Markdown = value
+	}
+	if updatedAt := event.Value("updatedAt"); updatedAt != nil {
+		w.latestPlanning.UpdatedAt = int64FromAny(updatedAt)
+	}
+	if w.latestPlanning.UpdatedAt == 0 {
+		w.latestPlanning.UpdatedAt = event.Timestamp
+	}
 }
 
 func (w *StepWriter) updateArtifact(event stream.EventData) {

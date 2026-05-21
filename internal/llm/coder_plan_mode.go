@@ -16,7 +16,7 @@ var coderPlanningModePlanTools = []string{
 	"file_grep",
 	"datetime",
 	"ask_user_question",
-	"plan_add_tasks",
+	"planning_write",
 }
 
 const defaultCoderPlanningPrompt = `You are in CODER planning mode.
@@ -24,7 +24,7 @@ const defaultCoderPlanningPrompt = `You are in CODER planning mode.
 Planning rules:
 1. You may inspect files and ask the user questions, but you must not execute or mutate anything.
 2. Use ask_user_question whenever important intent, scope, or implementation choices are unclear.
-3. Create a concrete execution plan with plan_add_tasks when you have enough information.
+3. Create a concrete execution plan with planning_write when you have enough information.
 4. Do not claim execution has started. The backend will ask the user to confirm the plan before any execution tools are available.`
 
 type coderPlanningStream struct {
@@ -40,6 +40,7 @@ type coderPlanningStream struct {
 
 	taskIndex           int
 	planDone            bool
+	executionDone       bool
 	confirmationPending bool
 	confirmationDone    bool
 	summaryDone         bool
@@ -59,9 +60,6 @@ func newCoderPlanningStream(engine *LLMAgentEngine, ctx context.Context, req api
 		Budget:        NormalizeBudget(session.ResolvedBudget),
 		StageSettings: settings,
 		RunLoopState:  RunLoopStateIdle,
-		PlanState: &PlanRuntimeState{
-			PlanID: session.RunID + "_plan",
-		},
 	}
 	return &coderPlanningStream{
 		engine:   engine,
@@ -101,7 +99,7 @@ func (s *coderPlanningStream) Next() (AgentDelta, error) {
 		event, err := s.current.Next()
 		if err == io.EOF {
 			if llmStream, ok := s.current.(*llmRunStream); ok {
-				if !s.planDone || s.taskLifecycle {
+				if !s.planDone || !s.executionDone {
 					s.executeMessages = append(s.executeMessages, nonSystemMessages(llmStream.AccumulatedMessages())...)
 				}
 			}
@@ -137,8 +135,8 @@ func (s *coderPlanningStream) advance() error {
 	if !s.confirmationDone {
 		return nil
 	}
-	if s.taskIndex < len(s.execCtx.PlanState.Tasks) {
-		return s.advanceTaskExecution()
+	if !s.executionDone {
+		return s.startExecutionStage()
 	}
 	if !s.summaryDone {
 		return s.startSummaryStage()
@@ -176,17 +174,17 @@ func (s *coderPlanningStream) planningPrompt() string {
 	if desc := s.buildExecuteToolDescriptions(); desc != "" {
 		prompt += "\n\n" + desc
 	}
-	return prompt + "\n\nCreate an execution plan for the user's request. You MUST call plan_add_tasks before the planning phase finishes."
+	return prompt + "\n\nCreate a standard Markdown execution plan for the user's request. You MUST call planning_write before the planning phase finishes. The plan must include Summary, Key Changes, Plan, Test Plan, and Assumptions."
 }
 
 func (s *coderPlanningStream) afterStageEOF() error {
 	if !s.planDone {
 		s.planDone = true
-		if s.execCtx == nil || s.execCtx.PlanState == nil || len(s.execCtx.PlanState.Tasks) == 0 {
+		if s.execCtx == nil || s.execCtx.PlanningState == nil || strings.TrimSpace(s.execCtx.PlanningState.Markdown) == "" {
 			s.pending = append(s.pending, DeltaError{
 				Error: NewErrorPayload(
 					"plan_not_created",
-					"CODER planning mode did not create any tasks via plan_add_tasks",
+					"CODER planning mode did not write a Markdown plan via planning_write",
 					ErrorScopeRun,
 					ErrorCategorySystem,
 					nil,
@@ -200,18 +198,8 @@ func (s *coderPlanningStream) afterStageEOF() error {
 		return nil
 	}
 
-	if s.taskLifecycle {
-		s.taskLifecycle = false
-		task := &s.execCtx.PlanState.Tasks[s.taskIndex]
-		finalStatus := NormalizePlanTaskStatus(task.Status)
-		if isTerminalPlanStatus(finalStatus) {
-			s.emitTaskTerminal(task, finalStatus)
-			if finalStatus == "failed" {
-				s.taskIndex = len(s.execCtx.PlanState.Tasks)
-			}
-			return nil
-		}
-		s.emitTaskFailure(task, "task execution did not reach a terminal status")
+	if !s.executionDone {
+		s.executionDone = true
 		return nil
 	}
 
@@ -359,17 +347,18 @@ func confirmationAnswer(normalized map[string]any) string {
 }
 
 func (s *coderPlanningStream) cancelUnstartedPlan(message string) {
-	if s.execCtx != nil && s.execCtx.PlanState != nil {
-		for index := range s.execCtx.PlanState.Tasks {
-			status := NormalizePlanTaskStatus(s.execCtx.PlanState.Tasks[index].Status)
-			if !isTerminalPlanStatus(status) {
-				s.execCtx.PlanState.Tasks[index].Status = "canceled"
-			}
-		}
-		s.pending = append(s.pending, DeltaPlanUpdate{
-			PlanID: s.execCtx.PlanState.PlanID,
-			ChatID: s.session.ChatID,
-			Plan:   PlanTasksArray(s.execCtx.PlanState),
+	if s.execCtx != nil && s.execCtx.PlanningState != nil {
+		s.execCtx.PlanningState.Status = "canceled"
+		s.pending = append(s.pending, DeltaPlanningEnd{
+			PlanningID:   s.execCtx.PlanningState.PlanningID,
+			PlanningFile: s.execCtx.PlanningState.PlanningFile,
+			ChatID:       s.session.ChatID,
+			RunID:        s.session.RunID,
+			RequestID:    s.session.RequestID,
+			AgentKey:     s.session.AgentKey,
+			Title:        s.execCtx.PlanningState.Title,
+			Status:       "canceled",
+			Markdown:     s.execCtx.PlanningState.Markdown,
 		})
 	}
 	if strings.TrimSpace(message) != "" {
@@ -377,6 +366,38 @@ func (s *coderPlanningStream) cancelUnstartedPlan(message string) {
 	}
 	s.summaryDone = true
 	s.completed = true
+}
+
+func (s *coderPlanningStream) startExecutionStage() error {
+	s.pending = append(s.pending, DeltaStageMarker{Stage: "coder-execute"})
+	planningMarkdown := ""
+	if s.execCtx != nil && s.execCtx.PlanningState != nil {
+		planningMarkdown = s.execCtx.PlanningState.Markdown
+	}
+	executePrompt := "Execute the confirmed CODER plan.\n\nOriginal request:\n" + s.req.Message + "\n\nConfirmed plan:\n" + planningMarkdown
+	messages := make([]openAIMessage, 0, len(s.executeMessages)+2)
+	systemPrompt := s.settings.Execute.PrimaryPrompt()
+	if systemPrompt == "" {
+		systemPrompt = "Execute the confirmed CODER plan for the user."
+	}
+	messages = append(messages, openAIMessage{Role: "system", Content: systemPrompt})
+	messages = append(messages, s.executeMessages...)
+	messages = append(messages, openAIMessage{Role: "user", Content: executePrompt})
+
+	req := s.req
+	req.Message = executePrompt
+	stream, err := s.engine.newRunStreamWithOptions(s.ctx, req, s.sessionForStage(s.settings.Execute, s.executeStageTools()), true, runStreamOptions{
+		ExecCtx:   s.execCtx,
+		Messages:  messages,
+		ToolNames: s.executeStageTools(),
+		ModelKey:  s.resolveStageModelKey(s.settings.Execute),
+		Stage:     "coder-execute",
+	})
+	if err != nil {
+		return err
+	}
+	s.current = stream
+	return nil
 }
 
 func (s *coderPlanningStream) advanceTaskExecution() error {
@@ -452,9 +473,13 @@ func (s *coderPlanningStream) startSummaryStage() error {
 	}
 	summaryMessages = append(summaryMessages, openAIMessage{Role: "system", Content: systemPrompt})
 	summaryMessages = append(summaryMessages, s.executeMessages...)
+	planningMarkdown := ""
+	if s.execCtx != nil && s.execCtx.PlanningState != nil {
+		planningMarkdown = s.execCtx.PlanningState.Markdown
+	}
 	summaryMessages = append(summaryMessages, openAIMessage{
 		Role:    "user",
-		Content: "Please provide a final summary of the completed confirmed plan.\n\nOriginal request:\n" + s.req.Message + "\n\nTask results:\n" + formatTaskList(s.execCtx.PlanState.Tasks),
+		Content: "Please provide a final summary of the completed confirmed plan.\n\nOriginal request:\n" + s.req.Message + "\n\nConfirmed plan:\n" + planningMarkdown,
 	})
 
 	stream, err := s.engine.newRunStreamWithOptions(s.ctx, s.req, s.sessionForStage(s.settings.Summary, nil), false, runStreamOptions{
@@ -515,15 +540,23 @@ func (s *coderPlanningStream) planStageTools() []string {
 
 func (s *coderPlanningStream) executeStageTools() []string {
 	tools := stageToolsOrDefault(s.settings.Execute, s.session.ToolNames)
-	tools = removeToolNames(tools, "plan_add_tasks")
-	return appendUniqueTools(tools, "plan_update_task")
+	return removeToolNames(tools, "plan_add_tasks", "plan_get_tasks", "plan_update_task", "planning_write", "ask_user_question")
+}
+
+func isPlanningOnlyTool(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "plan_add_tasks", "plan_get_tasks", "plan_update_task", "planning_write", "ask_user_question":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *coderPlanningStream) planStagePostToolHook(toolName string, _ string) PostToolHookResult {
-	if !isPlanTool(toolName) {
+	if !isPlanningWriteTool(toolName) {
 		return PostToolContinue
 	}
-	if s.execCtx != nil && s.execCtx.PlanState != nil && len(s.execCtx.PlanState.Tasks) > 0 {
+	if s.execCtx != nil && s.execCtx.PlanningState != nil && strings.TrimSpace(s.execCtx.PlanningState.Markdown) != "" {
 		return PostToolStop
 	}
 	return PostToolContinue
@@ -537,7 +570,7 @@ func (s *coderPlanningStream) buildExecuteToolDescriptions() string {
 	descByName := s.toolDescriptionsByName()
 	var lines []string
 	for _, toolName := range tools {
-		if isPlanTool(toolName) || strings.HasPrefix(strings.ToLower(strings.TrimSpace(toolName)), "plan_") {
+		if isPlanningOnlyTool(toolName) {
 			continue
 		}
 		desc := strings.TrimSpace(descByName[strings.ToLower(strings.TrimSpace(toolName))])

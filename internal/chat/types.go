@@ -31,6 +31,15 @@ type ArtifactItemState struct {
 	SHA256     string `json:"sha256,omitempty"`
 }
 
+type PlanningState struct {
+	PlanningID   string `json:"planningId"`
+	PlanningFile string `json:"planningFile"`
+	Title        string `json:"title,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Markdown     string `json:"markdown,omitempty"`
+	UpdatedAt    int64  `json:"updatedAt,omitempty"`
+}
+
 // ---------------------------------------------------------------------------
 // Chat Storage V3.1 — JSONL line types (matching Java format)
 // ---------------------------------------------------------------------------
@@ -229,6 +238,7 @@ type Detail struct {
 	Events      []stream.EventData
 	References  []map[string]any
 	Plan        *PlanState
+	Planning    *PlanningState
 	Artifact    *ArtifactState
 }
 

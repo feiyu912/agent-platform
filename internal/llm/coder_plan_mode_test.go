@@ -15,19 +15,19 @@ func TestResolveAgentModeCoder(t *testing.T) {
 
 func TestCoderPlanningStageToolsAreReadOnlyPlusQuestionsAndPlan(t *testing.T) {
 	stream := &coderPlanningStream{}
-	want := []string{"file_read", "file_grep", "datetime", "ask_user_question", "plan_add_tasks"}
+	want := []string{"file_read", "file_grep", "datetime", "ask_user_question", "planning_write"}
 	if got := stream.planStageTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("planStageTools()=%#v want %#v", got, want)
 	}
 }
 
-func TestCoderExecuteStageToolsExcludePlanAddAndAppendPlanUpdate(t *testing.T) {
+func TestCoderExecuteStageToolsExcludePlanningOnlyTools(t *testing.T) {
 	stream := &coderPlanningStream{
 		session: contracts.QuerySession{
-			ToolNames: []string{"bash", "file_read", "plan_add_tasks", "datetime"},
+			ToolNames: []string{"bash", "file_read", "plan_add_tasks", "planning_write", "ask_user_question", "plan_update_task", "datetime"},
 		},
 	}
-	want := []string{"bash", "file_read", "datetime", "plan_update_task"}
+	want := []string{"bash", "file_read", "datetime"}
 	if got := stream.executeStageTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("executeStageTools()=%#v want %#v", got, want)
 	}

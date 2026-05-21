@@ -496,6 +496,7 @@ type ChatDetailResponse struct {
 	Runs           []RunSummary       `json:"runs,omitempty"`
 	ActiveRun      *ActiveRunInfo     `json:"activeRun,omitempty"`
 	Plan           any                `json:"plan,omitempty"`
+	Planning       any                `json:"planning,omitempty"`
 	Artifact       any                `json:"artifact,omitempty"`
 	References     []Reference        `json:"references,omitempty"`
 	Usage          *ChatUsageData     `json:"usage,omitempty"`
