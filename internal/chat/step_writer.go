@@ -269,8 +269,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		w.updatePlan(event)
 
 	case "planning.start", "planning.delta", "planning.snapshot", "planning.end":
-		w.updatePlanning(event)
-		w.appendTypedEventLine(event, "planning")
+		w.handlePlanningEvent(event)
 
 	case "task.start":
 		w.flushCurrentStep()
@@ -684,6 +683,57 @@ func (w *StepWriter) appendTypedEventLine(event stream.EventData, lineType strin
 	})
 }
 
+func (w *StepWriter) handlePlanningEvent(event stream.EventData) {
+	w.updatePlanning(event)
+	switch event.Type {
+	case "planning.start", "planning.delta", "planning.end":
+		if w.debugEventsEnabled {
+			w.appendTypedEventLine(event, "planning")
+		}
+		if event.Type == "planning.end" {
+			w.appendTypedEventLine(w.planningSnapshotEvent(event), "planning")
+		}
+	case "planning.snapshot":
+		w.appendTypedEventLine(event, "planning")
+	}
+}
+
+func (w *StepWriter) planningSnapshotEvent(source stream.EventData) stream.EventData {
+	payload := map[string]any{}
+	if w.latestPlanning != nil {
+		payload["planningId"] = w.latestPlanning.PlanningID
+		payload["planningFile"] = w.latestPlanning.PlanningFile
+		payload["title"] = w.latestPlanning.Title
+		payload["status"] = w.latestPlanning.Status
+		payload["markdown"] = w.latestPlanning.Markdown
+		payload["updatedAt"] = w.latestPlanning.UpdatedAt
+	}
+	if value := strings.TrimSpace(source.String("chatId")); value != "" {
+		payload["chatId"] = value
+	} else {
+		payload["chatId"] = w.chatID
+	}
+	if value := strings.TrimSpace(source.String("runId")); value != "" {
+		payload["runId"] = value
+	} else {
+		payload["runId"] = w.runID
+	}
+	if value := strings.TrimSpace(source.String("requestId")); value != "" {
+		payload["requestId"] = value
+	}
+	if value := strings.TrimSpace(source.String("agentKey")); value != "" {
+		payload["agentKey"] = value
+	}
+	if payload["updatedAt"] == nil || int64FromAny(payload["updatedAt"]) == 0 {
+		payload["updatedAt"] = source.Timestamp
+	}
+	return stream.EventData{
+		Type:      "planning.snapshot",
+		Timestamp: source.Timestamp,
+		Payload:   payload,
+	}
+}
+
 func (w *StepWriter) updatePlan(event stream.EventData) {
 	planID := event.String("planId")
 	plan := &PlanState{PlanID: planID, Tasks: []PlanTaskState{}}
@@ -702,6 +752,14 @@ func (w *StepWriter) updatePlan(event stream.EventData) {
 }
 
 func (w *StepWriter) updatePlanning(event stream.EventData) {
+	if event.Type == "planning.start" {
+		if planningID := strings.TrimSpace(event.String("planningId")); planningID != "" &&
+			w.latestPlanning != nil &&
+			w.latestPlanning.PlanningID != "" &&
+			w.latestPlanning.PlanningID != planningID {
+			w.latestPlanning = nil
+		}
+	}
 	if w.latestPlanning == nil {
 		w.latestPlanning = &PlanningState{}
 	}
@@ -716,6 +774,9 @@ func (w *StepWriter) updatePlanning(event stream.EventData) {
 	}
 	if value := strings.TrimSpace(event.String("status")); value != "" {
 		w.latestPlanning.Status = value
+	}
+	if value := event.String("delta"); value != "" {
+		w.latestPlanning.Markdown += value
 	}
 	if value := strings.TrimSpace(event.String("markdown")); value != "" {
 		w.latestPlanning.Markdown = value

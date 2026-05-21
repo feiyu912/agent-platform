@@ -1697,6 +1697,116 @@ func TestStepWriterOmitsPreCallDebugWhenDebugEventsDisabled(t *testing.T) {
 	}
 }
 
+func TestStepWriterPlanningLifecyclePersistsSnapshotByDefault(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-planning-snapshot", "coder", "", "plan it"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	writer := NewStepWriter(store, "chat-planning-snapshot", "run-planning", "coder", false)
+	emitPlanningLifecycleForTest(writer, "chat-planning-snapshot")
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-planning-snapshot"))
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected one planning snapshot line, got %#v", lines)
+	}
+	event, _ := lines[0]["event"].(map[string]any)
+	if lines[0]["_type"] != "planning" || event["type"] != "planning.snapshot" {
+		t.Fatalf("expected planning.snapshot line, got %#v", lines[0])
+	}
+	if event["markdown"] != "# Plan\n\nBody" || event["planningId"] != "plan-run-planning" {
+		t.Fatalf("unexpected planning snapshot event %#v", event)
+	}
+
+	detail, err := store.LoadChat("chat-planning-snapshot")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	if detail.Planning == nil || detail.Planning.Markdown != "# Plan\n\nBody" {
+		t.Fatalf("expected latest planning state from snapshot, got %#v", detail.Planning)
+	}
+	if !detailHasEventType(detail.Events, "planning.snapshot") ||
+		detailHasEventType(detail.Events, "planning.start") ||
+		detailHasEventType(detail.Events, "planning.delta") ||
+		detailHasEventType(detail.Events, "planning.end") {
+		t.Fatalf("unexpected replayed planning events %#v", detail.Events)
+	}
+}
+
+func TestStepWriterPlanningLifecyclePersistsDebugEventsWhenEnabled(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	writer := NewStepWriter(store, "chat-planning-debug", "run-planning", "coder", false, WithDebugEventsEnabled(true))
+	emitPlanningLifecycleForTest(writer, "chat-planning-debug")
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-planning-debug"))
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	got := make([]string, 0, len(lines))
+	for _, line := range lines {
+		event, _ := line["event"].(map[string]any)
+		got = append(got, stringVal(event["type"]))
+	}
+	want := []string{"planning.start", "planning.delta", "planning.end", "planning.snapshot"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("planning event lines = %#v, want %#v", got, want)
+	}
+}
+
+func emitPlanningLifecycleForTest(writer *StepWriter, chatID string) {
+	writer.OnEvent(stream.EventData{
+		Type:      "planning.start",
+		Timestamp: 1001,
+		Payload: map[string]any{
+			"planningId":   "plan-run-planning",
+			"planningFile": "/tmp/plan-run-planning.md",
+			"chatId":       chatID,
+			"runId":        "run-planning",
+			"requestId":    "req-planning",
+			"agentKey":     "coder",
+			"title":        "Plan",
+			"status":       "started",
+			"updatedAt":    int64(1001),
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type:      "planning.delta",
+		Timestamp: 1002,
+		Payload: map[string]any{
+			"planningId": "plan-run-planning",
+			"delta":      "# Plan\n\nBody",
+			"status":     "writing",
+			"updatedAt":  int64(1002),
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Type:      "planning.end",
+		Timestamp: 1003,
+		Payload: map[string]any{
+			"planningId": "plan-run-planning",
+			"status":     "ready",
+			"updatedAt":  int64(1003),
+		},
+	})
+}
+
+func detailHasEventType(events []stream.EventData, eventType string) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
+}
+
 func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

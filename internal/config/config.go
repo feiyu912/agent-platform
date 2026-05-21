@@ -889,6 +889,7 @@ func (c *Config) applyEnv() {
 
 	c.Stream.IncludeToolPayloadEvents = boolEnv("STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS", c.Stream.IncludeToolPayloadEvents)
 	c.Stream.DebugEventsEnabled = boolEnv("DEBUG_EVENTS_ENABLED", c.Stream.DebugEventsEnabled)
+	c.Stream.DebugEventsEnabled = boolEnv("DELTA_LOGS_ENABLED", c.Stream.DebugEventsEnabled)
 	c.SSE.HeartbeatIntervalMs = int64Env("AGENT_SSE_HEARTBEAT_INTERVAL_MS", c.SSE.HeartbeatIntervalMs)
 	c.H2A.Render.FlushIntervalMs = int64Env("AGENT_H2A_RENDER_FLUSH_INTERVAL_MS", c.H2A.Render.FlushIntervalMs)
 	c.H2A.Render.MaxBufferedChars = intEnv("AGENT_H2A_RENDER_MAX_BUFFERED_CHARS", c.H2A.Render.MaxBufferedChars)

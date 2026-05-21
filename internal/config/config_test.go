@@ -428,6 +428,20 @@ func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 	})
 }
 
+func TestLoadAcceptsDeltaLogsEnabledAlias(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"DELTA_LOGS_ENABLED": "true",
+	}, func() {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if !cfg.Stream.DebugEventsEnabled {
+			t.Fatalf("expected DELTA_LOGS_ENABLED to enable stream debug events")
+		}
+	})
+}
+
 func TestLoadContainerHubAndBashConfigFromFiles(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		cfg, err := Load()

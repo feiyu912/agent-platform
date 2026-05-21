@@ -220,21 +220,21 @@ func (s *coderPlanningStream) emitPlanConfirmationAsk() {
 func (s *coderPlanningStream) planConfirmationAsk() DeltaAwaitAsk {
 	return DeltaAwaitAsk{
 		AwaitingID:   s.session.RunID + "_coder_plan_confirm",
-		Mode:         "question",
+		Mode:         "approval",
 		Timeout:      toolTimeout(NormalizeBudget(s.execCtx.Budget).Tool).Milliseconds(),
 		RunID:        s.session.RunID,
 		ViewportType: "builtin",
-		ViewportKey:  "question",
-		Questions: []any{
+		ViewportKey:  "approval",
+		Approvals: []any{
 			map[string]any{
-				"id":       "confirm",
-				"question": "是否按此计划执行？",
-				"type":     "select",
-				"options": []any{
-					map[string]any{"label": "执行计划", "description": "按当前计划开始执行任务"},
-					map[string]any{"label": "取消执行", "description": "停止本轮，不执行计划任务"},
-				},
+				"id":            "confirm",
+				"command":       "是否按此计划执行？",
+				"description":   "确认后将按当前 Markdown plan 开始执行",
 				"allowFreeText": false,
+				"options": []any{
+					map[string]any{"label": "执行计划", "decision": "approve", "description": "按当前计划开始执行任务"},
+					map[string]any{"label": "取消执行", "decision": "reject", "description": "停止本轮，不执行计划任务"},
+				},
 			},
 		},
 	}
@@ -259,9 +259,9 @@ func (s *coderPlanningStream) awaitPlanConfirmation() error {
 			s.completed = true
 			return nil
 		}
-		answer := AwaitingErrorAnswer("question", "timeout", "等待项已超时")
+		answer := AwaitingErrorAnswer("approval", "timeout", "等待项已超时")
 		if !errors.Is(err, context.DeadlineExceeded) {
-			answer = AwaitingErrorAnswer("question", "invalid_submit", err.Error())
+			answer = AwaitingErrorAnswer("approval", "invalid_submit", err.Error())
 		}
 		s.pending = append(s.pending, DeltaAwaitingAnswer{
 			AwaitingID: awaitingID,
@@ -282,28 +282,11 @@ func (s *coderPlanningStream) awaitPlanConfirmation() error {
 	})
 
 	args := s.planConfirmationArgs()
-	var (
-		handler interface {
-			NormalizeSubmit(args map[string]any, params any) (map[string]any, error)
-		}
-		ok bool
-	)
-	if s.engine.frontend != nil {
-		handler, ok = s.engine.frontend.Handler("ask_user_question")
-	}
-	if !ok {
-		s.pending = append(s.pending, DeltaAwaitingAnswer{
-			AwaitingID: awaitingID,
-			Answer:     AwaitingErrorAnswer("question", "invalid_submit", "ask_user_question handler is not registered"),
-		})
-		s.cancelUnstartedPlan("已取消执行计划。")
-		return nil
-	}
-	normalized, normalizeErr := handler.NormalizeSubmit(args, submitResult.Request.Params)
+	normalized, normalizeErr := normalizeHITLApprovalSubmit(args, submitResult.Request.Params)
 	if normalizeErr != nil {
 		s.pending = append(s.pending, DeltaAwaitingAnswer{
 			AwaitingID: awaitingID,
-			Answer:     AwaitingErrorAnswer("question", "invalid_submit", normalizeErr.Error()),
+			Answer:     AwaitingErrorAnswer("approval", "invalid_submit", normalizeErr.Error()),
 		})
 		s.cancelUnstartedPlan("已取消执行计划。")
 		return nil
@@ -313,7 +296,7 @@ func (s *coderPlanningStream) awaitPlanConfirmation() error {
 		Answer:     CloneMap(normalized),
 	})
 
-	if strings.EqualFold(AnyStringNode(normalized["status"]), "error") || confirmationAnswer(normalized) != "执行计划" {
+	if strings.EqualFold(AnyStringNode(normalized["status"]), "error") || confirmationDecision(normalized) != "approve" {
 		s.cancelUnstartedPlan("已取消执行计划。")
 		return nil
 	}
@@ -324,23 +307,23 @@ func (s *coderPlanningStream) planConfirmationArgs() map[string]any {
 	ask := s.planConfirmationAsk()
 	return map[string]any{
 		"mode":      ask.Mode,
-		"questions": append([]any(nil), ask.Questions...),
+		"approvals": append([]any(nil), ask.Approvals...),
 	}
 }
 
-func confirmationAnswer(normalized map[string]any) string {
-	switch answers := normalized["answers"].(type) {
+func confirmationDecision(normalized map[string]any) string {
+	switch approvals := normalized["approvals"].(type) {
 	case []map[string]any:
-		if len(answers) == 0 {
+		if len(approvals) == 0 {
 			return ""
 		}
-		return strings.TrimSpace(AnyStringNode(answers[0]["answer"]))
+		return strings.TrimSpace(AnyStringNode(approvals[0]["decision"]))
 	case []any:
-		if len(answers) == 0 {
+		if len(approvals) == 0 {
 			return ""
 		}
-		answer, _ := answers[0].(map[string]any)
-		return strings.TrimSpace(AnyStringNode(answer["answer"]))
+		approval, _ := approvals[0].(map[string]any)
+		return strings.TrimSpace(AnyStringNode(approval["decision"]))
 	default:
 		return ""
 	}

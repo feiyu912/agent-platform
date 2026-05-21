@@ -949,14 +949,19 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	submitFrontendAnswer(t, fixture.server, runID, firstAwaitingID, "README.md")
 	_, secondAwaitingID := readAwaitingQuestion(t, reader, &streamBody, "How broad should the change be?")
 	submitFrontendAnswer(t, fixture.server, runID, secondAwaitingID, "Small")
-	_, confirmAwaitingID := readAwaitingQuestion(t, reader, &streamBody, "是否按此计划执行？")
+	_, confirmAwaitingID := readAwaitingApproval(t, reader, &streamBody, "confirm")
 	if strings.Contains(streamBody.String(), `"type":"task.start"`) {
 		t.Fatalf("did not expect task.start before plan confirmation, got %s", streamBody.String())
 	}
-	if !strings.Contains(streamBody.String(), `"type":"planning.end"`) || !strings.Contains(streamBody.String(), `"planningFile"`) {
-		t.Fatalf("expected planning.end before confirmation, got %s", streamBody.String())
+	for _, eventType := range []string{`"type":"planning.start"`, `"type":"planning.delta"`, `"type":"planning.end"`} {
+		if !strings.Contains(streamBody.String(), eventType) {
+			t.Fatalf("expected %s before confirmation, got %s", eventType, streamBody.String())
+		}
 	}
-	submitFrontendAnswer(t, fixture.server, runID, confirmAwaitingID, "执行计划")
+	if strings.Contains(streamBody.String(), `"type":"planning.snapshot"`) {
+		t.Fatalf("did not expect live planning.snapshot, got %s", streamBody.String())
+	}
+	submitFrontendDecision(t, fixture.server, runID, confirmAwaitingID, "approve")
 
 	for {
 		line, readErr := reader.ReadString('\n')
@@ -978,8 +983,11 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	if !(planIndex >= 0 && confirmIndex > planIndex && executionIndex > confirmIndex) {
 		t.Fatalf("expected planning.end before confirmation and execution content after confirmation, got %s", body)
 	}
-	if !strings.Contains(body, `"answer":"执行计划"`) {
-		t.Fatalf("expected confirmation answer in stream, got %s", body)
+	if !strings.Contains(body, `"mode":"approval"`) || !strings.Contains(body, `"decision":"approve"`) {
+		t.Fatalf("expected confirmation approval in stream, got %s", body)
+	}
+	if strings.Contains(body, `"type":"planning.snapshot"`) {
+		t.Fatalf("did not expect live planning.snapshot, got %s", body)
 	}
 	if !strings.Contains(body, "execution completed") || !strings.Contains(body, "confirmed plan completed") {
 		t.Fatalf("expected confirmed execution to complete, got %s", body)
@@ -1016,6 +1024,9 @@ func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
 			t.Fatalf("unexpected provider call after cancel: %d", call)
 		}
 	}, testFixtureOptions{
+		configure: func(cfg *config.Config) {
+			cfg.Stream.DebugEventsEnabled = true
+		},
 		setupRuntime: func(root string, cfg *config.Config) {
 			workspace := filepath.Join(root, "workspace")
 			agentDir := filepath.Join(cfg.Paths.AgentsDir, "coder-app")
@@ -1050,8 +1061,8 @@ func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
 
 	reader := bufio.NewReader(resp.Body)
 	var streamBody strings.Builder
-	runID, confirmAwaitingID := readAwaitingQuestion(t, reader, &streamBody, "是否按此计划执行？")
-	submitFrontendAnswer(t, fixture.server, runID, confirmAwaitingID, "取消执行")
+	runID, confirmAwaitingID := readAwaitingApproval(t, reader, &streamBody, "confirm")
+	submitFrontendDecision(t, fixture.server, runID, confirmAwaitingID, "reject")
 
 	for {
 		line, readErr := reader.ReadString('\n')
@@ -1076,6 +1087,7 @@ func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
 	if got := providerCallCount.Load(); got != 1 {
 		t.Fatalf("provider calls = %d, want 1", got)
 	}
+	assertPersistedPlanningDebugEvents(t, fixture.server)
 }
 
 func readAwaitingQuestion(t *testing.T, reader *bufio.Reader, streamBody *strings.Builder, expectedQuestion string) (string, string) {
@@ -1103,6 +1115,34 @@ func readAwaitingQuestion(t *testing.T, reader *bufio.Reader, streamBody *string
 	}
 }
 
+func readAwaitingApproval(t *testing.T, reader *bufio.Reader, streamBody *strings.Builder, expectedApprovalID string) (string, string) {
+	t.Helper()
+	for {
+		line, readErr := reader.ReadString('\n')
+		streamBody.WriteString(line)
+		if strings.HasPrefix(line, "data: {") {
+			payload := decodeSSELine(t, line)
+			if payload["type"] == "awaiting.ask" && awaitingApprovalID(payload) == expectedApprovalID {
+				if payload["mode"] != "approval" || payload["viewportType"] != "builtin" || payload["viewportKey"] != "approval" {
+					t.Fatalf("expected approval awaiting.ask, got %#v", payload)
+				}
+				runID, _ := payload["runId"].(string)
+				awaitingID, _ := payload["awaitingId"].(string)
+				if runID == "" || awaitingID == "" {
+					t.Fatalf("expected awaiting identifiers, got %#v", payload)
+				}
+				return runID, awaitingID
+			}
+		}
+		if readErr == io.EOF {
+			t.Fatalf("stream ended before awaiting approval %q, got %s", expectedApprovalID, streamBody.String())
+		}
+		if readErr != nil {
+			t.Fatalf("read stream before awaiting approval %q: %v", expectedApprovalID, readErr)
+		}
+	}
+}
+
 func assertCoderPlanningToolSet(t *testing.T, got []string) {
 	t.Helper()
 	if len(got) != 5 {
@@ -1121,9 +1161,37 @@ func awaitingQuestionText(payload map[string]any) string {
 	return strings.TrimSpace(stringValue(first["question"]))
 }
 
+func awaitingApprovalID(payload map[string]any) string {
+	approvals, _ := payload["approvals"].([]any)
+	if len(approvals) == 0 {
+		return ""
+	}
+	first, _ := approvals[0].(map[string]any)
+	return strings.TrimSpace(stringValue(first["id"]))
+}
+
 func submitFrontendAnswer(t *testing.T, server http.Handler, runID string, awaitingID string, answer string) {
 	t.Helper()
 	body := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"answer":"` + answer + `"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("submit expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response api.ApiResponse[api.SubmitResponse]
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+	if !response.Data.Accepted || response.Data.Status != "accepted" {
+		t.Fatalf("expected accepted submit, got %#v", response.Data)
+	}
+}
+
+func submitFrontendDecision(t *testing.T, server http.Handler, runID string, awaitingID string, decision string) {
+	t.Helper()
+	body := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"` + decision + `"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1167,20 +1235,54 @@ func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) 
 			if !strings.Contains(stringValue(planning["markdown"]), "## Summary") {
 				t.Fatalf("expected persisted planning markdown, got %#v", planning)
 			}
-			hasPlanningEnd := false
+			hasPlanningSnapshot := false
 			for _, ev := range chatResp.Data.Events {
-				if ev.Type == "planning.end" {
-					hasPlanningEnd = true
-					break
+				switch ev.Type {
+				case "planning.snapshot":
+					hasPlanningSnapshot = true
+				case "planning.start", "planning.delta", "planning.end":
+					t.Fatalf("did not expect default replay planning debug event %s in %#v", ev.Type, chatResp.Data.Events)
 				}
 			}
-			if !hasPlanningEnd {
-				t.Fatalf("expected replayed planning.end event, got %#v", chatResp.Data.Events)
+			if !hasPlanningSnapshot {
+				t.Fatalf("expected replayed planning.snapshot event, got %#v", chatResp.Data.Events)
 			}
 			return
 		}
 	}
 	t.Fatalf("expected persisted request.query planningMode=true, got %#v", chatResp.Data.Events)
+}
+
+func assertPersistedPlanningDebugEvents(t *testing.T, server http.Handler) {
+	t.Helper()
+	chatsRec := httptest.NewRecorder()
+	server.ServeHTTP(chatsRec, httptest.NewRequest(http.MethodGet, "/api/chats", nil))
+	var chatsResp api.ApiResponse[[]api.ChatSummaryResponse]
+	if err := json.Unmarshal(chatsRec.Body.Bytes(), &chatsResp); err != nil {
+		t.Fatalf("decode chats response: %v", err)
+	}
+	if len(chatsResp.Data) != 1 {
+		t.Fatalf("expected one chat, got %#v", chatsResp.Data)
+	}
+
+	chatRec := httptest.NewRecorder()
+	server.ServeHTTP(chatRec, httptest.NewRequest(http.MethodGet, "/api/chat?chatId="+chatsResp.Data[0].ChatID, nil))
+	var chatResp api.ApiResponse[api.ChatDetailResponse]
+	if err := json.Unmarshal(chatRec.Body.Bytes(), &chatResp); err != nil {
+		t.Fatalf("decode chat response: %v", err)
+	}
+	for _, eventType := range []string{"planning.start", "planning.delta", "planning.end", "planning.snapshot"} {
+		found := false
+		for _, ev := range chatResp.Data.Events {
+			if ev.Type == eventType {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected replayed %s with debug enabled, got %#v", eventType, chatResp.Data.Events)
+		}
+	}
 }
 
 func TestQueryPersistsToolSnapshotWhenStreamToolPayloadEventsDisabled(t *testing.T) {

@@ -479,17 +479,6 @@ func appendPlanningDeltas(pending *[]AgentDelta, session QuerySession, result To
 			Status:       "writing",
 			Delta:        markdown,
 		},
-		DeltaPlanningSnapshot{
-			PlanningID:   planningID,
-			PlanningFile: planningFile,
-			ChatID:       session.ChatID,
-			RunID:        session.RunID,
-			RequestID:    session.RequestID,
-			AgentKey:     session.AgentKey,
-			Title:        title,
-			Status:       status,
-			Markdown:     markdown,
-		},
 		DeltaPlanningEnd{
 			PlanningID:   planningID,
 			PlanningFile: planningFile,

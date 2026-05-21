@@ -859,6 +859,107 @@ func TestWebSocketQueryToolPayloadVisibilityFollowsStreamConfig(t *testing.T) {
 	}
 }
 
+func TestWebSocketCoderPlanningEmitsLifecycleEvents(t *testing.T) {
+	var providerCallCount atomic.Int32
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		switch call := providerCallCount.Add(1); call {
+		case 1:
+			writeProviderSSE(t, w,
+				providerToolCallFrame(t, "tool_plan", "planning_write", map[string]any{
+					"title":       "WebSocket Planning",
+					"summary":     "Plan should stream over websocket.",
+					"keyChanges":  []string{"Emit planning lifecycle events"},
+					"steps":       []string{"Confirm and execute the plan"},
+					"testPlan":    []string{"Assert websocket event types"},
+					"assumptions": []string{"The user approves the plan"},
+				}),
+				`[DONE]`,
+			)
+		case 2:
+			writeProviderSSE(t, w,
+				`{"choices":[{"delta":{"content":"execution completed"},"finish_reason":"stop"}]}`,
+				`[DONE]`,
+			)
+		case 3:
+			writeProviderSSE(t, w,
+				`{"choices":[{"delta":{"content":"summary completed"},"finish_reason":"stop"}]}`,
+				`[DONE]`,
+			)
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+		}
+	}, testFixtureOptions{
+		notifications: ws.NewHub(),
+		configure: func(cfg *config.Config) {
+			cfg.WebSocket.WriteQueueSize = 16
+			cfg.WebSocket.PingIntervalMs = 30000
+		},
+		setupRuntime: func(root string, cfg *config.Config) {
+			workspace := filepath.Join(root, "workspace")
+			agentDir := filepath.Join(cfg.Paths.AgentsDir, "coder-ws")
+			if err := os.MkdirAll(agentDir, 0o755); err != nil {
+				t.Fatalf("mkdir coder agent: %v", err)
+			}
+			if err := os.MkdirAll(workspace, 0o755); err != nil {
+				t.Fatalf("mkdir workspace: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(agentDir, "agent.yml"), []byte(strings.Join([]string{
+				"key: coder-ws",
+				"name: Coder WS",
+				"mode: CODER",
+				"modelConfig:",
+				"  modelKey: mock-model",
+				"workspaceConfig:",
+				"  root: " + filepath.ToSlash(workspace),
+			}, "\n")), 0o644); err != nil {
+				t.Fatalf("write coder agent: %v", err)
+			}
+		},
+	})
+
+	server := httptest.NewServer(fixture.server)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := gws.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+
+	requestID := "req_query_planning"
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/query",
+		ID:    requestID,
+		Payload: ws.MarshalPayload(map[string]any{
+			"message":      "please plan over websocket",
+			"agentKey":     "coder-ws",
+			"planningMode": true,
+		}),
+	}); err != nil {
+		t.Fatalf("write websocket query: %v", err)
+	}
+
+	eventTypes, runID, awaitingID := collectWebSocketEventsUntilPlanningApproval(t, conn, requestID)
+	assertStringSliceContains(t, eventTypes, "planning.start", "planning.delta", "planning.end", "awaiting.ask")
+	assertStringSliceExcludes(t, eventTypes, "planning.snapshot")
+
+	submitBody := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"approve"}]}`
+	submitRec, err := http.Post(server.URL+"/api/submit", "application/json", bytes.NewBufferString(submitBody))
+	if err != nil {
+		t.Fatalf("submit approval: %v", err)
+	}
+	defer submitRec.Body.Close()
+	if submitRec.StatusCode != http.StatusOK {
+		t.Fatalf("submit expected 200, got %d: %s", submitRec.StatusCode, readBodyString(t, submitRec.Body))
+	}
+
+	eventTypes = append(eventTypes, collectWebSocketStreamEventTypes(t, conn, requestID)...)
+	assertStringSliceContains(t, eventTypes, "run.complete")
+	assertStringSliceExcludes(t, eventTypes, "planning.snapshot")
+}
+
 type awaitingPushQuestionFlow struct {
 	fixture    testFixture
 	server     *loopbackServer
@@ -1055,6 +1156,44 @@ func loadChatSummariesRawForTest(t *testing.T, handler http.Handler) string {
 		t.Fatalf("list chats expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	return rec.Body.String()
+}
+
+func collectWebSocketEventsUntilPlanningApproval(t *testing.T, conn *gws.Conn, requestID string) ([]string, string, string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	types := make([]string, 0)
+	for time.Now().Before(deadline) {
+		if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+			t.Fatalf("set websocket read deadline: %v", err)
+		}
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("read websocket message: %v", err)
+		}
+		var meta struct {
+			Frame string `json:"frame"`
+			ID    string `json:"id"`
+		}
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			t.Fatalf("decode websocket frame: %v", err)
+		}
+		if meta.Frame != ws.FrameStream || meta.ID != requestID {
+			continue
+		}
+		var frame ws.StreamFrame
+		if err := json.Unmarshal(raw, &frame); err != nil {
+			t.Fatalf("decode websocket stream frame: %v", err)
+		}
+		if frame.Event == nil {
+			continue
+		}
+		types = append(types, frame.Event.Type)
+		if frame.Event.Type == "awaiting.ask" && frame.Event.String("mode") == "approval" {
+			return types, frame.Event.String("runId"), frame.Event.String("awaitingId")
+		}
+	}
+	t.Fatalf("timed out waiting for websocket planning approval for %s", requestID)
+	return nil, "", ""
 }
 
 func collectWebSocketStreamEventTypes(t *testing.T, conn *gws.Conn, requestID string) []string {

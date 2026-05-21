@@ -32,3 +32,32 @@ func TestCoderExecuteStageToolsExcludePlanningOnlyTools(t *testing.T) {
 		t.Fatalf("executeStageTools()=%#v want %#v", got, want)
 	}
 }
+
+func TestCoderPlanningConfirmationUsesApprovalMode(t *testing.T) {
+	stream := &coderPlanningStream{
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 120000}},
+		},
+	}
+	ask := stream.planConfirmationAsk()
+	if ask.Mode != "approval" || ask.ViewportType != "builtin" || ask.ViewportKey != "approval" {
+		t.Fatalf("expected approval confirmation ask, got %#v", ask)
+	}
+	if len(ask.Questions) != 0 || len(ask.Approvals) != 1 {
+		t.Fatalf("expected one approval and no questions, got %#v", ask)
+	}
+	approval, _ := ask.Approvals[0].(map[string]any)
+	if approval["id"] != "confirm" {
+		t.Fatalf("unexpected approval item %#v", approval)
+	}
+	options, _ := approval["options"].([]any)
+	if len(options) != 2 {
+		t.Fatalf("expected approve/reject options, got %#v", approval)
+	}
+	first, _ := options[0].(map[string]any)
+	second, _ := options[1].(map[string]any)
+	if first["decision"] != "approve" || second["decision"] != "reject" {
+		t.Fatalf("expected explicit approval decisions, got %#v", options)
+	}
+}
