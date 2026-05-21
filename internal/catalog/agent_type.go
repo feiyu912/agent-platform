@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-const AgentTypeCoder = "CODER"
+const AgentModeCoder = "CODER"
 
-var coderAgentProfile = agentTypeProfile{
+var coderAgentProfile = agentModeProfile{
 	Tools: []string{
 		"bash",
 		"file_read",
@@ -30,7 +30,7 @@ var coderAgentProfile = agentTypeProfile{
 	ReactMaxSteps: 160,
 }
 
-type agentTypeProfile struct {
+type agentModeProfile struct {
 	Tools         []string
 	ContextTags   []string
 	Budget        map[string]any
@@ -43,8 +43,8 @@ func normalizeAgentType(value string) (string, error) {
 		return "", nil
 	}
 	switch agentType {
-	case AgentTypeCoder:
-		return agentType, nil
+	case AgentModeCoder:
+		return "", fmt.Errorf("type: CODER is no longer supported; use mode: CODER")
 	default:
 		return "", fmt.Errorf("unsupported agent type %q", value)
 	}
@@ -58,9 +58,9 @@ func parseAgentWorkspaceConfig(value any) AgentWorkspaceConfig {
 	return AgentWorkspaceConfig{Root: filepath.Clean(root)}
 }
 
-func validateAgentTypeWorkspace(agentType string, workspace AgentWorkspaceConfig) error {
-	switch agentType {
-	case AgentTypeCoder:
+func validateAgentModeWorkspace(mode string, workspace AgentWorkspaceConfig) error {
+	switch strings.ToUpper(strings.TrimSpace(mode)) {
+	case AgentModeCoder:
 		root := strings.TrimSpace(workspace.Root)
 		if root == "" {
 			return fmt.Errorf("workspaceConfig.root is required for CODER agents")
@@ -72,8 +72,8 @@ func validateAgentTypeWorkspace(agentType string, workspace AgentWorkspaceConfig
 	return nil
 }
 
-func applyAgentTypeProfileDefaults(def AgentDefinition) AgentDefinition {
-	profile, ok := agentTypeProfileFor(def.Type)
+func applyAgentModeProfileDefaults(def AgentDefinition) AgentDefinition {
+	profile, ok := agentModeProfileFor(def.Mode)
 	if !ok {
 		return def
 	}
@@ -92,12 +92,12 @@ func applyAgentTypeProfileDefaults(def AgentDefinition) AgentDefinition {
 	return def
 }
 
-func agentTypeProfileFor(agentType string) (agentTypeProfile, bool) {
-	switch strings.ToUpper(strings.TrimSpace(agentType)) {
-	case AgentTypeCoder:
+func agentModeProfileFor(mode string) (agentModeProfile, bool) {
+	switch strings.ToUpper(strings.TrimSpace(mode)) {
+	case AgentModeCoder:
 		return coderAgentProfile, true
 	default:
-		return agentTypeProfile{}, false
+		return agentModeProfile{}, false
 	}
 }
 

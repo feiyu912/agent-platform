@@ -231,6 +231,7 @@ func (s *Server) buildAgentEditorOptions() api.AgentEditorOptionsResponse {
 		},
 		Modes: []api.AgentEditorOption{
 			{Key: "REACT", Label: "REACT"},
+			{Key: "CODER", Label: "CODER"},
 			{Key: "PLAN_EXECUTE", Label: "PLAN-EXECUTE"},
 			{Key: "PROXY", Label: "PROXY"},
 		},

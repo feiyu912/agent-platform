@@ -278,7 +278,7 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 	}
 	def.Type = agentType
 	def.Workspace = parseAgentWorkspaceConfig(root["workspaceConfig"])
-	if err := validateAgentTypeWorkspace(def.Type, def.Workspace); err != nil {
+	if err := validateAgentModeWorkspace(def.Mode, def.Workspace); err != nil {
 		return AgentDefinition{}, nil, err
 	}
 	modelConfig := mapNode(root["modelConfig"])
@@ -346,7 +346,7 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		}
 	}
 	def.ReactMaxSteps = intNode(mapNode(root["react"])["maxSteps"])
-	def = applyAgentTypeProfileDefaults(def)
+	def = applyAgentModeProfileDefaults(def)
 
 	if err := validateReservedBashToolNames(def.Tools, def.ToolOverrides); err != nil {
 		return AgentDefinition{}, nil, err

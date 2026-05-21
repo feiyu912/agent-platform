@@ -73,8 +73,8 @@ type QueryLine struct {
 }
 
 // StepLine represents a step line in chatId.jsonl.
-// _type is the agent mode: "react" or "plan-execute".
-// REACT mode: { _type: "react", seq: N, messages: [...] }
+// _type is the persisted step shape: "react" or "plan-execute".
+// REACT/ONESHOT/CODER modes: { _type: "react", seq: N, messages: [...] }
 // PLAN_EXECUTE mode:
 //
 //	{ _type: "plan-execute", stage: "plan", messages: [...] }

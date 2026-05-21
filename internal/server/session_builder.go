@@ -116,7 +116,7 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		ModelKey:               agentDef.ModelKey,
 		ToolNames:              buildSessionToolNames(effectiveAgentTools(agentDef), options.AllowInvokeAgents),
 		Mode:                   agentDef.Mode,
-		PlanningMode:           req.PlanningMode != nil && *req.PlanningMode && strings.EqualFold(agentDef.Type, catalog.AgentTypeCoder),
+		PlanningMode:           req.PlanningMode != nil && *req.PlanningMode && strings.EqualFold(agentDef.Mode, catalog.AgentModeCoder),
 		ReactMaxSteps:          agentDef.ReactMaxSteps,
 		TeamID:                 req.TeamID,
 		Created:                options.Created,
@@ -204,7 +204,7 @@ func buildSessionToolNames(base []string, allowInvokeAgents bool) []string {
 
 func canUseInvokeAgentsTool(mode string) bool {
 	switch strings.ToUpper(strings.TrimSpace(mode)) {
-	case "REACT", "ONESHOT":
+	case "REACT", "ONESHOT", catalog.AgentModeCoder:
 		return true
 	default:
 		return false

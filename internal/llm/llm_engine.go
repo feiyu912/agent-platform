@@ -57,9 +57,6 @@ func NewLLMAgentEngineWithHTTPClient(cfg config.Config, models *ModelRegistry, t
 }
 
 func (e *LLMAgentEngine) Stream(ctx context.Context, req api.QueryRequest, session QuerySession) (AgentStream, error) {
-	if session.PlanningMode {
-		return newCoderPlanningStream(e, ctx, req, session)
-	}
 	return resolveAgentMode(session.Mode).Start(e, ctx, req, session)
 }
 

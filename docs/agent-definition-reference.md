@@ -94,7 +94,7 @@ plain:
 
 ## Go 版暂未落地能力
 
-- `ONESHOT / REACT / PLAN_EXECUTE` 的完整定义驱动编排
+- `REACT / CODER / PLAN_EXECUTE / PROXY` 的完整定义驱动编排；`ONESHOT` 作为旧兼容值保留
 - prompt 分层拼装
 - per-agent memory / skill / tool 目录覆盖
 - WatchService 类文件系统事件热重载
@@ -120,7 +120,7 @@ contextConfig:
 其中：
 
 - `session` 会暴露运行时上下文
-- `owner` 会注入 `OWNER_DIR` 下的 markdown 内容；`CODER` 不会默认启用，需要显式声明
+- `owner` 会注入 `OWNER_DIR` 下的 markdown 内容；`mode: CODER` 不会默认启用，需要显式声明
 - `sandbox` 不再通过 `context tags` 控制；只要 agent 声明了 `runtimeConfig.environmentId`，运行时会自动注入 sandbox context
 - runtime memory context 不再通过 `context tags` 控制；只有 agent 显式开启 `memoryConfig.enabled: true` 时，运行时才会自动注入 memory context
 
@@ -133,6 +133,12 @@ contextConfig:
 - `PLAN_EXECUTE` 默认读取 `AGENTS.plan.md`、`AGENTS.execute.md`、`AGENTS.summary.md`
 - `planExecute.<stage>.promptFile` 可显式覆盖对应阶段
 - `PLAN_EXECUTE` 阶段缺少约定文件时，先回退顶层 `promptFile`，再回退 `AGENTS.md`
+
+## CODER Mode
+
+CODER 是一等 agent mode，应写作 `mode: CODER`，不要使用旧的 `type: CODER`。CODER 默认使用 `bash`、`file_read`、`file_write`、`file_edit`、`file_grep`、`datetime`，并要求 `workspaceConfig.root` 为绝对路径。
+
+请求顶层 `planningMode: true` 只对 `mode: CODER` 生效：planning 阶段仅暴露 `file_read`、`file_grep`、`datetime`、`ask_user_question`、`plan_add_tasks`；用户确认后 execution 阶段再暴露 CODER 执行工具并追加 `plan_update_task`。
 
 ## Static Memory 与 Runtime Memory
 

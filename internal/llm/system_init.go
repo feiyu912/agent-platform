@@ -37,6 +37,8 @@ func BuildSystemInitProfiles(session QuerySession, req api.QueryRequest, toolDef
 		}
 	case "oneshot":
 		return []SystemInitProfile{buildDefaultSystemInitProfile(session, req, toolDefs, "oneshot")}
+	case "coder":
+		return []SystemInitProfile{buildDefaultSystemInitProfile(session, req, toolDefs, "coder")}
 	default:
 		stage := "react"
 		if strings.TrimSpace(session.Mode) == "" {
@@ -182,6 +184,8 @@ func normalizedSystemInitMode(mode string) string {
 		return "oneshot"
 	case "PLAN_EXECUTE":
 		return "plan-execute"
+	case "CODER":
+		return "coder"
 	default:
 		return "react"
 	}

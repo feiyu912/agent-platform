@@ -142,6 +142,24 @@ func TestPlanExecuteSystemInitProfilesUseRuntimeSettings(t *testing.T) {
 	}
 }
 
+func TestCoderSystemInitProfileUsesDistinctMode(t *testing.T) {
+	session := fingerprintTestSession()
+	session.Mode = "CODER"
+	toolDefs := []api.ToolDetailResponse{
+		{Name: "bash", Description: "run shell", Parameters: map[string]any{"type": "object"}},
+	}
+	profiles := BuildSystemInitProfiles(session, api.QueryRequest{ChatID: "chat-1", Message: "hello"}, toolDefs, 12, 4)
+	if len(profiles) != 1 {
+		t.Fatalf("expected one CODER profile, got %#v", profiles)
+	}
+	if profiles[0].CacheKey != "coder:main" || profiles[0].Mode != "coder" {
+		t.Fatalf("unexpected CODER system init identity %#v", profiles[0])
+	}
+	if profiles[0].Fingerprint == ComputeSystemInitFingerprint(fingerprintTestSession(), "main", toolDefs) {
+		t.Fatalf("expected CODER fingerprint to differ from REACT")
+	}
+}
+
 func fingerprintTestSession() contracts.QuerySession {
 	return contracts.QuerySession{
 		RequestID:        "request-1",

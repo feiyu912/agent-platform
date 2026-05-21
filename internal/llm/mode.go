@@ -18,6 +18,8 @@ func resolveAgentMode(mode string) AgentMode {
 		return oneshotMode{}
 	case "PLAN_EXECUTE":
 		return planExecuteMode{}
+	case "CODER":
+		return coderMode{}
 	case "REACT":
 		fallthrough
 	default:
@@ -29,6 +31,17 @@ type reactMode struct{}
 
 func (reactMode) Start(engine *LLMAgentEngine, ctx context.Context, req api.QueryRequest, session QuerySession) (AgentStream, error) {
 	return engine.newRunStream(ctx, req, session, true)
+}
+
+type coderMode struct{}
+
+func (coderMode) Start(engine *LLMAgentEngine, ctx context.Context, req api.QueryRequest, session QuerySession) (AgentStream, error) {
+	if session.PlanningMode {
+		return newCoderPlanningStream(engine, ctx, req, session)
+	}
+	return engine.newRunStreamWithOptions(ctx, req, session, true, runStreamOptions{
+		Stage: "coder",
+	})
 }
 
 type oneshotMode struct{}

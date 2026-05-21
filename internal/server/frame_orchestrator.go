@@ -99,7 +99,7 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 		return nil
 	}
 	if !canUseInvokeAgentsTool(o.session.Mode) {
-		o.injectMainToolError(main, invoke.MainToolID, "sub-agent orchestration is only supported for REACT/ONESHOT main agents")
+		o.injectMainToolError(main, invoke.MainToolID, "sub-agent orchestration is only supported for REACT/ONESHOT/CODER main agents")
 		return nil
 	}
 	if len(invoke.Tasks) < 1 || len(invoke.Tasks) > contracts.MaxInvokeAgentTasks {
@@ -124,7 +124,7 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 			return nil
 		}
 		if !canUseInvokeAgentsTool(agentDef.Mode) && !isProxyAgentMode(agentDef.Mode) {
-			o.injectMainToolError(main, invoke.MainToolID, "sub-agent must be REACT/ONESHOT/PROXY")
+			o.injectMainToolError(main, invoke.MainToolID, "sub-agent must be REACT/ONESHOT/CODER/PROXY")
 			return nil
 		}
 		if containsInvokeAgentsTool(agentDef.Tools) {

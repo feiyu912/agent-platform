@@ -7,6 +7,12 @@ import (
 	contracts "agent-platform/internal/contracts"
 )
 
+func TestResolveAgentModeCoder(t *testing.T) {
+	if _, ok := resolveAgentMode("CODER").(coderMode); !ok {
+		t.Fatalf("expected CODER to resolve to coderMode")
+	}
+}
+
 func TestCoderPlanningStageToolsAreReadOnlyPlusQuestionsAndPlan(t *testing.T) {
 	stream := &coderPlanningStream{}
 	want := []string{"file_read", "file_grep", "datetime", "ask_user_question", "plan_add_tasks"}

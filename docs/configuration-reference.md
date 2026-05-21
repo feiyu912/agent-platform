@@ -444,7 +444,7 @@ contextConfig:
 说明：
 
 - `session` 负责暴露运行上下文
-- `owner` 负责注入 `OWNER_DIR` 下的 markdown 内容；`CODER` 不会默认启用，需要显式声明
+- `owner` 负责注入 `OWNER_DIR` 下的 markdown 内容；`mode: CODER` 不会默认启用，需要显式声明
 - `sandbox` 不再属于 `context tags`；只要 agent 配置了 `runtimeConfig.environmentId`，运行时就会自动注入 sandbox context
 - runtime memory context 不再属于 `context tags`；只有 agent 显式开启 `memoryConfig.enabled: true` 时，运行时才会注入 memory context
 

@@ -139,19 +139,22 @@ func TestBuildAgentDetailMetaIncludesSandboxForRuntimeEnvironment(t *testing.T) 
 	}
 }
 
-func TestBuildAgentDetailResponseIncludesTypeAndWorkspace(t *testing.T) {
+func TestBuildAgentDetailResponseIncludesCoderModeAndWorkspace(t *testing.T) {
 	workspace := filepath.Join(t.TempDir(), "project")
 	s := &Server{}
 	response := s.buildAgentDetailResponse(catalog.AgentDefinition{
 		Key:  "coder",
 		Name: "Coder",
-		Type: catalog.AgentTypeCoder,
+		Mode: catalog.AgentModeCoder,
 		Workspace: catalog.AgentWorkspaceConfig{
 			Root: workspace,
 		},
 	})
-	if response.Type != catalog.AgentTypeCoder {
-		t.Fatalf("type = %q, want %q", response.Type, catalog.AgentTypeCoder)
+	if response.Mode != catalog.AgentModeCoder {
+		t.Fatalf("mode = %q, want %q", response.Mode, catalog.AgentModeCoder)
+	}
+	if response.Type != "" {
+		t.Fatalf("type = %q, want empty for CODER mode", response.Type)
 	}
 	workspaceMeta, ok := response.Meta["workspace"].(map[string]any)
 	if !ok || workspaceMeta["root"] != workspace {
@@ -166,7 +169,7 @@ func TestBuildAgentDetailResponseIncludesTypeAndWorkspace(t *testing.T) {
 	response = s.buildAgentDetailResponse(catalog.AgentDefinition{
 		Key:  "coder-custom",
 		Name: "Coder Custom",
-		Type: catalog.AgentTypeCoder,
+		Mode: catalog.AgentModeCoder,
 		Controls: []map[string]any{
 			{"key": "planningMode", "type": "custom"},
 		},

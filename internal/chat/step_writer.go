@@ -26,7 +26,7 @@ type StepWriter struct {
 	store  Store
 	chatID string
 	runID  string
-	mode   string // "REACT" / "PLAN_EXECUTE" / "ONESHOT"
+	mode   string // "REACT" / "PLAN_EXECUTE" / "ONESHOT" / "CODER"
 	hidden bool   // true 时跳过 QueryLine 持久化，用于系统自发触发的 run（如 schedule）
 
 	debugEventsEnabled bool
@@ -526,7 +526,7 @@ func (w *StepWriter) flushCurrentStep() {
 			line.Seq = w.seqCounter
 		}
 	} else {
-		// REACT / ONESHOT 都用 react，每行都带 seq
+		// REACT / ONESHOT / CODER 都用 react，每行都带 seq
 		line.Type = "react"
 		w.seqCounter++
 		line.Seq = w.seqCounter

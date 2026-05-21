@@ -64,8 +64,7 @@ func TestBuildQuerySessionUsesCoderProfileDefaults(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(agentDir, "agent.yml"), []byte(
 		"key: coder-app\n"+
-			"type: CODER\n"+
-			"mode: REACT\n"+
+			"mode: CODER\n"+
 			"modelConfig:\n"+
 			"  modelKey: deepseek-v4-flash\n"+
 			"workspaceConfig:\n"+
@@ -109,6 +108,9 @@ func TestBuildQuerySessionUsesCoderProfileDefaults(t *testing.T) {
 	if session.ReactMaxSteps != 160 {
 		t.Fatalf("react max steps = %d, want 160", session.ReactMaxSteps)
 	}
+	if session.Mode != catalog.AgentModeCoder {
+		t.Fatalf("mode = %q, want %q", session.Mode, catalog.AgentModeCoder)
+	}
 	if session.WorkspaceRoot != filepath.Clean(workspace) {
 		t.Fatalf("workspace root = %q, want %q", session.WorkspaceRoot, filepath.Clean(workspace))
 	}
@@ -123,8 +125,7 @@ func TestBuildQuerySessionPlanningModeOnlyAppliesToCoder(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(agentsDir, "coder-app", "agent.yml"), []byte(
 		"key: coder-app\n"+
-			"type: CODER\n"+
-			"mode: REACT\n"+
+			"mode: CODER\n"+
 			"modelConfig:\n"+
 			"  modelKey: mock-model\n"+
 			"workspaceConfig:\n"+

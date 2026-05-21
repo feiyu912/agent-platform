@@ -921,8 +921,7 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(agentDir, "agent.yml"), []byte(strings.Join([]string{
 				"key: coder-app",
 				"name: Coder App",
-				"type: CODER",
-				"mode: REACT",
+				"mode: CODER",
 				"modelConfig:",
 				"  modelKey: mock-model",
 				"workspaceConfig:",
@@ -1024,8 +1023,7 @@ func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(agentDir, "agent.yml"), []byte(strings.Join([]string{
 				"key: coder-app",
 				"name: Coder App",
-				"type: CODER",
-				"mode: REACT",
+				"mode: CODER",
 				"modelConfig:",
 				"  modelKey: mock-model",
 				"workspaceConfig:",

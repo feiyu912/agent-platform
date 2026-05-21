@@ -249,7 +249,7 @@ func TestParseAgentFileSupportsCoderWorkspace(t *testing.T) {
 	content := "" +
 		"key: coder\n" +
 		"name: Coder\n" +
-		"type: coder\n" +
+		"mode: coder\n" +
 		"workspaceConfig:\n" +
 		"  root: " + filepath.ToSlash(workspace) + "\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -260,8 +260,8 @@ func TestParseAgentFileSupportsCoderWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse agent file: %v", err)
 	}
-	if def.Type != AgentTypeCoder {
-		t.Fatalf("type = %q, want %q", def.Type, AgentTypeCoder)
+	if def.Mode != AgentModeCoder {
+		t.Fatalf("mode = %q, want %q", def.Mode, AgentModeCoder)
 	}
 	if def.Workspace.Root != filepath.Clean(workspace) {
 		t.Fatalf("workspace root = %q, want %q", def.Workspace.Root, filepath.Clean(workspace))
@@ -274,7 +274,7 @@ func TestParseAgentFileAppliesCoderProfileDefaults(t *testing.T) {
 	path := filepath.Join(root, "agent.yml")
 	content := "" +
 		"key: coder\n" +
-		"type: CODER\n" +
+		"mode: CODER\n" +
 		"workspaceConfig:\n" +
 		"  root: " + filepath.ToSlash(workspace) + "\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -316,7 +316,7 @@ func TestParseAgentFileAllowsCoderProfileOverrides(t *testing.T) {
 	path := filepath.Join(root, "agent.yml")
 	content := "" +
 		"key: coder\n" +
-		"type: CODER\n" +
+		"mode: CODER\n" +
 		"toolConfig:\n" +
 		"  tools:\n" +
 		"    - datetime\n" +
@@ -354,13 +354,39 @@ func TestParseAgentFileAllowsCoderProfileOverrides(t *testing.T) {
 func TestParseAgentFileRejectsCoderWithoutWorkspace(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")
-	if err := os.WriteFile(path, []byte("key: coder\ntype: CODER\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("key: coder\nmode: CODER\n"), 0o644); err != nil {
 		t.Fatalf("write agent file: %v", err)
 	}
 
 	_, err := parseAgentFile(path)
 	if err == nil || !strings.Contains(err.Error(), "workspaceConfig.root is required") {
 		t.Fatalf("expected workspace requirement error, got %v", err)
+	}
+}
+
+func TestParseAgentFileRejectsCoderRelativeWorkspace(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	if err := os.WriteFile(path, []byte("key: coder\nmode: CODER\nworkspaceConfig:\n  root: ./project\n"), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "workspaceConfig.root must be an absolute path") {
+		t.Fatalf("expected absolute workspace requirement error, got %v", err)
+	}
+}
+
+func TestParseAgentFileRejectsLegacyCoderType(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	if err := os.WriteFile(path, []byte("key: coder\ntype: CODER\n"), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "use mode: CODER") {
+		t.Fatalf("expected legacy CODER type migration error, got %v", err)
 	}
 }
 

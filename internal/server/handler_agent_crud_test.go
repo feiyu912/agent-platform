@@ -125,7 +125,7 @@ func TestAgentEditorOptionsHTTP(t *testing.T) {
 	if len(response.Data.Models) != 1 || response.Data.Models[0].Key != "mock-model" {
 		t.Fatalf("expected mock model option, got %#v", response.Data.Models)
 	}
-	if got := response.Data.Modes; len(got) != 3 || got[0].Label != "REACT" || got[1].Label != "PLAN-EXECUTE" || got[2].Label != "PROXY" {
+	if got := response.Data.Modes; len(got) != 4 || got[0].Label != "REACT" || got[1].Label != "CODER" || got[2].Label != "PLAN-EXECUTE" || got[3].Label != "PROXY" {
 		t.Fatalf("unexpected modes %#v", got)
 	}
 	if len(response.Data.ContextTags) != 4 || response.Data.ContextTags[0].Key != "system" || response.Data.ContextTags[3].Key != "all-agents" {
@@ -267,7 +267,7 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode options data: %v", err)
 	}
-	if optionsFrame.Frame != ws.FrameResponse || optionsFrame.ID != "agent-options" || len(options.Modes) != 3 || options.Modes[2].Label != "PROXY" {
+	if optionsFrame.Frame != ws.FrameResponse || optionsFrame.ID != "agent-options" || len(options.Modes) != 4 || options.Modes[3].Label != "PROXY" {
 		t.Fatalf("unexpected options frame %#v data=%#v", optionsFrame, options)
 	}
 
