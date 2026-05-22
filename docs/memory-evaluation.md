@@ -8,11 +8,11 @@
 
 ### 1. 确认 memory 日志已开启
 
-默认已开启，日志路径 `runtime/logs/memory.log`。可通过环境变量覆盖：
+默认已开启，日志路径 `runtime/memory/memory.log`。可通过环境变量覆盖：
 
 ```bash
 LOGGING_MEMORY_ENABLED=true
-LOGGING_AGENT_MEMORY_FILE=runtime/logs/memory.log
+LOGGING_AGENT_MEMORY_FILE=runtime/memory/memory.log
 ```
 
 ### 2. 确认 auto-learn 已开启
@@ -95,12 +95,12 @@ memoryConfig:
 
 ```bash
 # 平均引用率
-cat runtime/logs/memory.log \
+cat runtime/memory/memory.log \
   | jq -r 'select(.operation=="disclosure_feedback") | .referenceRate' \
   | awk '{s+=$1; n++} END {if(n>0) printf "avg_reference_rate: %.3f (samples: %d)\n", s/n, n; else print "no data"}'
 
 # 引用率分布（分 10 个桶）
-cat runtime/logs/memory.log \
+cat runtime/memory/memory.log \
   | jq -r 'select(.operation=="disclosure_feedback") | .referenceRate' \
   | awk '{bucket=int($1*10); counts[bucket]++; total++} END {for(i=0;i<=10;i++) printf "[%.1f-%.1f): %d (%.1f%%)\n", i/10, (i+1)/10, counts[i]+0, (counts[i]+0)/total*100}'
 ```
@@ -118,7 +118,7 @@ cat runtime/logs/memory.log \
 **聚合命令**：
 
 ```bash
-cat runtime/logs/memory.log \
+cat runtime/memory/memory.log \
   | jq -r 'select(.operation=="build_context_bundle" and .totalCandidates > 0) | (.stableFacts + .sessionItems + .observations) / .totalCandidates' \
   | awk '{s+=$1; n++} END {if(n>0) printf "avg_selection_rate: %.3f (samples: %d)\n", s/n, n; else print "no data"}'
 ```
@@ -135,12 +135,12 @@ cat runtime/logs/memory.log \
 
 ```bash
 # 各层出现频率
-cat runtime/logs/memory.log \
+cat runtime/memory/memory.log \
   | jq -r 'select(.operation=="build_context_bundle" and .layers != null) | .layers[]' \
   | sort | uniq -c | sort -rn
 
 # 层组合分布
-cat runtime/logs/memory.log \
+cat runtime/memory/memory.log \
   | jq -r 'select(.operation=="build_context_bundle" and .layers != null) | [.layers[]] | join("+")' \
   | sort | uniq -c | sort -rn
 ```
@@ -159,7 +159,7 @@ cat runtime/logs/memory.log \
 **聚合命令**：
 
 ```bash
-cat runtime/logs/memory.log \
+cat runtime/memory/memory.log \
   | jq -r 'select(.operation=="build_context_bundle" and .maxChars > 0) | (.stableChars + .sessionChars + .observationChars) / .maxChars' \
   | awk '{s+=$1; n++} END {if(n>0) printf "avg_budget_utilization: %.3f (samples: %d)\n", s/n, n; else print "no data"}'
 ```
@@ -174,7 +174,7 @@ cat runtime/logs/memory.log \
 **聚合命令**：
 
 ```bash
-cat runtime/logs/memory.log \
+cat runtime/memory/memory.log \
   | jq -r 'select(.operation=="build_context_bundle") | .stopReason' \
   | sort | uniq -c | sort -rn
 ```
@@ -185,7 +185,7 @@ cat runtime/logs/memory.log \
 
 ```bash
 #!/bin/bash
-LOG=runtime/logs/memory.log
+LOG=runtime/memory/memory.log
 
 echo "=== Memory System Evaluation Report ==="
 echo ""

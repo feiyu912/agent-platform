@@ -226,7 +226,7 @@ agent definition 侧另有 `memoryConfig`：
 | `LOGGING_AGENT_VIEWPORT_ENABLED` | `true` | `Debug / troubleshooting` | 是否记录 viewport 日志 |
 | `LOGGING_AGENT_SSE_ENABLED` | `false` | `Debug / troubleshooting` | 是否记录 SSE 事件日志 |
 | `LOGGING_MEMORY_ENABLED` | `true` | `Debug / troubleshooting` | 是否启用 memory 独立操作日志 |
-| `LOGGING_AGENT_MEMORY_FILE` | `runtime/logs/memory.log` | `Debug / troubleshooting` | memory 独立日志文件路径 |
+| `LOGGING_AGENT_MEMORY_FILE` | `runtime/memory/memory.log` | `Debug / troubleshooting` | memory 独立日志文件路径 |
 | `LOGGING_AGENT_LLM_INTERACTION_ENABLED` | `true` | `Debug / troubleshooting` | 是否记录 LLM provider 原始 chunk 与解析后的 delta 日志 |
 | `LOGGING_AGENT_LLM_INTERACTION_MASK_SENSITIVE` | `false` | `Debug / troubleshooting` | 是否把 LLM 交互日志替换为 `[masked chars=N]` |
 

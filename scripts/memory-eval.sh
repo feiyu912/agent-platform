@@ -2,7 +2,7 @@
 # Memory System Evaluation Report
 # Usage: ./scripts/memory-eval.sh [path-to-memory.log]
 
-LOG="${1:-runtime/logs/memory.log}"
+LOG="${1:-runtime/memory/memory.log}"
 
 if [ ! -f "$LOG" ]; then
   echo "memory.log not found: $LOG"

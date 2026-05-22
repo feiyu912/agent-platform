@@ -530,7 +530,6 @@ func defaultConfig() Config {
 			SSE:       ToggleConfig{Enabled: false},
 			Memory: MemoryLoggingConfig{
 				Enabled: true,
-				File:    filepath.Join(runtimeRoot, "logs", "memory.log"),
 			},
 			LLMInteraction: LLMInteractionLoggingConfig{
 				Enabled:       true,
@@ -1048,6 +1047,9 @@ func (c *Config) applyEnv() {
 	c.Logging.Viewport.Enabled = boolEnv("LOGGING_AGENT_VIEWPORT_ENABLED", c.Logging.Viewport.Enabled)
 	c.Logging.SSE.Enabled = boolEnv("LOGGING_AGENT_SSE_ENABLED", c.Logging.SSE.Enabled)
 	c.Logging.Memory.Enabled = boolEnv("LOGGING_MEMORY_ENABLED", c.Logging.Memory.Enabled)
+	if strings.TrimSpace(c.Logging.Memory.File) == "" {
+		c.Logging.Memory.File = memoryLogFileDefault(c.Paths.MemoryDir)
+	}
 	c.Logging.Memory.File = pathEnv("LOGGING_AGENT_MEMORY_FILE", c.Logging.Memory.File)
 	c.Logging.LLMInteraction.Enabled = boolEnv("LOGGING_AGENT_LLM_INTERACTION_ENABLED", c.Logging.LLMInteraction.Enabled)
 	c.Logging.LLMInteraction.MaskSensitive = boolEnv("LOGGING_AGENT_LLM_INTERACTION_MASK_SENSITIVE", c.Logging.LLMInteraction.MaskSensitive)
@@ -1071,6 +1073,13 @@ func (c *Config) applyEnv() {
 	c.WebSocket.WriteTimeoutMs = int64Env("AGENT_WS_WRITE_TIMEOUT_MS", c.WebSocket.WriteTimeoutMs)
 	c.WebSocket.WriteQueueSize = intEnv("AGENT_WS_WRITE_QUEUE_SIZE", c.WebSocket.WriteQueueSize)
 	c.WebSocket.MaxObservesPerConn = intEnv("AGENT_WS_MAX_OBSERVES_PER_CONN", c.WebSocket.MaxObservesPerConn)
+}
+
+func memoryLogFileDefault(memoryDir string) string {
+	if strings.TrimSpace(memoryDir) == "" {
+		return ""
+	}
+	return filepath.Join(memoryDir, "memory.log")
 }
 
 func (c *Config) normalize() error {

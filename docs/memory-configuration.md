@@ -80,7 +80,7 @@ provider 侧 `memory.embedding` 解析：
 | provider | `memory.embedding.dimension` | `0` | provider 默认 embedding 维度 |
 | provider | `memory.embedding.timeoutMs` | `0` | provider 默认 embedding 超时 |
 | env | `LOGGING_MEMORY_ENABLED` | `true` | 是否启用 memory 独立日志 |
-| env | `LOGGING_AGENT_MEMORY_FILE` | `runtime/logs/memory.log` | memory 独立日志路径 |
+| env | `LOGGING_AGENT_MEMORY_FILE` | `runtime/memory/memory.log` | memory 独立日志路径 |
 
 ## 分组说明
 
@@ -256,7 +256,7 @@ memoryConfig:
 
 ```bash
 LOGGING_MEMORY_ENABLED=true
-LOGGING_AGENT_MEMORY_FILE=runtime/logs/memory.log
+LOGGING_AGENT_MEMORY_FILE=runtime/memory/memory.log
 ```
 
 ## 注意事项

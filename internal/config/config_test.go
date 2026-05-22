@@ -273,6 +273,9 @@ func TestLoadCustomStorageDirs(t *testing.T) {
 		if cfg.Memory.StorageDir != filepath.Join("var", "custom-memory") {
 			t.Fatalf("unexpected memory storage dir: %q", cfg.Memory.StorageDir)
 		}
+		if cfg.Logging.Memory.File != filepath.Join("var", "custom-memory", "memory.log") {
+			t.Fatalf("unexpected memory log file: %q", cfg.Logging.Memory.File)
+		}
 	})
 }
 
@@ -310,6 +313,9 @@ func TestLoadRuntimeDirDerivesRuntimePaths(t *testing.T) {
 		if cfg.Memory.StorageDir != filepath.Join(runtimeRoot, "memory") {
 			t.Fatalf("unexpected memory storage dir: %q", cfg.Memory.StorageDir)
 		}
+		if cfg.Logging.Memory.File != filepath.Join(runtimeRoot, "memory", "memory.log") {
+			t.Fatalf("unexpected memory log file: %q", cfg.Logging.Memory.File)
+		}
 	})
 }
 
@@ -338,6 +344,9 @@ func TestLoadRuntimeDirAllowsCommonDirectoryOverrides(t *testing.T) {
 		if cfg.Paths.MemoryDir != filepath.Join("var", "custom-memory") {
 			t.Fatalf("unexpected memory dir: %q", cfg.Paths.MemoryDir)
 		}
+		if cfg.Logging.Memory.File != filepath.Join("var", "custom-memory", "memory.log") {
+			t.Fatalf("unexpected memory log file: %q", cfg.Logging.Memory.File)
+		}
 		if cfg.Paths.PanDir != panDir {
 			t.Fatalf("unexpected pan dir: %q", cfg.Paths.PanDir)
 		}
@@ -352,6 +361,25 @@ func TestLoadRuntimeDirAllowsCommonDirectoryOverrides(t *testing.T) {
 		}
 		if cfg.Memory.StorageDir != filepath.Join("var", "custom-memory") {
 			t.Fatalf("unexpected memory storage dir: %q", cfg.Memory.StorageDir)
+		}
+	})
+}
+
+func TestLoadMemoryLogFileEnvOverridesMemoryDirDefault(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"MEMORY_DIR":                filepath.Join("var", "custom-memory"),
+		"LOGGING_AGENT_MEMORY_FILE": filepath.Join("var", "custom-log", "memory.log"),
+		"LOGGING_MEMORY_ENABLED":    "false",
+	}, func() {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if cfg.Logging.Memory.File != filepath.Join("var", "custom-log", "memory.log") {
+			t.Fatalf("unexpected memory log file: %q", cfg.Logging.Memory.File)
+		}
+		if cfg.Logging.Memory.Enabled {
+			t.Fatalf("expected memory logging to be disabled")
 		}
 	})
 }
