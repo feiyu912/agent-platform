@@ -55,19 +55,22 @@
 
 | 环境变量 | 默认值 | 标签 | 说明 |
 |---|---|---|---|
-| `REGISTRIES_DIR` | `runtime/registries` | `End user` | provider / model registry 根目录 |
-| `OWNER_DIR` | `runtime/owner` | `End user` | owner 目录 |
-| `AGENTS_DIR` | `runtime/agents` | `End user` | agents 定义目录 |
-| `TEAMS_DIR` | `runtime/teams` | `End user` | teams 定义目录 |
-| `ROOT_DIR` | `runtime/root` | `End user` | runtime 根目录映射 |
-| `SCHEDULES_DIR` | `runtime/schedules` | `End user` | schedules 定义目录 |
-| `CHATS_DIR` | `runtime/chats` | `End user` | chat 落盘目录 |
-| `MEMORY_DIR` | `runtime/memory` | `End user` | memory 落盘目录 |
-| `PAN_DIR` | `runtime/pan` | `End user` | pan 目录映射 |
-| `SKILLS_MARKET_DIR` | `runtime/skills-market` | `End user` | skills market 目录映射 |
+| `RUNTIME_DIR` | `runtime` | `End user` | runtime 总目录；优先级高于内部兼容变量 `SERVICE_DATA_DIR` |
+| `REGISTRIES_DIR` | `${RUNTIME_DIR}/registries` | `End user` | provider / model registry 根目录 |
+| `CHATS_DIR` | `${RUNTIME_DIR}/chats` | `End user` | chat 落盘目录 |
+| `MEMORY_DIR` | `${RUNTIME_DIR}/memory` | `End user` | memory 落盘目录 |
+| `PAN_DIR` | `${RUNTIME_DIR}/pan` | `End user` | pan 目录映射 |
+| `OWNER_DIR` | `${RUNTIME_DIR}/owner` | `Advanced / operator` | owner 目录；运行时支持但不展示在 `.env.example` |
+| `AGENTS_DIR` | `${RUNTIME_DIR}/agents` | `Advanced / operator` | agents 定义目录；运行时支持但不展示在 `.env.example` |
+| `TEAMS_DIR` | `${RUNTIME_DIR}/teams` | `Advanced / operator` | teams 定义目录；运行时支持但不展示在 `.env.example` |
+| `ROOT_DIR` | `${RUNTIME_DIR}/root` | `Advanced / operator` | runtime 根目录映射；运行时支持但不展示在 `.env.example` |
+| `SCHEDULES_DIR` | `${RUNTIME_DIR}/schedules` | `Advanced / operator` | schedules 定义目录；运行时支持但不展示在 `.env.example` |
+| `SKILLS_MARKET_DIR` | `${RUNTIME_DIR}/skills-market` | `Advanced / operator` | skills market 目录映射；运行时支持但不展示在 `.env.example` |
 | `WECOM_GO_SKILL_DIR` | `../wecom-go-skill` | `Advanced / operator` | `platform: wecom-go-skill` 沙箱挂载的宿主目录 |
 | `AGW_CLI_DIR` | `../agw-cli` | `Advanced / operator` | `platform: agw-cli` 沙箱挂载的宿主目录 |
 | `PROVIDER_APIKEY_KEY_PART` | 空 | `Advanced / operator` | provider `apiKey: AES(...)` 的环境变量半密钥 |
+
+目录解析优先级为：显式子目录变量（如 `CHATS_DIR`）> `RUNTIME_DIR` > `SERVICE_DATA_DIR` > `runtime`。
 
 ### Container Hub
 
@@ -389,11 +392,11 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 - `AGENT_SSE_*`
 - `AGENT_H2A_RENDER_*`
 - `AGENT_WS_*`
+- `RUNTIME_DIR` / runtime 子目录 `*_DIR`
 
 ## 当前仍会启动失败的旧变量
 
 - `CONFIGS_DIR`
-- `RUNTIME_DIR`
 - `AGENT_BASH_*`
 - `AGENT_FILE_*`
 - 旧 `AGENT_AUTH_*`
@@ -406,22 +409,17 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 
 ## Compose 目录映射
 
-`compose.yml` 会把宿主机目录映射到容器内固定路径：
+`compose.yml` 会把宿主机 runtime 根目录映射到容器内固定路径，并允许四个高频子目录单独覆盖：
 
-| 宿主机变量 | 容器内路径 |
+| 宿主机来源 | 容器内路径 |
 |---|---|
-| `REGISTRIES_DIR` | `/opt/registries` |
-| `OWNER_DIR` | `/opt/owner` |
-| `AGENTS_DIR` | `/opt/agents` |
-| `TEAMS_DIR` | `/opt/teams` |
-| `ROOT_DIR` | `/opt/root` |
-| `SCHEDULES_DIR` | `/opt/schedules` |
-| `CHATS_DIR` | `/opt/chats` |
-| `MEMORY_DIR` | `/opt/memory` |
-| `PAN_DIR` | `/opt/pan` |
-| `SKILLS_MARKET_DIR` | `/opt/skills-market` |
+| `${RUNTIME_DIR:-./runtime}` | `/opt/runtime` |
+| `${REGISTRIES_DIR:-${RUNTIME_DIR:-./runtime}/registries}` | `/opt/runtime/registries` |
+| `${CHATS_DIR:-${RUNTIME_DIR:-./runtime}/chats}` | `/opt/runtime/chats` |
+| `${MEMORY_DIR:-${RUNTIME_DIR:-./runtime}/memory}` | `/opt/runtime/memory` |
+| `${PAN_DIR:-${RUNTIME_DIR:-./runtime}/pan}` | `/opt/runtime/pan` |
 
-这些环境变量在容器内也会同步设置为对应 `/opt/*` 路径，且容器内应用监听端口固定为 `8080`。
+容器内应用会设置 `RUNTIME_DIR=/opt/runtime`，并把 runtime 子目录同步为对应 `/opt/runtime/*` 路径；容器内应用监听端口固定为 `8080`。
 
 ## Agent Context Tags
 

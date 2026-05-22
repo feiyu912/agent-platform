@@ -273,6 +273,86 @@ func TestLoadCustomStorageDirs(t *testing.T) {
 	})
 }
 
+func TestLoadRuntimeDirDerivesRuntimePaths(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"RUNTIME_DIR":      filepath.Join("var", "runtime"),
+		"SERVICE_DATA_DIR": filepath.Join("var", "service-data"),
+	}, func() {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		runtimeRoot := filepath.Join("var", "runtime")
+		if cfg.Paths.RegistriesDir != filepath.Join(runtimeRoot, "registries") {
+			t.Fatalf("unexpected registries dir: %q", cfg.Paths.RegistriesDir)
+		}
+		if cfg.Paths.ChatsDir != filepath.Join(runtimeRoot, "chats") {
+			t.Fatalf("unexpected chats dir: %q", cfg.Paths.ChatsDir)
+		}
+		if cfg.Paths.MemoryDir != filepath.Join(runtimeRoot, "memory") {
+			t.Fatalf("unexpected memory dir: %q", cfg.Paths.MemoryDir)
+		}
+		if cfg.Paths.PanDir != filepath.Join(runtimeRoot, "pan") {
+			t.Fatalf("unexpected pan dir: %q", cfg.Paths.PanDir)
+		}
+		if cfg.Providers.ExternalDir != filepath.Join(runtimeRoot, "registries", "providers") {
+			t.Fatalf("unexpected providers dir: %q", cfg.Providers.ExternalDir)
+		}
+		if cfg.Models.ExternalDir != filepath.Join(runtimeRoot, "registries", "models") {
+			t.Fatalf("unexpected models dir: %q", cfg.Models.ExternalDir)
+		}
+		if cfg.ChatStorage.Dir != filepath.Join(runtimeRoot, "chats") {
+			t.Fatalf("unexpected chat storage dir: %q", cfg.ChatStorage.Dir)
+		}
+		if cfg.Memory.StorageDir != filepath.Join(runtimeRoot, "memory") {
+			t.Fatalf("unexpected memory storage dir: %q", cfg.Memory.StorageDir)
+		}
+	})
+}
+
+func TestLoadRuntimeDirAllowsCommonDirectoryOverrides(t *testing.T) {
+	panDir := filepath.Join(t.TempDir(), "custom-pan")
+	if err := os.Mkdir(panDir, 0o755); err != nil {
+		t.Fatalf("make pan dir: %v", err)
+	}
+	withIsolatedEnv(t, map[string]string{
+		"RUNTIME_DIR":    filepath.Join("var", "runtime"),
+		"REGISTRIES_DIR": filepath.Join("var", "custom-registries"),
+		"CHATS_DIR":      filepath.Join("var", "custom-chats"),
+		"MEMORY_DIR":     filepath.Join("var", "custom-memory"),
+		"PAN_DIR":        panDir,
+	}, func() {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if cfg.Paths.RegistriesDir != filepath.Join("var", "custom-registries") {
+			t.Fatalf("unexpected registries dir: %q", cfg.Paths.RegistriesDir)
+		}
+		if cfg.Paths.ChatsDir != filepath.Join("var", "custom-chats") {
+			t.Fatalf("unexpected chats dir: %q", cfg.Paths.ChatsDir)
+		}
+		if cfg.Paths.MemoryDir != filepath.Join("var", "custom-memory") {
+			t.Fatalf("unexpected memory dir: %q", cfg.Paths.MemoryDir)
+		}
+		if cfg.Paths.PanDir != panDir {
+			t.Fatalf("unexpected pan dir: %q", cfg.Paths.PanDir)
+		}
+		if cfg.Providers.ExternalDir != filepath.Join("var", "custom-registries", "providers") {
+			t.Fatalf("unexpected providers dir: %q", cfg.Providers.ExternalDir)
+		}
+		if cfg.Models.ExternalDir != filepath.Join("var", "custom-registries", "models") {
+			t.Fatalf("unexpected models dir: %q", cfg.Models.ExternalDir)
+		}
+		if cfg.ChatStorage.Dir != filepath.Join("var", "custom-chats") {
+			t.Fatalf("unexpected chat storage dir: %q", cfg.ChatStorage.Dir)
+		}
+		if cfg.Memory.StorageDir != filepath.Join("var", "custom-memory") {
+			t.Fatalf("unexpected memory storage dir: %q", cfg.Memory.StorageDir)
+		}
+	})
+}
+
 func TestLoadIgnoresLegacyMemoryStorageEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"AGENT_MEMORY_STORAGE_DIR": filepath.Join("var", "custom-memory"),
@@ -289,13 +369,13 @@ func TestLoadIgnoresLegacyMemoryStorageEnv(t *testing.T) {
 
 func TestLoadIgnoresDeprecatedEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"RUNTIME_DIR": "runtime",
+		"AGENT_CONFIG_DIR": "configs",
 	}, func() {
 		_, err := Load()
 		if err == nil {
 			t.Fatalf("expected deprecated env to fail")
 		}
-		if !strings.Contains(err.Error(), "RUNTIME_DIR") {
+		if !strings.Contains(err.Error(), "AGENT_CONFIG_DIR") {
 			t.Fatalf("expected error to mention deprecated env, got %v", err)
 		}
 	})
@@ -976,6 +1056,8 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 	keys := append([]string{}, deprecatedEnvVars...)
 	keys = append(keys,
 		"SERVICE_CONFIG_DIR",
+		"SERVICE_DATA_DIR",
+		"RUNTIME_DIR",
 		"SERVER_PORT",
 		"REGISTRIES_DIR",
 		"OWNER_DIR",

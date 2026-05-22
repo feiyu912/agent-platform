@@ -422,7 +422,10 @@ func checkDeprecatedEnvVars() error {
 }
 
 func defaultConfig() Config {
-	runtimeRoot := strings.TrimSpace(os.Getenv("SERVICE_DATA_DIR"))
+	runtimeRoot := strings.TrimSpace(os.Getenv("RUNTIME_DIR"))
+	if runtimeRoot == "" {
+		runtimeRoot = strings.TrimSpace(os.Getenv("SERVICE_DATA_DIR"))
+	}
 	if runtimeRoot == "" {
 		runtimeRoot = "runtime"
 	}
@@ -1645,7 +1648,6 @@ var deprecatedEnvVars = []string{
 	"AGENT_FILE_MAX_BATCH_OPS",
 	"AGENT_FILE_REQUIRE_WRITE_APPROVAL",
 	"AGENT_FILE_REQUIRE_READ_BEFORE_WRITE",
-	"RUNTIME_DIR",
 	"AGENT_CONFIG_DIR",
 	"AGENT_AGENTS_EXTERNAL_DIR",
 	"AGENT_TEAMS_EXTERNAL_DIR",

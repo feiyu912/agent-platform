@@ -151,12 +151,13 @@ RUN_SOCKET_TESTS=1 make test-integration
 - `STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS`
 - `DEBUG_EVENTS_ENABLED`
 - `AGENT_DEFAULT_*`
-- `REGISTRIES_DIR` / `OWNER_DIR` / `AGENTS_DIR` / `TEAMS_DIR` / `ROOT_DIR` / `SCHEDULES_DIR` / `CHATS_DIR` / `MEMORY_DIR` / `SKILLS_MARKET_DIR` / `PAN_DIR`
+- `RUNTIME_DIR` / `REGISTRIES_DIR` / `CHATS_DIR` / `MEMORY_DIR` / `PAN_DIR`
 - `WECOM_GO_SKILL_DIR` / `AGW_CLI_DIR`（用于 `runtimeConfig.extraMounts` 中的企微平台服务挂载）
 - `PROVIDER_APIKEY_KEY_PART`
 
 以下环境变量仍受 Go runtime 支持，但为了降低最终用户理解成本，默认不再出现在 `.env.example` 中：
 
+- 低频 runtime 子目录覆盖：`OWNER_DIR`、`AGENTS_DIR`、`TEAMS_DIR`、`ROOT_DIR`、`SCHEDULES_DIR`、`SKILLS_MARKET_DIR`
 - 传输与渲染调试：`AGENT_SSE_HEARTBEAT_INTERVAL_MS`、`AGENT_H2A_RENDER_*`
 - WebSocket 深度调优：`AGENT_WS_MAX_MESSAGE_SIZE`、`AGENT_WS_PING_INTERVAL_MS`、`AGENT_WS_WRITE_TIMEOUT_MS`、`AGENT_WS_WRITE_QUEUE_SIZE`、`AGENT_WS_MAX_OBSERVES_PER_CONN`
 - 日志排障：`LOGGING_AGENT_*`
@@ -217,7 +218,6 @@ Provider `apiKey` 支持两种写法：
 - 旧 `AGENT_BASH_*`（改用 `configs/bash.yml`）
 - 旧 `AGENT_FILE_*`（改用 `configs/file-tools.yml`）
 - 旧单 gateway env：`GATEWAY_WS_URL`、`AGENT_GATEWAY_WS_URL`、`GATEWAY_JWT_TOKEN`、`GATEWAY_BASE_URL`、`AGENT_GATEWAY_WS_*`
-- 旧 `RUNTIME_DIR`
 - 旧 `AGENT_CONFIG_DIR`
 - 旧 `AGENT_MEMORY_STORAGE_DIR`
 - 旧 `MEMORY_CHATS_*`
@@ -241,13 +241,15 @@ docker compose config
 docker compose up --build
 ```
 
-`compose.yml` 与参考仓库保持同样的目录变量工作流：
+`compose.yml` 使用同样的 runtime 根目录工作流：
 
 - 使用 `env_file: .env`
 - 本地 `make run` 使用 `SERVER_PORT` 作为监听端口
 - 宿主机端口映射为 `${SERVER_PORT}:8080`
 - 容器内应用监听端口固定为 `8080`
-- 容器内目录固定为 `/opt/registries`、`/opt/owner`、`/opt/agents`、`/opt/teams`、`/opt/root`、`/opt/schedules`、`/opt/chats`、`/opt/memory`、`/opt/pan`、`/opt/skills-market`
+- 宿主机 runtime 根目录来自 `${RUNTIME_DIR:-./runtime}`
+- `REGISTRIES_DIR`、`CHATS_DIR`、`MEMORY_DIR`、`PAN_DIR` 可单独覆盖宿主机 bind source；未配置时自然落在 `${RUNTIME_DIR}` 下
+- 容器内 runtime 根目录固定为 `/opt/runtime`，应用通过 `RUNTIME_DIR=/opt/runtime` 解析子目录
 - `./configs` 只读挂载到 `/opt/configs`
 
 Container Hub 默认基础挂载当前固定为 7 个：

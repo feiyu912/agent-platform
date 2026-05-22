@@ -13,48 +13,34 @@ services:
       - .env
     environment:
       SERVER_PORT: 8080
-      REGISTRIES_DIR: /opt/registries
-      OWNER_DIR: /opt/owner
-      AGENTS_DIR: /opt/agents
-      TEAMS_DIR: /opt/teams
-      ROOT_DIR: /opt/root
-      SCHEDULES_DIR: /opt/schedules
-      CHATS_DIR: /opt/chats
-      MEMORY_DIR: /opt/memory
-      PAN_DIR: /opt/pan
-      SKILLS_MARKET_DIR: /opt/skills-market
+      RUNTIME_DIR: /opt/runtime
+      REGISTRIES_DIR: /opt/runtime/registries
+      OWNER_DIR: /opt/runtime/owner
+      AGENTS_DIR: /opt/runtime/agents
+      TEAMS_DIR: /opt/runtime/teams
+      ROOT_DIR: /opt/runtime/root
+      SCHEDULES_DIR: /opt/runtime/schedules
+      CHATS_DIR: /opt/runtime/chats
+      MEMORY_DIR: /opt/runtime/memory
+      PAN_DIR: /opt/runtime/pan
+      SKILLS_MARKET_DIR: /opt/runtime/skills-market
     volumes:
       - type: bind
         source: ./configs
         target: /opt/configs
         read_only: true
       - type: bind
-        source: ${REGISTRIES_DIR:-./runtime/registries}
-        target: /opt/registries
+        source: ${RUNTIME_DIR:-./runtime}
+        target: /opt/runtime
       - type: bind
-        source: ${OWNER_DIR:-./runtime/owner}
-        target: /opt/owner
+        source: ${REGISTRIES_DIR:-${RUNTIME_DIR:-./runtime}/registries}
+        target: /opt/runtime/registries
       - type: bind
-        source: ${AGENTS_DIR:-./runtime/agents}
-        target: /opt/agents
+        source: ${CHATS_DIR:-${RUNTIME_DIR:-./runtime}/chats}
+        target: /opt/runtime/chats
       - type: bind
-        source: ${TEAMS_DIR:-./runtime/teams}
-        target: /opt/teams
+        source: ${MEMORY_DIR:-${RUNTIME_DIR:-./runtime}/memory}
+        target: /opt/runtime/memory
       - type: bind
-        source: ${ROOT_DIR:-./runtime/root}
-        target: /opt/root
-      - type: bind
-        source: ${SCHEDULES_DIR:-./runtime/schedules}
-        target: /opt/schedules
-      - type: bind
-        source: ${CHATS_DIR:-./runtime/chats}
-        target: /opt/chats
-      - type: bind
-        source: ${MEMORY_DIR:-./runtime/memory}
-        target: /opt/memory
-      - type: bind
-        source: ${PAN_DIR:-./runtime/pan}
-        target: /opt/pan
-      - type: bind
-        source: ${SKILLS_MARKET_DIR:-./runtime/skills-market}
-        target: /opt/skills-market
+        source: ${PAN_DIR:-${RUNTIME_DIR:-./runtime}/pan}
+        target: /opt/runtime/pan
