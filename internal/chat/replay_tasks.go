@@ -94,12 +94,12 @@ func beginReplayedSubTask(rd *chatRunData, runID string, taskID string, taskName
 			Type:      "task.start",
 			Timestamp: ts,
 			Payload: map[string]any{
-				"taskId":      taskID,
-				"runId":       runID,
-				"taskName":    taskName,
-				"description": taskDescription,
-				"subAgentKey": taskSubAgentKey,
-				"toolId":      taskMainToolID,
+				"taskId":         taskID,
+				"runId":          runID,
+				"taskName":       taskName,
+				"description":    taskDescription,
+				"subAgentKey":    taskSubAgentKey,
+				"invokingToolId": taskMainToolID,
 			},
 		})
 	}

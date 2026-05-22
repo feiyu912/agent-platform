@@ -88,6 +88,12 @@ func TestDispatcherFallsBackToActiveTaskIDForSubAgentBlocks(t *testing.T) {
 		MainToolID:  "tool_main_1",
 	})
 	assertEventTypes(t, startEvents, "task.start")
+	if got := startEvents[0].Data().String("invokingToolId"); got != "tool_main_1" {
+		t.Fatalf("expected task.start invokingToolId, got %#v", startEvents[0].ToData())
+	}
+	if _, exists := startEvents[0].ToData()["toolId"]; exists {
+		t.Fatalf("did not expect task.start toolId, got %#v", startEvents[0].ToData())
+	}
 
 	contentEvents := dispatcher.Dispatch(ContentDelta{
 		ContentID: "run_1_c_1",

@@ -1951,11 +1951,11 @@ func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 	writer.OnEvent(stream.EventData{
 		Type: "task.start",
 		Payload: map[string]any{
-			"taskId":      "task_1",
-			"taskName":    "分析",
-			"description": "run analysis",
-			"subAgentKey": "analyzer",
-			"toolId":      "tool_main_1",
+			"taskId":         "task_1",
+			"taskName":       "分析",
+			"description":    "run analysis",
+			"subAgentKey":    "analyzer",
+			"invokingToolId": "tool_main_1",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -3023,12 +3023,12 @@ func TestStepWriterSubAgentStepsAreExcludedFromRawMessages(t *testing.T) {
 		Type:      "task.start",
 		Timestamp: 1002,
 		Payload: map[string]any{
-			"taskId":      "task_1",
-			"runId":       "run-subagent-raw",
-			"taskName":    "分析",
-			"description": "run analysis",
-			"subAgentKey": "analyzer",
-			"toolId":      "tool_main_1",
+			"taskId":         "task_1",
+			"runId":          "run-subagent-raw",
+			"taskName":       "分析",
+			"description":    "run analysis",
+			"subAgentKey":    "analyzer",
+			"invokingToolId": "tool_main_1",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -3100,10 +3100,10 @@ func TestStepWriterTaskSnapshotsUpsertAfterComplete(t *testing.T) {
 		Type:      "task.start",
 		Timestamp: 1001,
 		Payload: map[string]any{
-			"taskId":      "task_1",
-			"taskName":    "讲故事",
-			"subAgentKey": "story-agent",
-			"toolId":      "tool_main_1",
+			"taskId":         "task_1",
+			"taskName":       "讲故事",
+			"subAgentKey":    "story-agent",
+			"invokingToolId": "tool_main_1",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -3362,7 +3362,7 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 		}
 		switch event.Type {
 		case "task.start":
-			if event.String("subAgentKey") == "analyzer" && event.String("toolId") == "tool_main_1" && event.String("taskName") == "分析" {
+			if event.String("subAgentKey") == "analyzer" && event.String("invokingToolId") == "tool_main_1" && event.String("taskName") == "分析" {
 				sawStart = true
 			}
 		case "task.complete":

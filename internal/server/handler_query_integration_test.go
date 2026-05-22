@@ -770,6 +770,7 @@ func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t
 	preTaskToolNames := make([]string, 0)
 	firstTaskStartIndex := -1
 	taskStarts := map[string]int{}
+	taskStartPayloads := map[string]map[string]any{}
 	taskCompletes := map[string]int{}
 
 	for index, message := range messages {
@@ -786,7 +787,9 @@ func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t
 			if firstTaskStartIndex < 0 {
 				firstTaskStartIndex = index
 			}
-			taskStarts[stringValue(message["taskId"])] = index
+			taskID := stringValue(message["taskId"])
+			taskStarts[taskID] = index
+			taskStartPayloads[taskID] = message
 		case "task.complete":
 			taskCompletes[stringValue(message["taskId"])] = index
 		}
@@ -812,6 +815,9 @@ func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t
 	alphaStart, ok := taskStarts["task_alpha"]
 	if !ok {
 		t.Fatalf("missing task.start for task_alpha in %#v", messages)
+	}
+	if _, ok := taskStartPayloads["task_alpha"]["toolId"]; ok {
+		t.Fatalf("did not expect task.start toolId, got %#v", taskStartPayloads["task_alpha"])
 	}
 	alphaComplete, ok := taskCompletes["task_alpha"]
 	if !ok {
