@@ -2009,7 +2009,6 @@ func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 		Type: "task.complete",
 		Payload: map[string]any{
 			"taskId": "task_1",
-			"status": "completed",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -2100,7 +2099,6 @@ func TestStepWriterSubTaskReactFlushOrder(t *testing.T) {
 		Type: "task.complete",
 		Payload: map[string]any{
 			"taskId": "task_1",
-			"status": "completed",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -3045,7 +3043,6 @@ func TestStepWriterSubAgentStepsAreExcludedFromRawMessages(t *testing.T) {
 		Timestamp: 1004,
 		Payload: map[string]any{
 			"taskId": "task_1",
-			"status": "completed",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -3120,7 +3117,6 @@ func TestStepWriterTaskSnapshotsUpsertAfterComplete(t *testing.T) {
 		Timestamp: 1003,
 		Payload: map[string]any{
 			"taskId": "task_1",
-			"status": "completed",
 		},
 	})
 	writer.OnEvent(stream.EventData{
@@ -3228,7 +3224,6 @@ func TestStepWriterDoesNotInferTaskForUntargetedContent(t *testing.T) {
 		Timestamp: 1003,
 		Payload: map[string]any{
 			"taskId": "task_1",
-			"status": "completed",
 		},
 	})
 	writer.Flush()
@@ -3366,7 +3361,7 @@ func TestLoadChatSynthesizesTaskLifecycleFromSubAgentSteps(t *testing.T) {
 				sawStart = true
 			}
 		case "task.complete":
-			if event.String("taskId") == "task_1" && event.String("status") == "completed" {
+			if event.String("taskId") == "task_1" {
 				sawComplete = true
 			}
 		}

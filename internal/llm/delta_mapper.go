@@ -237,11 +237,11 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 				MainToolID:  value.MainToolID,
 			}}
 		case "complete":
-			return []stream.StreamInput{stream.TaskComplete{TaskID: value.TaskID, Status: value.Status}}
+			return []stream.StreamInput{stream.TaskComplete{TaskID: value.TaskID}}
 		case "cancel":
-			return []stream.StreamInput{stream.TaskCancel{TaskID: value.TaskID, Status: value.Status}}
-		case "fail":
-			return []stream.StreamInput{stream.TaskFail{TaskID: value.TaskID, Status: value.Status, Error: value.Error}}
+			return []stream.StreamInput{stream.TaskCancel{TaskID: value.TaskID, Reason: value.Reason}}
+		case "error":
+			return []stream.StreamInput{stream.TaskError{TaskID: value.TaskID, Error: value.Error}}
 		default:
 			return nil
 		}

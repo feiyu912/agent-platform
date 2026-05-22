@@ -169,17 +169,15 @@ func synthesizeReplayedSubTaskTerminal(runID string, task *replayedSubTask, next
 			Timestamp: task.LastTimestamp,
 			Payload: map[string]any{
 				"taskId": task.TaskID,
-				"status": "cancelled",
 			},
 		}}
 	case "error", "failed", "fail":
 		return []stream.EventData{{
 			Seq:       nextSeq(),
-			Type:      "task.fail",
+			Type:      "task.error",
 			Timestamp: task.LastTimestamp,
 			Payload: map[string]any{
 				"taskId": task.TaskID,
-				"status": "error",
 				"error": map[string]any{
 					"code":     "sub_agent_failed",
 					"message":  "sub-agent failed",
@@ -195,7 +193,6 @@ func synthesizeReplayedSubTaskTerminal(runID string, task *replayedSubTask, next
 			Timestamp: task.LastTimestamp,
 			Payload: map[string]any{
 				"taskId": task.TaskID,
-				"status": "completed",
 			},
 		}}
 	}

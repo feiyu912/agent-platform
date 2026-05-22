@@ -306,7 +306,7 @@ runtimeConfig:
 - `agent_invoke` 是显式配置的批量调度原语，不走 `ToolExecutor.Invoke`；只有 agent 在 `toolConfig.tools` 声明 `agent_invoke` 时才会暴露给模型，`mode: REACT/ONESHOT/CODER` 不再自动附加该能力。旧名 `_agent_invoke_` 不再作为兼容别名支持。
 - 主 agent 识别到该 tool call 后，会先保留主时间线上的 `tool.start/args/end/snapshot`，再由 server 侧编排层并发启动 `1~3` 个子 agent。
 - 编排层会先顺序 emit 每个 `task.start`，同一批并发任务按 `invokingToolId` 聚合；随后由多个 goroutine 并发消费子 stream，再汇聚回主 goroutine 发出带精确 `taskId` 的子流 delta。
-- 子 agent 复用现有 `task.start / task.complete / task.cancel / task.fail` 协议；`task.start` 额外携带 `subAgentKey` 和 `invokingToolId`，终态 task 事件额外携带 `status`。
+- 子 agent 复用现有 `task.start / task.complete / task.cancel / task.error` 协议；`task.start` 额外携带 `subAgentKey` 和 `invokingToolId`，终态 task 事件由事件类型表达状态，不额外携带 `status`；`task.cancel` 可带 `reason`，`task.error` 携带结构化 `error`。
 - 子 agent 的 JSONL 与主 agent 同构：每次子任务调起先写带 `taskId` 的 `_type:"query"`，并把该子 agent 的 system init 完整嵌入该 query 的 `systems`；终态 `_type:"react"` 只保留 `taskId`、`taskStatus`、`taskSubAgentKey`，其它任务元数据按 `taskId` 从 query 行关联。
 - `runId` 始终保持主 RunID；前端通过 `taskId` 把子流事件归到子面板，通过 `invokingToolId` 把主时间线上的 `agent_invoke` 节点和聚合卡片关联起来。
 - 全部子任务结束后，编排层会按输入顺序聚合子结果，并仅向主 `mainToolID` 单次 `InjectToolResult`；主上下文只消费这份聚合后的 `tool.result` 文本。

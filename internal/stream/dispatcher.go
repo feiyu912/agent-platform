@@ -56,8 +56,8 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 		return d.handleTaskComplete(value)
 	case TaskCancel:
 		return d.handleTaskCancel(value)
-	case TaskFail:
-		return d.handleTaskFail(value)
+	case TaskError:
+		return d.handleTaskError(value)
 	case ArtifactPublish:
 		artifactCount := value.ArtifactCount
 		if artifactCount <= 0 {

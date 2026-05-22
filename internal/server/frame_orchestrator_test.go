@@ -903,14 +903,14 @@ func TestFrameOrchestratorPartialFailureAggregation(t *testing.T) {
 	var failedLifecycle *contracts.DeltaTaskLifecycle
 	for _, delta := range emitted[3:] {
 		lifecycle, ok := delta.(contracts.DeltaTaskLifecycle)
-		if !ok || lifecycle.Kind != "fail" {
+		if !ok || lifecycle.Kind != "error" {
 			continue
 		}
 		failedLifecycle = &lifecycle
 		break
 	}
-	if failedLifecycle == nil || failedLifecycle.Status != "failed" || failedLifecycle.Error == nil {
-		t.Fatalf("expected one failed lifecycle delta in terminal events, got %#v", emitted)
+	if failedLifecycle == nil || failedLifecycle.Error == nil {
+		t.Fatalf("expected one error lifecycle delta in terminal events, got %#v", emitted)
 	}
 }
 

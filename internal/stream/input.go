@@ -160,25 +160,23 @@ func (TaskStart) streamInputTag() {}
 
 type TaskComplete struct {
 	TaskID string
-	Status string
 }
 
 func (TaskComplete) streamInputTag() {}
 
 type TaskCancel struct {
 	TaskID string
-	Status string
+	Reason string
 }
 
 func (TaskCancel) streamInputTag() {}
 
-type TaskFail struct {
+type TaskError struct {
 	TaskID string
-	Status string
 	Error  map[string]any
 }
 
-func (TaskFail) streamInputTag() {}
+func (TaskError) streamInputTag() {}
 
 type ArtifactPublish struct {
 	ChatID        string

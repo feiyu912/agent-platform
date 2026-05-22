@@ -202,16 +202,15 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 		results[routed.result.Index] = *routed.result
 		terminalKind := "complete"
 		if routed.result.Status == "failed" {
-			terminalKind = "fail"
+			terminalKind = "error"
 		} else if routed.result.Status == "cancelled" {
 			terminalKind = "cancel"
 		}
 		lifecycle := contracts.DeltaTaskLifecycle{
 			Kind:   terminalKind,
 			TaskID: routed.result.TaskID,
-			Status: routed.result.Status,
 		}
-		if terminalKind == "fail" {
+		if terminalKind == "error" {
 			lifecycle.Error = contracts.NewErrorPayload("sub_agent_failed", firstNonEmpty(routed.result.Error, routed.result.Text), contracts.ErrorScopeTask, contracts.ErrorCategorySystem, nil)
 		}
 		o.emitDelta(lifecycle)

@@ -38,7 +38,6 @@ func (d *StreamEventDispatcher) handleTaskComplete(input TaskComplete) []StreamE
 	}
 	events = append(events, NewEvent("task.complete", map[string]any{
 		"taskId": input.TaskID,
-		"status": input.Status,
 	}))
 	return events
 }
@@ -50,19 +49,18 @@ func (d *StreamEventDispatcher) handleTaskCancel(input TaskCancel) []StreamEvent
 	}
 	events = append(events, NewEvent("task.cancel", map[string]any{
 		"taskId": input.TaskID,
-		"status": input.Status,
+		"reason": input.Reason,
 	}))
 	return events
 }
 
-func (d *StreamEventDispatcher) handleTaskFail(input TaskFail) []StreamEvent {
+func (d *StreamEventDispatcher) handleTaskError(input TaskError) []StreamEvent {
 	events := d.closeOpenBlocks()
 	if d.state.activeTaskID == input.TaskID {
 		d.state.activeTaskID = ""
 	}
-	events = append(events, NewEvent("task.fail", map[string]any{
+	events = append(events, NewEvent("task.error", map[string]any{
 		"taskId": input.TaskID,
-		"status": input.Status,
 		"error":  normalizeErrorMap(input.Error, "task_failed", "task", "runtime"),
 	}))
 	return events

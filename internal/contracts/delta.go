@@ -131,7 +131,7 @@ type DeltaTaskLifecycle struct {
 	Description string
 	SubAgentKey string
 	MainToolID  string
-	Status      string
+	Reason      string
 	Error       map[string]any
 }
 

@@ -254,7 +254,7 @@ func (s *planExecuteStream) emitTaskTerminal(task *PlanTask, status string) {
 		s.pending = append(s.pending, DeltaTaskLifecycle{Kind: "cancel", TaskID: task.TaskID})
 	case "failed":
 		s.pending = append(s.pending, DeltaTaskLifecycle{
-			Kind:   "fail",
+			Kind:   "error",
 			TaskID: task.TaskID,
 			Error: NewErrorPayload("task_failed", "Task status updated to failed",
 				ErrorScopeTask, ErrorCategorySystem, nil),
@@ -272,7 +272,7 @@ func (s *planExecuteStream) emitTaskFailure(task *PlanTask, message string) {
 		Plan:   PlanTasksArray(s.execCtx.PlanState),
 	})
 	s.pending = append(s.pending, DeltaTaskLifecycle{
-		Kind:   "fail",
+		Kind:   "error",
 		TaskID: task.TaskID,
 		Error: NewErrorPayload("task_execution_error", message,
 			ErrorScopeTask, ErrorCategorySystem, map[string]any{"taskId": task.TaskID}),

@@ -285,22 +285,19 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		}
 		buffer.taskStatus = ""
 		buffer.taskSubAgentKey = event.String("subAgentKey")
-	case "task.complete", "task.cancel", "task.fail":
+	case "task.complete", "task.cancel", "task.error":
 		taskID := event.String("taskId")
 		if strings.TrimSpace(taskID) == "" {
 			break
 		}
 		buffer := w.ensureTaskBuffer(taskID)
-		buffer.taskStatus = event.String("status")
-		if buffer.taskStatus == "" {
-			switch event.Type {
-			case "task.cancel":
-				buffer.taskStatus = "cancelled"
-			case "task.fail":
-				buffer.taskStatus = "failed"
-			default:
-				buffer.taskStatus = "completed"
-			}
+		switch event.Type {
+		case "task.cancel":
+			buffer.taskStatus = "cancelled"
+		case "task.error":
+			buffer.taskStatus = "failed"
+		default:
+			buffer.taskStatus = "completed"
 		}
 		w.flushTaskStep(taskID)
 		delete(w.taskBuffers, taskID)

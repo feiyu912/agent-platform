@@ -134,7 +134,7 @@ func TestDispatcherClosesContentBeforeTaskComplete(t *testing.T) {
 		Delta:     "马到成功",
 	})
 
-	events := dispatcher.Dispatch(TaskComplete{TaskID: "task_sub_1", Status: "completed"})
+	events := dispatcher.Dispatch(TaskComplete{TaskID: "task_sub_1"})
 	assertEventTypes(t, events, "content.end", "content.snapshot", "task.complete")
 	if got := events[1].Data().String("taskId"); got != "task_sub_1" {
 		t.Fatalf("expected content.snapshot taskId, got %#v", events[1].ToData())
@@ -142,6 +142,45 @@ func TestDispatcherClosesContentBeforeTaskComplete(t *testing.T) {
 	if got := events[1].Data().String("text"); got != "马到成功" {
 		t.Fatalf("expected content.snapshot text, got %#v", events[1].ToData())
 	}
+}
+
+func TestDispatcherTaskTerminalPayloads(t *testing.T) {
+	t.Run("complete", func(t *testing.T) {
+		dispatcher := NewDispatcher(StreamRequest{RunID: "run_1", ChatID: "chat_1"})
+		events := dispatcher.Dispatch(TaskComplete{TaskID: "task_1"})
+		assertEventTypes(t, events, "task.complete")
+		payload := events[0].Data().Payload
+		if len(payload) != 1 || payload["taskId"] != "task_1" {
+			t.Fatalf("unexpected task.complete payload %#v", payload)
+		}
+	})
+
+	t.Run("cancel", func(t *testing.T) {
+		dispatcher := NewDispatcher(StreamRequest{RunID: "run_1", ChatID: "chat_1"})
+		events := dispatcher.Dispatch(TaskCancel{TaskID: "task_1", Reason: "user_cancelled"})
+		assertEventTypes(t, events, "task.cancel")
+		payload := events[0].Data().Payload
+		if len(payload) != 2 || payload["taskId"] != "task_1" || payload["reason"] != "user_cancelled" {
+			t.Fatalf("unexpected task.cancel payload %#v", payload)
+		}
+	})
+
+	t.Run("error", func(t *testing.T) {
+		dispatcher := NewDispatcher(StreamRequest{RunID: "run_1", ChatID: "chat_1"})
+		events := dispatcher.Dispatch(TaskError{
+			TaskID: "task_1",
+			Error:  map[string]any{"code": "boom", "message": "failed"},
+		})
+		assertEventTypes(t, events, "task.error")
+		payload := events[0].Data().Payload
+		if len(payload) != 2 || payload["taskId"] != "task_1" {
+			t.Fatalf("unexpected task.error payload %#v", payload)
+		}
+		errPayload, _ := payload["error"].(map[string]any)
+		if errPayload["code"] != "boom" || errPayload["message"] != "failed" {
+			t.Fatalf("unexpected task.error error payload %#v", payload)
+		}
+	})
 }
 
 func TestDispatcherEmitsPlanningLifecycle(t *testing.T) {

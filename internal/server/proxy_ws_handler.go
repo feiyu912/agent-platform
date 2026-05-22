@@ -748,7 +748,7 @@ func (r *proxyEventRecorder) OnEvent(event stream.EventData) {
 		applyTerminalEventUsage(&r.runUsage, event)
 		r.stepWriter.OnEvent(event)
 	case "tool.result",
-		"task.start", "task.complete", "task.cancel", "task.fail",
+		"task.start", "task.complete", "task.cancel", "task.error",
 		"plan.create", "plan.update", "artifact.publish",
 		"request.submit", "awaiting.answer", "request.steer":
 		r.stepWriter.OnEvent(event)

@@ -467,14 +467,13 @@ func (s *coderPlanningStream) startSummaryStage() error {
 func (s *coderPlanningStream) emitTaskTerminal(task *PlanTask, status string) {
 	switch status {
 	case "completed":
-		s.pending = append(s.pending, DeltaTaskLifecycle{Kind: "complete", TaskID: task.TaskID, Status: status})
+		s.pending = append(s.pending, DeltaTaskLifecycle{Kind: "complete", TaskID: task.TaskID})
 	case "canceled":
-		s.pending = append(s.pending, DeltaTaskLifecycle{Kind: "cancel", TaskID: task.TaskID, Status: status})
+		s.pending = append(s.pending, DeltaTaskLifecycle{Kind: "cancel", TaskID: task.TaskID})
 	case "failed":
 		s.pending = append(s.pending, DeltaTaskLifecycle{
-			Kind:   "fail",
+			Kind:   "error",
 			TaskID: task.TaskID,
-			Status: status,
 			Error: NewErrorPayload("task_failed", "Task status updated to failed",
 				ErrorScopeTask, ErrorCategorySystem, nil),
 		})
@@ -491,9 +490,8 @@ func (s *coderPlanningStream) emitTaskFailure(task *PlanTask, message string) {
 		Plan:   PlanTasksArray(s.execCtx.PlanState),
 	})
 	s.pending = append(s.pending, DeltaTaskLifecycle{
-		Kind:   "fail",
+		Kind:   "error",
 		TaskID: task.TaskID,
-		Status: "failed",
 		Error: NewErrorPayload("task_execution_error", message,
 			ErrorScopeTask, ErrorCategorySystem, map[string]any{"taskId": task.TaskID}),
 	})
