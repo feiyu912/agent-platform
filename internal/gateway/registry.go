@@ -1,12 +1,8 @@
 // Package gateway 管理多条反向 WS 连接（wecom / feishu / ding / ...），
 // 每条对应一个 channel 插件。Registry 是 connector 的索引：
-//   - 按 ID 做增删查（Admin API 场景）
 //   - 按 Channel 做路由（artifact 外推、文件下载按 chatId 前缀选择 gateway）
 //
 // legacy 单 gateway 部署是"一条 channel 空串的 entry"的特例，路由退化为总命中它。
-//
-// Registry 本身不决定 gateway 生命周期——StartAll 从 config 初始化首批，
-// Admin API 之后运行时可 Register / Unregister。
 package gateway
 
 import (
@@ -23,7 +19,7 @@ import (
 	"agent-platform/internal/ws/gatewayclient"
 )
 
-// Entry 是 Registry 里一条 gateway 的运行态快照，给 Admin API List 用。
+// Entry 是 Registry 里一条 gateway 的运行态快照。
 type Entry struct {
 	ID            string
 	Channel       string
@@ -141,35 +137,6 @@ func (r *Registry) Register(entry config.GatewayEntry) error {
 	}
 	r.rebuildSourcePrefixIndexLocked()
 	return nil
-}
-
-// Unregister 停止 connector 并从 Registry 移除。不存在时返回 ErrNotFound。
-func (r *Registry) Unregister(id string) error {
-	r.mu.Lock()
-	entry, ok := r.entries[id]
-	if !ok {
-		r.mu.Unlock()
-		return ErrNotFound
-	}
-	delete(r.entries, id)
-	if entry.Channel != "" && r.byChannel[entry.Channel] == id {
-		delete(r.byChannel, entry.Channel)
-	}
-	if entry.SourceChannel != "" && r.bySourceChannel[entry.SourceChannel] == id {
-		delete(r.bySourceChannel, entry.SourceChannel)
-	}
-	r.rebuildSourcePrefixIndexLocked()
-	r.mu.Unlock()
-
-	return entry.client.Stop()
-}
-
-// LookupByID 查 entry；主要给 Admin API 和测试用。
-func (r *Registry) LookupByID(id string) (*Entry, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	e, ok := r.entries[id]
-	return e, ok
 }
 
 // LookupByChatID 按 chatId 前缀（例如 "wecom#..." → channel "wecom"）查 entry。
@@ -290,17 +257,6 @@ func (r *Registry) Connected(channelID string) bool {
 	return entry.client.Connected()
 }
 
-// All 返回当前所有 entries 的快照。调用方不应修改 slice 元素。
-func (r *Registry) All() []*Entry {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]*Entry, 0, len(r.entries))
-	for _, e := range r.entries {
-		out = append(out, e)
-	}
-	return out
-}
-
 // StopAll 停所有 connector；通常只在 App.Close 调用。
 func (r *Registry) StopAll() {
 	r.mu.Lock()
@@ -318,6 +274,5 @@ func (r *Registry) StopAll() {
 var (
 	ErrDuplicateID      = fmt.Errorf("gateway: duplicate id")
 	ErrDuplicateChannel = fmt.Errorf("gateway: duplicate channel")
-	ErrNotFound         = fmt.Errorf("gateway: id not found")
 	ErrInvalidConfig    = fmt.Errorf("gateway: invalid config (id/url required)")
 )

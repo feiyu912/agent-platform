@@ -326,8 +326,6 @@ type GatewayWSConfig struct {
 	// 兼容策略：部署侧只配置 legacy URL/JwtToken 时，normalize() 会把这条合成为
 	// Gateways[0]（ID="default", Channel=""），路由层在"单条无 channel"场景下跳过前缀
 	// 匹配，行为与未引入多 gateway 前字节一致。
-	//
-	// 运行时可通过 Admin API (POST /api/admin/gateways) 动态增删，desktop 管理插件生命周期。
 }
 
 // GatewayEntry 描述单个 gateway 反向连接条目。

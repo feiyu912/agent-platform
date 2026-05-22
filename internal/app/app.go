@@ -281,7 +281,6 @@ func New(rootCtx context.Context) (*App, error) {
 		ScheduleRegistry:     scheduleRegistry,
 		ScheduleExecutions:   scheduleExecutionStore,
 		GatewayResolver:      gatewayResolver,
-		GatewayAdmin:         &gatewayAdminAdapter{resolver: gatewayResolver},
 	})
 	if err != nil {
 		if scheduleExecutionStore != nil {
@@ -458,59 +457,6 @@ func firstPositiveInt(values ...int) int {
 		}
 	}
 	return 0
-}
-
-// gatewayAdminAdapter 把 gateway.Registry 桥接到 server.GatewayAdmin 接口，
-// 避免 server 包直接 import gateway 包。Registry nil 时 List 返回空、增删返回 ErrNotConfigured。
-type gatewayAdminAdapter struct {
-	resolver *lazyGatewayResolver
-}
-
-func (a *gatewayAdminAdapter) AdminRegister(entry server.GatewayAdminEntry) error {
-	reg := a.resolver.Registry()
-	if reg == nil {
-		return fmt.Errorf("gateway registry not initialized")
-	}
-	return reg.Register(config.GatewayEntry{
-		ID:                 entry.ID,
-		Channel:            entry.Channel,
-		SourceChannel:      entry.SourceChannel,
-		SourcePrefix:       entry.SourcePrefix,
-		URL:                entry.URL,
-		JwtToken:           entry.Token,
-		BaseURL:            entry.BaseURL,
-		HandshakeTimeoutMs: entry.HandshakeTimeoutMs,
-		ReconnectMinMs:     entry.ReconnectMinMs,
-		ReconnectMaxMs:     entry.ReconnectMaxMs,
-	})
-}
-
-func (a *gatewayAdminAdapter) AdminUnregister(id string) error {
-	reg := a.resolver.Registry()
-	if reg == nil {
-		return fmt.Errorf("gateway registry not initialized")
-	}
-	return reg.Unregister(id)
-}
-
-func (a *gatewayAdminAdapter) AdminList() []server.GatewayAdminEntry {
-	reg := a.resolver.Registry()
-	if reg == nil {
-		return nil
-	}
-	entries := reg.All()
-	out := make([]server.GatewayAdminEntry, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, server.GatewayAdminEntry{
-			ID:            e.ID,
-			Channel:       e.Channel,
-			SourceChannel: e.SourceChannel,
-			SourcePrefix:  e.SourcePrefix,
-			URL:           e.URL,
-			BaseURL:       e.BaseURL,
-		})
-	}
-	return out
 }
 
 // lazyGatewayResolver 把 artifactpusher 的 resolver 和 Registry 构建解耦。

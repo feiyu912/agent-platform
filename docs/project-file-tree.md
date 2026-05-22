@@ -362,8 +362,6 @@
 
 目录作用：HTTP/WebSocket 路由、Handler、查询和会话执行。
 
-- `internal/server/admin_routes.go` (95 行): HTTP/WebSocket 路由、Handler、查询和会话执行：admin routes
-- `internal/server/admin_routes_test.go` (126 行): 测试与回归验证：admin routes
 - `internal/server/channel_test.go` (242 行): 测试与回归验证：channel
 - `internal/server/channel_ws_test.go` (138 行): 测试与回归验证：channel ws
 - `internal/server/chat_read_state.go` (92 行): HTTP/WebSocket 路由、Handler、查询和会话执行：chat read state
