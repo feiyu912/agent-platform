@@ -132,7 +132,6 @@ func (s *planExecuteStream) advance() error {
 
 // advanceTaskExecution starts execution for the current task.
 // The llmRunStream handles the multi-turn tool execution loop internally.
-// MaxToolCallsPerTurn=1 ensures only one tool is processed per round (Java behaviour).
 // After the stream ends, afterStageEOF checks task status.
 func (s *planExecuteStream) advanceTaskExecution() error {
 	task := &s.execCtx.PlanState.Tasks[s.taskIndex]
@@ -177,13 +176,12 @@ func (s *planExecuteStream) startTaskStream(task *PlanTask) error {
 	req := s.req
 	req.Message = taskPrompt
 	stream, err := s.engine.newRunStreamWithOptions(s.ctx, req, s.sessionForStage(s.settings.Execute, s.executeStageTools()), true, runStreamOptions{
-		ExecCtx:             s.execCtx,
-		Messages:            messages, // Carry full execute history including steers
-		ToolNames:           s.executeStageTools(),
-		ModelKey:            s.resolveStageModelKey(s.settings.Execute),
-		MaxSteps:            s.settings.MaxWorkRoundsPerTask,
-		Stage:               fmt.Sprintf("execute-step-%d", s.taskIndex+1),
-		MaxToolCallsPerTurn: 1,
+		ExecCtx:   s.execCtx,
+		Messages:  messages, // Carry full execute history including steers
+		ToolNames: s.executeStageTools(),
+		ModelKey:  s.resolveStageModelKey(s.settings.Execute),
+		MaxSteps:  s.settings.MaxWorkRoundsPerTask,
+		Stage:     fmt.Sprintf("execute-step-%d", s.taskIndex+1),
 		PostToolHook: func(toolName string, toolID string) PostToolHookResult {
 			if !isPlanTool(toolName) {
 				return PostToolContinue

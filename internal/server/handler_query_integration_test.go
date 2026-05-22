@@ -873,14 +873,25 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 		case 3:
 			assertCoderPlanningToolSet(t, toolNames)
 			writeProviderSSE(t, w,
-				providerToolCallFrame(t, "tool_plan", "planning_write", map[string]any{
-					"title":      "Confirm Coder Plan",
-					"summary":    "Plan first, then check the current time before reporting.",
-					"keyChanges": []string{"Use datetime after confirmation"},
-					"steps":      []string{"Check the current time before reporting"},
-					"testPlan":   []string{"Verify the stream completes"},
-					"assumptions": []string{
-						"The user confirms before execution starts",
+				providerToolCallsFrame(t, []providerToolCallSpec{
+					{
+						ID:   "tool_plan",
+						Name: "planning_write",
+						Args: map[string]any{
+							"title":      "Confirm Coder Plan",
+							"summary":    "Plan first, then check the current time before reporting.",
+							"keyChanges": []string{"Use datetime after confirmation"},
+							"steps":      []string{"Check the current time before reporting"},
+							"testPlan":   []string{"Verify the stream completes"},
+							"assumptions": []string{
+								"The user confirms before execution starts",
+							},
+						},
+					},
+					{
+						ID:   "tool_plan_time",
+						Name: "datetime",
+						Args: map[string]any{},
 					},
 				}),
 				`[DONE]`,
@@ -960,6 +971,11 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	}
 	if got := strings.Count(streamBody.String(), `"type":"planning.delta"`); got <= 1 {
 		t.Fatalf("expected multiple planning.delta events before confirmation, got %d in %s", got, streamBody.String())
+	}
+	timeResultIndex := strings.Index(streamBody.String(), `"type":"tool.result","toolId":"tool_plan_time"`)
+	confirmationAskIndex := strings.Index(streamBody.String(), `"awaitingId":"`+runID+`_coder_plan_confirm"`)
+	if !(timeResultIndex >= 0 && confirmationAskIndex > timeResultIndex) {
+		t.Fatalf("expected later planning batch tool result before confirmation, got %s", streamBody.String())
 	}
 	if strings.Contains(streamBody.String(), `"type":"planning.snapshot"`) {
 		t.Fatalf("did not expect live planning.snapshot, got %s", streamBody.String())

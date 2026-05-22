@@ -76,13 +76,16 @@ func (s *llmRunStream) fillPending() error {
 				continue
 			}
 			if s.postToolHook != nil && s.postToolHook(toolName, toolID) == PostToolStop {
-				s.queuedToolCalls = nil
-				s.finished = true
+				s.stopAfterToolBatch = true
 			}
 			continue
 		}
 		if len(s.queuedToolCalls) > 0 {
 			s.activateNextToolCall()
+			continue
+		}
+		if s.stopAfterToolBatch {
+			s.finished = true
 			continue
 		}
 		if s.currentTurn == nil {
@@ -312,10 +315,6 @@ func (s *llmRunStream) finishCurrentTurn() error {
 		s.finished = true
 		return nil
 	}
-	if s.maxToolCallsPerTurn > 0 && len(toolCalls) > s.maxToolCallsPerTurn {
-		toolCalls = toolCalls[:s.maxToolCallsPerTurn]
-	}
-
 	content := turn.content.String()
 	if content != "" || len(toolCalls) > 0 {
 		msg := s.newAssistantTurnMessage(turn, content, toolCalls)

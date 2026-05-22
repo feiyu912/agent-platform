@@ -150,13 +150,12 @@ func (s *coderPlanningStream) startPlanStage() error {
 	req := s.req
 	req.Message = strings.TrimSpace(planPrompt) + "\n\nUser request:\n" + s.req.Message
 	stream, err := s.engine.newRunStreamWithOptions(s.ctx, req, s.sessionForStage(s.settings.Plan, s.planStageTools()), true, runStreamOptions{
-		ExecCtx:             s.execCtx,
-		ToolNames:           s.planStageTools(),
-		ModelKey:            s.resolveStageModelKey(s.settings.Plan),
-		MaxSteps:            s.settings.MaxSteps,
-		Stage:               "coder-plan",
-		MaxToolCallsPerTurn: 1,
-		PostToolHook:        s.planStagePostToolHook,
+		ExecCtx:      s.execCtx,
+		ToolNames:    s.planStageTools(),
+		ModelKey:     s.resolveStageModelKey(s.settings.Plan),
+		MaxSteps:     s.settings.MaxSteps,
+		Stage:        "coder-plan",
+		PostToolHook: s.planStagePostToolHook,
 	})
 	if err != nil {
 		return err
@@ -407,13 +406,12 @@ func (s *coderPlanningStream) startTaskStream(task *PlanTask) error {
 	req := s.req
 	req.Message = taskPrompt
 	stream, err := s.engine.newRunStreamWithOptions(s.ctx, req, s.sessionForStage(s.settings.Execute, s.executeStageTools()), true, runStreamOptions{
-		ExecCtx:             s.execCtx,
-		Messages:            messages,
-		ToolNames:           s.executeStageTools(),
-		ModelKey:            s.resolveStageModelKey(s.settings.Execute),
-		MaxSteps:            s.settings.MaxWorkRoundsPerTask,
-		Stage:               fmt.Sprintf("coder-execute-step-%d", s.taskIndex+1),
-		MaxToolCallsPerTurn: 1,
+		ExecCtx:   s.execCtx,
+		Messages:  messages,
+		ToolNames: s.executeStageTools(),
+		ModelKey:  s.resolveStageModelKey(s.settings.Execute),
+		MaxSteps:  s.settings.MaxWorkRoundsPerTask,
+		Stage:     fmt.Sprintf("coder-execute-step-%d", s.taskIndex+1),
 		PostToolHook: func(toolName string, _ string) PostToolHookResult {
 			if !isPlanTool(toolName) {
 				return PostToolContinue

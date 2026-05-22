@@ -438,25 +438,38 @@ func writeProviderSSE(t *testing.T, w http.ResponseWriter, frames ...string) {
 
 func providerToolCallFrame(t *testing.T, toolID string, toolName string, args map[string]any) string {
 	t.Helper()
-	argsJSON, err := json.Marshal(args)
-	if err != nil {
-		t.Fatalf("marshal tool args: %v", err)
+	return providerToolCallsFrame(t, []providerToolCallSpec{{ID: toolID, Name: toolName, Args: args}})
+}
+
+type providerToolCallSpec struct {
+	ID   string
+	Name string
+	Args map[string]any
+}
+
+func providerToolCallsFrame(t *testing.T, calls []providerToolCallSpec) string {
+	t.Helper()
+	toolCalls := make([]any, 0, len(calls))
+	for index, call := range calls {
+		argsJSON, err := json.Marshal(call.Args)
+		if err != nil {
+			t.Fatalf("marshal tool args: %v", err)
+		}
+		toolCalls = append(toolCalls, map[string]any{
+			"index": index,
+			"id":    call.ID,
+			"type":  "function",
+			"function": map[string]any{
+				"name":      call.Name,
+				"arguments": string(argsJSON),
+			},
+		})
 	}
 	frame, err := json.Marshal(map[string]any{
 		"choices": []any{
 			map[string]any{
 				"delta": map[string]any{
-					"tool_calls": []any{
-						map[string]any{
-							"index": 0,
-							"id":    toolID,
-							"type":  "function",
-							"function": map[string]any{
-								"name":      toolName,
-								"arguments": string(argsJSON),
-							},
-						},
-					},
+					"tool_calls": toolCalls,
 				},
 				"finish_reason": "tool_calls",
 			},

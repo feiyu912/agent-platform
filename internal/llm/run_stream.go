@@ -16,25 +16,24 @@ import (
 )
 
 type llmRunStream struct {
-	engine              *LLMAgentEngine
-	protocol            providerProtocol
-	ctx                 context.Context
-	req                 api.QueryRequest
-	session             QuerySession
-	runControl          *RunControl
-	model               ModelDefinition
-	provider            ProviderDefinition
-	toolSpecs           []openAIToolSpec
-	requestedToolNames  []string
-	messages            []openAIMessage
-	protocolConfig      protocolRuntimeConfig
-	stageSettings       StageSettings
-	execCtx             *ExecutionContext
-	maxSteps            int
-	toolChoice          string
-	maxToolCallsPerTurn int
-	postToolHook        func(string, string) PostToolHookResult
-	checker             hitl.Checker
+	engine             *LLMAgentEngine
+	protocol           providerProtocol
+	ctx                context.Context
+	req                api.QueryRequest
+	session            QuerySession
+	runControl         *RunControl
+	model              ModelDefinition
+	provider           ProviderDefinition
+	toolSpecs          []openAIToolSpec
+	requestedToolNames []string
+	messages           []openAIMessage
+	protocolConfig     protocolRuntimeConfig
+	stageSettings      StageSettings
+	execCtx            *ExecutionContext
+	maxSteps           int
+	toolChoice         string
+	postToolHook       func(string, string) PostToolHookResult
+	checker            hitl.Checker
 
 	step               int
 	pending            []AgentDelta
@@ -49,6 +48,7 @@ type llmRunStream struct {
 	previousToolResult any
 	queuedToolCalls    []*preparedToolInvocation
 	activeToolCall     *preparedToolInvocation
+	stopAfterToolBatch bool
 	promptBuildOptions PromptBuildOptions
 	hitlPendingBatch   *pendingHITLApprovalBatch
 	hitlPendingCall    *preparedToolInvocation

@@ -2,7 +2,9 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -126,6 +128,68 @@ func (r *recordingToolExecutor) Invoke(_ context.Context, name string, args map[
 		return contracts.ToolExecutionResult{Output: "ok", ExitCode: 0}, nil
 	}
 	return r.result, nil
+}
+
+func TestParallelToolCallBatchExecutesAllBeforePostToolStop(t *testing.T) {
+	executor := &recordingToolExecutor{}
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools: executor,
+		},
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{
+			StartedAt: time.Now(),
+		},
+		maxSteps:     2,
+		allowToolUse: true,
+		postToolHook: func(toolName string, toolID string) PostToolHookResult {
+			if toolID == "tool_1" {
+				return PostToolStop
+			}
+			return PostToolContinue
+		},
+		currentTurn: &providerTurnStream{
+			toolCalls: map[int]*toolCallAccumulator{
+				0: {ID: "tool_1", Type: "function", FunctionName: "datetime"},
+				1: {ID: "tool_2", Type: "function", FunctionName: "datetime"},
+				2: {ID: "tool_3", Type: "function", FunctionName: "datetime"},
+			},
+			finishReason:  "tool_calls",
+			hasMeaningful: true,
+		},
+	}
+	if err := stream.finishCurrentTurn(); err != nil {
+		t.Fatalf("finishCurrentTurn returned error: %v", err)
+	}
+
+	var resultIDs []string
+	for {
+		delta, err := stream.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("Next returned error: %v", err)
+		}
+		if result, ok := delta.(contracts.DeltaToolResult); ok {
+			resultIDs = append(resultIDs, result.ToolID)
+		}
+	}
+
+	wantIDs := []string{"tool_1", "tool_2", "tool_3"}
+	if !reflect.DeepEqual(resultIDs, wantIDs) {
+		t.Fatalf("tool result ids=%#v want %#v", resultIDs, wantIDs)
+	}
+	if len(executor.invocations) != 3 {
+		t.Fatalf("expected all batch tools to execute, got %#v", executor.invocations)
+	}
+	if len(stream.messages) != 4 {
+		t.Fatalf("expected assistant tool call message plus 3 tool messages, got %#v", stream.messages)
+	}
+	if got := len(stream.messages[0].ToolCalls); got != 3 {
+		t.Fatalf("expected assistant message to keep all tool calls, got %d", got)
+	}
 }
 
 type stubChecker struct {

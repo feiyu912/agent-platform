@@ -27,15 +27,14 @@ type LLMAgentEngine struct {
 }
 
 type runStreamOptions struct {
-	ExecCtx             *ExecutionContext
-	Messages            []openAIMessage
-	ToolNames           []string
-	ModelKey            string
-	MaxSteps            int
-	Stage               string
-	ToolChoice          string
-	MaxToolCallsPerTurn int
-	PostToolHook        func(toolName string, toolID string) PostToolHookResult
+	ExecCtx      *ExecutionContext
+	Messages     []openAIMessage
+	ToolNames    []string
+	ModelKey     string
+	MaxSteps     int
+	Stage        string
+	ToolChoice   string
+	PostToolHook func(toolName string, toolID string) PostToolHookResult
 }
 
 func NewLLMAgentEngine(cfg config.Config, models *ModelRegistry, tools ToolExecutor, frontend *frontendtools.Registry, sandbox SandboxClient) *LLMAgentEngine {
@@ -172,28 +171,27 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 		IncludeAfterCallHints:   true,
 	}
 	stream := &llmRunStream{
-		engine:              e,
-		protocol:            resolveProtocol(e, model),
-		ctx:                 ctx,
-		req:                 req,
-		session:             session,
-		runControl:          execCtx.RunControl,
-		model:               model,
-		provider:            provider,
-		toolSpecs:           toolSpecs,
-		requestedToolNames:  append([]string(nil), allowedTools...),
-		messages:            append([]openAIMessage(nil), messages...),
-		protocolConfig:      protocolConfig,
-		stageSettings:       stageSettings,
-		execCtx:             execCtx,
-		maxSteps:            maxSteps,
-		toolChoice:          toolChoice,
-		maxToolCallsPerTurn: options.MaxToolCallsPerTurn,
-		postToolHook:        options.PostToolHook,
-		allowToolUse:        allowToolUse,
-		finalTurnSystem:     deriveFinalTurnSystemPrompt(messages, session, req, model.Key, promptBuildOptions),
-		promptBuildOptions:  promptBuildOptions,
-		onApprovalSummary:   approvalSummarySinkFromContext(ctx),
+		engine:             e,
+		protocol:           resolveProtocol(e, model),
+		ctx:                ctx,
+		req:                req,
+		session:            session,
+		runControl:         execCtx.RunControl,
+		model:              model,
+		provider:           provider,
+		toolSpecs:          toolSpecs,
+		requestedToolNames: append([]string(nil), allowedTools...),
+		messages:           append([]openAIMessage(nil), messages...),
+		protocolConfig:     protocolConfig,
+		stageSettings:      stageSettings,
+		execCtx:            execCtx,
+		maxSteps:           maxSteps,
+		toolChoice:         toolChoice,
+		postToolHook:       options.PostToolHook,
+		allowToolUse:       allowToolUse,
+		finalTurnSystem:    deriveFinalTurnSystemPrompt(messages, session, req, model.Key, promptBuildOptions),
+		promptBuildOptions: promptBuildOptions,
+		onApprovalSummary:  approvalSummarySinkFromContext(ctx),
 	}
 	if len(session.SkillHookDirs) > 0 {
 		log.Printf("[llm][run:%s][hitl] creating SkillChecker hookDirs=%v", session.RunID, session.SkillHookDirs)

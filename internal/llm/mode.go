@@ -50,9 +50,8 @@ func (oneshotMode) Start(engine *LLMAgentEngine, ctx context.Context, req api.Qu
 	// Java ONESHOT allows tool use with single tool call + retry + second turn for final answer.
 	// Go uses the same stream with allowToolUse=true but MaxSteps limited.
 	return engine.newRunStreamWithOptions(ctx, req, session, true, runStreamOptions{
-		Stage:               "oneshot",
-		MaxSteps:            2, // One tool call round + one final answer turn
-		MaxToolCallsPerTurn: 1,
+		Stage:    "oneshot",
+		MaxSteps: 2, // One tool call round + one final answer turn
 	})
 }
 
