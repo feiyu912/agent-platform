@@ -76,6 +76,7 @@ func ComputeSystemInitFingerprint(session QuerySession, stage string, toolDefs [
 		"skillCatalogPrompt":     session.SkillCatalogPrompt,
 		"soulPrompt":             session.SoulPrompt,
 		"agentsPrompt":           session.AgentsPrompt,
+		"workspaceAgentsPrompt":  session.WorkspaceAgentsPrompt,
 		"planPrompt":             session.PlanPrompt,
 		"executePrompt":          session.ExecutePrompt,
 		"summaryPrompt":          session.SummaryPrompt,

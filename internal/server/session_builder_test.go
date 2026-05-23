@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"agent-platform/internal/api"
@@ -113,6 +114,138 @@ func TestBuildQuerySessionUsesCoderProfileDefaults(t *testing.T) {
 	}
 	if session.WorkspaceRoot != filepath.Clean(workspace) {
 		t.Fatalf("workspace root = %q, want %q", session.WorkspaceRoot, filepath.Clean(workspace))
+	}
+}
+
+func TestBuildQuerySessionLoadsWorkspaceAgentsForCoder(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte("workspace rules"), 0o644); err != nil {
+		t.Fatalf("write workspace AGENTS.md: %v", err)
+	}
+	def := catalog.AgentDefinition{
+		Key:      "coder-app",
+		Mode:     catalog.AgentModeCoder,
+		ModelKey: "mock-model",
+		Workspace: catalog.AgentWorkspaceConfig{
+			Root: workspace,
+		},
+	}
+	cfg := config.Config{
+		CoderSettings: config.CoderSettingsConfig{
+			WorkspaceAgents: config.CoderWorkspaceAgentsConfig{Enabled: true, File: "AGENTS.md"},
+		},
+	}
+	server := &Server{deps: Dependencies{Config: cfg}}
+	session, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey: "coder-app",
+		ChatID:   "chat-1",
+		RunID:    "run-1",
+	}, chat.Summary{ChatID: "chat-1"}, def, querySessionBuildOptions{})
+	if err != nil {
+		t.Fatalf("build query session: %v", err)
+	}
+	if session.WorkspaceAgentsPrompt != "workspace rules" {
+		t.Fatalf("workspace agents prompt = %q, want workspace rules", session.WorkspaceAgentsPrompt)
+	}
+}
+
+func TestBuildQuerySessionSkipsWorkspaceAgentsWhenDisabled(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte("workspace rules"), 0o644); err != nil {
+		t.Fatalf("write workspace AGENTS.md: %v", err)
+	}
+	def := catalog.AgentDefinition{
+		Key:       "coder-app",
+		Mode:      catalog.AgentModeCoder,
+		ModelKey:  "mock-model",
+		Workspace: catalog.AgentWorkspaceConfig{Root: workspace},
+	}
+	cfg := config.Config{
+		CoderSettings: config.CoderSettingsConfig{
+			WorkspaceAgents: config.CoderWorkspaceAgentsConfig{Enabled: false, File: "AGENTS.md"},
+		},
+	}
+	server := &Server{deps: Dependencies{Config: cfg}}
+	session, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey: "coder-app",
+		ChatID:   "chat-1",
+		RunID:    "run-1",
+	}, chat.Summary{ChatID: "chat-1"}, def, querySessionBuildOptions{})
+	if err != nil {
+		t.Fatalf("build query session: %v", err)
+	}
+	if session.WorkspaceAgentsPrompt != "" {
+		t.Fatalf("expected workspace agents prompt to be skipped, got %q", session.WorkspaceAgentsPrompt)
+	}
+}
+
+func TestBuildQuerySessionDoesNotLoadWorkspaceAgentsForNonCoder(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte("workspace rules"), 0o644); err != nil {
+		t.Fatalf("write workspace AGENTS.md: %v", err)
+	}
+	def := catalog.AgentDefinition{
+		Key:       "react-app",
+		Mode:      "REACT",
+		ModelKey:  "mock-model",
+		Workspace: catalog.AgentWorkspaceConfig{Root: workspace},
+	}
+	cfg := config.Config{
+		CoderSettings: config.CoderSettingsConfig{
+			WorkspaceAgents: config.CoderWorkspaceAgentsConfig{Enabled: true, File: "AGENTS.md"},
+		},
+	}
+	server := &Server{deps: Dependencies{Config: cfg}}
+	session, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey: "react-app",
+		ChatID:   "chat-1",
+		RunID:    "run-1",
+	}, chat.Summary{ChatID: "chat-1"}, def, querySessionBuildOptions{})
+	if err != nil {
+		t.Fatalf("build query session: %v", err)
+	}
+	if session.WorkspaceAgentsPrompt != "" {
+		t.Fatalf("expected non-CODER workspace agents prompt to be skipped, got %q", session.WorkspaceAgentsPrompt)
+	}
+}
+
+func TestBuildQuerySessionErrorsWhenWorkspaceAgentsUnreadable(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(filepath.Join(workspace, "AGENTS.md"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace AGENTS.md directory: %v", err)
+	}
+	def := catalog.AgentDefinition{
+		Key:       "coder-app",
+		Mode:      catalog.AgentModeCoder,
+		ModelKey:  "mock-model",
+		Workspace: catalog.AgentWorkspaceConfig{Root: workspace},
+	}
+	cfg := config.Config{
+		CoderSettings: config.CoderSettingsConfig{
+			WorkspaceAgents: config.CoderWorkspaceAgentsConfig{Enabled: true, File: "AGENTS.md"},
+		},
+	}
+	server := &Server{deps: Dependencies{Config: cfg}}
+	_, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey: "coder-app",
+		ChatID:   "chat-1",
+		RunID:    "run-1",
+	}, chat.Summary{ChatID: "chat-1"}, def, querySessionBuildOptions{})
+	if err == nil || !strings.Contains(err.Error(), "read workspace AGENTS prompt") {
+		t.Fatalf("expected workspace AGENTS read error, got %v", err)
 	}
 }
 

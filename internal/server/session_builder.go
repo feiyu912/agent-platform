@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"agent-platform/internal/api"
@@ -89,6 +91,10 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 	}
 
 	promptAppend := buildPromptAppendConfig(s.deps.Config.Prompts, agentDef)
+	workspaceAgentsPrompt, err := s.loadWorkspaceAgentsPrompt(agentDef)
+	if err != nil {
+		return contracts.QuerySession{}, err
+	}
 	skillHookDirs, runtimeEnvOverrides := resolveSkillRuntimeSettings(
 		runtimeAgentEnv(agentDef.Runtime["env"]),
 		agentDef.AgentDir,
@@ -138,6 +144,7 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		SkillCatalogPrompt:     buildSkillCatalogPrompt(agentDef, s.deps.Config.Paths.SkillsMarketDir, promptAppend),
 		SoulPrompt:             agentDef.SoulPrompt,
 		AgentsPrompt:           agentDef.AgentsPrompt,
+		WorkspaceAgentsPrompt:  workspaceAgentsPrompt,
 		PlanPrompt:             agentDef.PlanPrompt,
 		ExecutePrompt:          agentDef.ExecutePrompt,
 		SummaryPrompt:          agentDef.SummaryPrompt,
@@ -157,6 +164,40 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		session.Subject = principal.Subject
 	}
 	return session, nil
+}
+
+func (s *Server) loadWorkspaceAgentsPrompt(agentDef catalog.AgentDefinition) (string, error) {
+	if !strings.EqualFold(strings.TrimSpace(agentDef.Mode), catalog.AgentModeCoder) {
+		return "", nil
+	}
+	settings := s.deps.Config.CoderSettings.WorkspaceAgents
+	if !settings.Enabled {
+		return "", nil
+	}
+	workspaceRoot := strings.TrimSpace(agentDef.Workspace.Root)
+	if workspaceRoot == "" {
+		return "", nil
+	}
+	fileName := strings.TrimSpace(settings.File)
+	if fileName == "" {
+		return "", fmt.Errorf("coder workspace agents file is empty")
+	}
+	if filepath.IsAbs(fileName) {
+		fileName = filepath.Base(fileName)
+	}
+	cleanFileName := filepath.Clean(fileName)
+	if cleanFileName == "." || cleanFileName == ".." || strings.HasPrefix(cleanFileName, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid workspace AGENTS prompt path %q", fileName)
+	}
+	agentsPath := filepath.Join(workspaceRoot, cleanFileName)
+	data, err := os.ReadFile(agentsPath)
+	if err == nil {
+		return strings.TrimSpace(string(data)), nil
+	}
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	return "", fmt.Errorf("read workspace AGENTS prompt %s: %w", agentsPath, err)
 }
 
 func (s *Server) buildSessionToolOverrides(agentDef catalog.AgentDefinition) map[string]api.ToolDetailResponse {

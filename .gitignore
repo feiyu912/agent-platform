@@ -45,6 +45,8 @@ coverage.out
 !/configs/**/*.example.yml
 !/configs/**/*.example.yaml
 !/configs/**/*.example.pem
+!/configs/coder-prompts.yml
+!/configs/coder-settings.yml
 
 # IDE/Editor
 .classpath

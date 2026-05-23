@@ -153,11 +153,12 @@ type QuerySession struct {
 	SystemInitLegacy      bool // true for pre-system-init historical chats that should keep rebuilding prompts.
 
 	// Prompt files loaded from agent directory.
-	SoulPrompt    string
-	AgentsPrompt  string
-	PlanPrompt    string
-	ExecutePrompt string
-	SummaryPrompt string
+	SoulPrompt            string
+	AgentsPrompt          string
+	WorkspaceAgentsPrompt string
+	PlanPrompt            string
+	ExecutePrompt         string
+	SummaryPrompt         string
 
 	RuntimeEnvironmentID   string
 	RuntimeLevel           string

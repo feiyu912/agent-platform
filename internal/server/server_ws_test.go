@@ -947,6 +947,15 @@ func TestWebSocketCoderPlanningEmitsLifecycleEvents(t *testing.T) {
 	if got := countStrings(eventTypes, "planning.delta"); got <= 1 {
 		t.Fatalf("expected multiple websocket planning.delta events, got %d in %#v", got, eventTypes)
 	}
+	planningFile := filepath.Join(fixture.cfg.Paths.ChatsDir, "plans", runID+"_planning.md")
+	planningBytes, readPlanningErr := os.ReadFile(planningFile)
+	if readPlanningErr != nil {
+		t.Fatalf("expected websocket planning markdown file before confirmation: %v", readPlanningErr)
+	}
+	if planningText := string(planningBytes); !strings.Contains(planningText, "# WebSocket Planning") ||
+		!strings.Contains(planningText, "## Assumptions") {
+		t.Fatalf("unexpected websocket planning markdown file:\n%s", planningText)
+	}
 
 	submitBody := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"approve"}]}`
 	submitRec, err := http.Post(server.URL+"/api/submit", "application/json", bytes.NewBufferString(submitBody))

@@ -77,6 +77,32 @@ func TestBuildSystemPromptPlacesAgentIdentityBeforeSoul(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPromptIncludesAgentAndWorkspacePromptsInOrder(t *testing.T) {
+	prompt := buildSystemPrompt(QuerySession{
+		AgentKey:              "demo",
+		ChatID:                "chat-1",
+		RunID:                 "run-1",
+		Mode:                  "CODER",
+		AgentsPrompt:          "agent directory rules",
+		WorkspaceAgentsPrompt: "workspace project rules",
+		ContextTags:           []string{"session"},
+		RuntimeContext: RuntimeRequestContext{
+			LocalPaths: LocalPaths{WorkspaceDir: "/workspace"},
+		},
+	}, api.QueryRequest{ChatID: "chat-1", RunID: "run-1"}, "", PromptBuildOptions{})
+
+	agentIndex := strings.Index(prompt, "agent directory rules")
+	workspaceTitleIndex := strings.Index(prompt, "Workspace AGENTS.md")
+	workspaceIndex := strings.Index(prompt, "workspace project rules")
+	runtimeIndex := strings.Index(prompt, "Runtime Context: Session")
+	if agentIndex < 0 || workspaceTitleIndex < 0 || workspaceIndex < 0 || runtimeIndex < 0 {
+		t.Fatalf("expected agent, workspace, and runtime sections, got %q", prompt)
+	}
+	if !(agentIndex < workspaceTitleIndex && workspaceTitleIndex < workspaceIndex && workspaceIndex < runtimeIndex) {
+		t.Fatalf("unexpected prompt ordering:\n%s", prompt)
+	}
+}
+
 func TestBuildSystemPromptKeepsIdentityWhenSoulIsMissing(t *testing.T) {
 	prompt := buildSystemPrompt(QuerySession{
 		AgentKey:         "demo",

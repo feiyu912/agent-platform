@@ -3,10 +3,12 @@ package llm
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"agent-platform/internal/api"
+	"agent-platform/internal/config"
 	contracts "agent-platform/internal/contracts"
 )
 
@@ -33,6 +35,23 @@ func TestCoderExecuteStageToolsExcludePlanningOnlyTools(t *testing.T) {
 	want := []string{"bash", "file_read", "datetime"}
 	if got := stream.executeStageTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("executeStageTools()=%#v want %#v", got, want)
+	}
+}
+
+func TestCoderPlanningPromptUsesCoderPromptsConfig(t *testing.T) {
+	stream := &coderPlanningStream{
+		engine: &LLMAgentEngine{cfg: config.Config{
+			CoderPrompts: config.CoderPromptsConfig{
+				PlanningPrompt: "custom coder planning prompt\nUse planning_write.",
+			},
+		}},
+	}
+	prompt := stream.planningPrompt()
+	if !strings.Contains(prompt, "custom coder planning prompt") {
+		t.Fatalf("expected custom coder planning prompt, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Use planning_write.") {
+		t.Fatalf("expected configured planning_write instructions, got %q", prompt)
 	}
 }
 

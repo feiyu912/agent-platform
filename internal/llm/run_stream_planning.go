@@ -2,20 +2,48 @@ package llm
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	. "agent-platform/internal/contracts"
 	planutil "agent-platform/internal/planning"
 )
 
+const planningDeltaChunkRunes = 96
+
 type planningWriteStreamState struct {
-	toolID       string
-	argsBuffer   string
-	started      bool
-	planningID   string
-	planningFile string
-	title        string
-	sentMarkdown string
+	toolID               string
+	argsBuffer           string
+	started              bool
+	planningID           string
+	planningFile         string
+	title                string
+	sentMarkdown         string
+	draftFileInitialized bool
+}
+
+type planningDraftString struct {
+	Value   string
+	Present bool
+	Closed  bool
+}
+
+type planningDraftArray struct {
+	Items   []planningDraftString
+	Present bool
+	Closed  bool
+}
+
+type planningDraftArgs struct {
+	Title       planningDraftString
+	Summary     planningDraftString
+	KeyChanges  planningDraftArray
+	Steps       planningDraftArray
+	TestPlan    planningDraftArray
+	Assumptions planningDraftArray
 }
 
 func (s *llmRunStream) appendToolCallDeltas(deltas []AgentDelta) {
@@ -44,8 +72,11 @@ func (s *llmRunStream) planningDeltasFromToolCall(delta DeltaToolCall) []AgentDe
 		return nil
 	}
 	state.argsBuffer += delta.ArgsDelta
-	args := partialPlanningWriteArgs(state.argsBuffer)
-	title := strings.TrimSpace(AnyStringNode(args["title"]))
+	draftArgs := parsePlanningDraftArgs(state.argsBuffer)
+	if !draftArgs.Title.Closed {
+		return nil
+	}
+	title := strings.TrimSpace(draftArgs.Title.Value)
 	if title == "" {
 		return nil
 	}
@@ -63,8 +94,8 @@ func (s *llmRunStream) planningDeltasFromToolCall(delta DeltaToolCall) []AgentDe
 		state.started = true
 		events = append(events, s.planningStartDelta(state, "started"))
 	}
-	draft := planutil.RenderDraftMarkdown(args)
-	events = append(events, s.planningMarkdownDeltas(state, draft)...)
+	draft := renderPlanningDraftMarkdown(draftArgs)
+	events = append(events, s.planningMarkdownDeltas(state, draft, true)...)
 	return events
 }
 
@@ -97,7 +128,7 @@ func (s *llmRunStream) appendFinalPlanningDeltas(toolID string, result ToolExecu
 		state.started = true
 		s.pending = append(s.pending, s.planningStartDelta(state, "started"))
 	}
-	s.pending = append(s.pending, s.planningMarkdownDeltas(state, markdown)...)
+	s.pending = append(s.pending, s.planningMarkdownDeltas(state, markdown, false)...)
 	s.pending = append(s.pending, DeltaPlanningEnd{
 		PlanningID:   planningID,
 		PlanningFile: planningFile,
@@ -114,7 +145,7 @@ func (s *llmRunStream) appendFinalPlanningDeltas(toolID string, result ToolExecu
 	}
 }
 
-func (s *llmRunStream) planningMarkdownDeltas(state *planningWriteStreamState, markdown string) []AgentDelta {
+func (s *llmRunStream) planningMarkdownDeltas(state *planningWriteStreamState, markdown string, writeDraft bool) []AgentDelta {
 	if state == nil || markdown == "" || markdown == state.sentMarkdown {
 		return nil
 	}
@@ -133,6 +164,9 @@ func (s *llmRunStream) planningMarkdownDeltas(state *planningWriteStreamState, m
 	for _, chunk := range chunks {
 		if chunk == "" {
 			continue
+		}
+		if writeDraft {
+			state.appendPlanningDraftFile(chunk)
 		}
 		events = append(events, DeltaPlanningDelta{
 			PlanningID:   state.planningID,
@@ -153,26 +187,40 @@ func splitPlanningDeltaChunks(text string) []string {
 	if text == "" {
 		return nil
 	}
-	chunks := make([]string, 0)
-	start := 0
-	for {
-		idx := strings.Index(text[start:], "\n\n## ")
-		if idx < 0 {
-			break
-		}
-		boundary := start + idx + 2
-		if boundary > start {
-			chunks = append(chunks, text[start:boundary])
-		}
-		start = boundary
-	}
-	if start < len(text) {
-		chunks = append(chunks, text[start:])
-	}
-	if len(chunks) == 0 {
+	runes := []rune(text)
+	if len(runes) <= planningDeltaChunkRunes {
 		return []string{text}
 	}
+	chunks := make([]string, 0, (len(runes)/planningDeltaChunkRunes)+1)
+	for start := 0; start < len(runes); start += planningDeltaChunkRunes {
+		end := start + planningDeltaChunkRunes
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[start:end]))
+	}
 	return chunks
+}
+
+func (state *planningWriteStreamState) appendPlanningDraftFile(chunk string) {
+	if state == nil || strings.TrimSpace(state.planningFile) == "" || chunk == "" {
+		return
+	}
+	if !state.draftFileInitialized {
+		if err := os.MkdirAll(filepath.Dir(state.planningFile), 0o755); err != nil {
+			return
+		}
+		if err := os.WriteFile(state.planningFile, nil, 0o644); err != nil {
+			return
+		}
+		state.draftFileInitialized = true
+	}
+	file, err := os.OpenFile(state.planningFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, _ = file.WriteString(chunk)
 }
 
 func (s *llmRunStream) planningStartDelta(state *planningWriteStreamState, status string) DeltaPlanningStart {
@@ -235,33 +283,151 @@ func (s *llmRunStream) planningChatsDir() string {
 	return chatsDir
 }
 
+func parsePlanningDraftArgs(buffer string) planningDraftArgs {
+	return planningDraftArgs{
+		Title:       parsePlanningStringField(buffer, "title"),
+		Summary:     parsePlanningStringField(buffer, "summary"),
+		KeyChanges:  parsePlanningArrayField(buffer, "keyChanges"),
+		Steps:       parsePlanningArrayField(buffer, "steps"),
+		TestPlan:    parsePlanningArrayField(buffer, "testPlan"),
+		Assumptions: parsePlanningArrayField(buffer, "assumptions"),
+	}
+}
+
+func parsePlanningStringField(buffer string, key string) planningDraftString {
+	valueOffset := findJSONObjectValueOffset(buffer, key)
+	if valueOffset < 0 || valueOffset >= len(buffer) || buffer[valueOffset] != '"' {
+		return planningDraftString{}
+	}
+	value, _, closed, ok := parseJSONStringFragmentAt(buffer, valueOffset)
+	if !ok {
+		return planningDraftString{}
+	}
+	return planningDraftString{Value: value, Present: true, Closed: closed}
+}
+
+func parsePlanningArrayField(buffer string, key string) planningDraftArray {
+	valueOffset := findJSONObjectValueOffset(buffer, key)
+	if valueOffset < 0 || valueOffset >= len(buffer) || buffer[valueOffset] != '[' {
+		return planningDraftArray{}
+	}
+	return parsePlanningStringArrayAt(buffer, valueOffset)
+}
+
+func renderPlanningDraftMarkdown(args planningDraftArgs) string {
+	if !args.Title.Closed {
+		return ""
+	}
+	title := strings.TrimSpace(args.Title.Value)
+	if title == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("# ")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+	if !args.Summary.Present {
+		return b.String()
+	}
+	b.WriteString("## Summary\n")
+	summary := strings.TrimSpace(args.Summary.Value)
+	if summary == "" {
+		return b.String()
+	}
+	b.WriteString(summary)
+	if !args.Summary.Closed {
+		return b.String()
+	}
+	b.WriteString("\n\n")
+	if !appendPlanningDraftSection(&b, "Key Changes", args.KeyChanges, false) {
+		return b.String()
+	}
+	if !appendPlanningDraftSection(&b, "Plan", args.Steps, false) {
+		return b.String()
+	}
+	if !appendPlanningDraftSection(&b, "Test Plan", args.TestPlan, false) {
+		return b.String()
+	}
+	_ = appendPlanningDraftSection(&b, "Assumptions", args.Assumptions, true)
+	return b.String()
+}
+
+func appendPlanningDraftSection(b *strings.Builder, title string, section planningDraftArray, last bool) bool {
+	if !section.Present {
+		return false
+	}
+	b.WriteString("## ")
+	b.WriteString(title)
+	b.WriteByte('\n')
+	wroteItem := false
+	for _, item := range section.Items {
+		line := cleanPlanningDraftLine(item.Value)
+		if line == "" {
+			if !item.Closed {
+				return false
+			}
+			continue
+		}
+		wroteItem = true
+		b.WriteString("- ")
+		b.WriteString(line)
+		if !item.Closed {
+			return false
+		}
+		b.WriteByte('\n')
+	}
+	if !section.Closed {
+		return false
+	}
+	if !wroteItem {
+		b.WriteString("- None specified.\n")
+	}
+	if !last {
+		b.WriteByte('\n')
+	}
+	return true
+}
+
+func cleanPlanningDraftLine(line string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
+}
+
 func partialPlanningWriteArgs(buffer string) map[string]any {
 	var full map[string]any
 	if err := json.Unmarshal([]byte(buffer), &full); err == nil && len(full) > 0 {
 		return full
 	}
 	out := map[string]any{}
-	for _, key := range []string{"title", "summary", "keyChanges", "steps", "testPlan", "assumptions"} {
-		valueOffset := findJSONObjectValueOffset(buffer, key)
-		if valueOffset < 0 || valueOffset >= len(buffer) {
-			continue
-		}
-		switch buffer[valueOffset] {
-		case '"':
-			if value, _, ok := parseJSONStringAt(buffer, valueOffset); ok {
-				out[key] = value
-			}
-		case '[':
-			if values, closed := parsePartialJSONStringArray(buffer, valueOffset); closed {
-				items := make([]any, 0, len(values))
-				for _, value := range values {
-					items = append(items, value)
-				}
-				out[key] = items
-			}
-		}
+	draft := parsePlanningDraftArgs(buffer)
+	if draft.Title.Closed {
+		out["title"] = draft.Title.Value
+	}
+	if draft.Summary.Closed {
+		out["summary"] = draft.Summary.Value
+	}
+	if draft.KeyChanges.Closed {
+		out["keyChanges"] = closedPlanningDraftItems(draft.KeyChanges)
+	}
+	if draft.Steps.Closed {
+		out["steps"] = closedPlanningDraftItems(draft.Steps)
+	}
+	if draft.TestPlan.Closed {
+		out["testPlan"] = closedPlanningDraftItems(draft.TestPlan)
+	}
+	if draft.Assumptions.Closed {
+		out["assumptions"] = closedPlanningDraftItems(draft.Assumptions)
 	}
 	return out
+}
+
+func closedPlanningDraftItems(section planningDraftArray) []any {
+	items := make([]any, 0, len(section.Items))
+	for _, item := range section.Items {
+		if item.Closed {
+			items = append(items, item.Value)
+		}
+	}
+	return items
 }
 
 func findJSONObjectValueOffset(text string, key string) int {
@@ -287,30 +453,118 @@ func findJSONObjectValueOffset(text string, key string) int {
 }
 
 func parseJSONStringAt(text string, start int) (string, int, bool) {
+	value, end, closed, ok := parseJSONStringFragmentAt(text, start)
+	return value, end, ok && closed
+}
+
+func parseJSONStringFragmentAt(text string, start int) (string, int, bool, bool) {
 	if start < 0 || start >= len(text) || text[start] != '"' {
-		return "", start, false
+		return "", start, false, false
 	}
-	escaped := false
-	for i := start + 1; i < len(text); i++ {
+	var b strings.Builder
+	for i := start + 1; i < len(text); {
 		ch := text[i]
-		if escaped {
-			escaped = false
+		if ch == '"' {
+			return b.String(), i, true, true
+		}
+		if ch != '\\' {
+			b.WriteByte(ch)
+			i++
 			continue
 		}
-		if ch == '\\' {
-			escaped = true
-			continue
+		if i+1 >= len(text) {
+			return b.String(), len(text), false, true
 		}
-		if ch != '"' {
-			continue
+		escaped := text[i+1]
+		switch escaped {
+		case '"', '\\', '/':
+			b.WriteByte(escaped)
+			i += 2
+		case 'b':
+			b.WriteByte('\b')
+			i += 2
+		case 'f':
+			b.WriteByte('\f')
+			i += 2
+		case 'n':
+			b.WriteByte('\n')
+			i += 2
+		case 'r':
+			b.WriteByte('\r')
+			i += 2
+		case 't':
+			b.WriteByte('\t')
+			i += 2
+		case 'u':
+			r, next, ok := parseJSONUnicodeEscape(text, i)
+			if !ok {
+				return b.String(), len(text), false, true
+			}
+			b.WriteRune(r)
+			i = next
+		default:
+			return b.String(), i, false, true
 		}
-		var value string
-		if err := json.Unmarshal([]byte(text[start:i+1]), &value); err != nil {
-			return "", i, false
-		}
-		return value, i, true
 	}
-	return "", start, false
+	return b.String(), len(text), false, true
+}
+
+func parseJSONUnicodeEscape(text string, slash int) (rune, int, bool) {
+	if slash+6 > len(text) || text[slash] != '\\' || text[slash+1] != 'u' {
+		return 0, slash, false
+	}
+	value, err := strconv.ParseInt(text[slash+2:slash+6], 16, 32)
+	if err != nil {
+		return 0, slash, false
+	}
+	r := rune(value)
+	next := slash + 6
+	if 0xD800 <= r && r <= 0xDBFF && next+6 <= len(text) && text[next] == '\\' && text[next+1] == 'u' {
+		lowValue, lowErr := strconv.ParseInt(text[next+2:next+6], 16, 32)
+		low := rune(lowValue)
+		if lowErr == nil && 0xDC00 <= low && low <= 0xDFFF {
+			return utf16.DecodeRune(r, low), next + 6, true
+		}
+	}
+	return r, next, true
+}
+
+func parsePlanningStringArrayAt(text string, start int) planningDraftArray {
+	array := planningDraftArray{Present: true}
+	if start < 0 || start >= len(text) || text[start] != '[' {
+		return planningDraftArray{}
+	}
+	for i := start + 1; i < len(text); {
+		i = skipJSONSpaces(text, i)
+		if i >= len(text) {
+			return array
+		}
+		switch text[i] {
+		case ']':
+			array.Closed = true
+			return array
+		case ',':
+			i++
+			continue
+		case '"':
+			value, end, closed, ok := parseJSONStringFragmentAt(text, i)
+			if !ok {
+				return array
+			}
+			array.Items = append(array.Items, planningDraftString{
+				Value:   value,
+				Present: true,
+				Closed:  closed,
+			})
+			if !closed {
+				return array
+			}
+			i = end + 1
+		default:
+			return array
+		}
+	}
+	return array
 }
 
 func parsePartialJSONStringArray(text string, start int) ([]string, bool) {

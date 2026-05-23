@@ -133,12 +133,15 @@ contextConfig:
 - `PLAN_EXECUTE` 默认读取 `AGENTS.plan.md`、`AGENTS.execute.md`、`AGENTS.summary.md`
 - `planExecute.<stage>.promptFile` 可显式覆盖对应阶段
 - `PLAN_EXECUTE` 阶段缺少约定文件时，先回退顶层 `promptFile`，再回退 `AGENTS.md`
+- `mode: CODER` 还会按 `configs/coder-settings.yml` 读取 `workspaceConfig.root/AGENTS.md`，用于注入项目级 workspace 规则
 
 ## CODER Mode
 
 CODER 是一等 agent mode，应写作 `mode: CODER`，不要使用旧的 `type: CODER`。CODER 默认使用 `bash`、`file_read`、`file_write`、`file_edit`、`file_grep`、`datetime`，并要求 `workspaceConfig.root` 为绝对路径。
 
 请求顶层 `planningMode: true` 只对 `mode: CODER` 生效：planning 阶段仅暴露 `file_read`、`file_grep`、`datetime`、`ask_user_question`、`planning_write`；`planning_write` 会把标准 Markdown 规划写入 `CHATS_DIR/plans/<runId>_planning.md` 并触发 live `planning.start` / `planning.delta` / `planning.end` 流事件。live 事件保持轻量：`planning.start` 建立上下文，`planning.delta` 仅携带 `planningId` 与增量文本，`planning.end` 仅携带 `planningId`；`planning.snapshot` 由后端聚合后用于持久化回放和 debug 展示，`planningFile` 只暴露文件名。用户以 approval 确认后，execution 阶段再暴露 CODER 执行工具，不追加 `plan_update_task`。
+
+CODER 专属系统提示词从 `configs/coder-prompts.yml` 读取；当前支持 `planning-prompt`。该文件是运行时配置事实源，提示词正文不在 Go 源码中维护。
 
 ## Static Memory 与 Runtime Memory
 

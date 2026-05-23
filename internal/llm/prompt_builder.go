@@ -37,6 +37,8 @@ func buildSystemPrompt(session QuerySession, req api.QueryRequest, _ string, opt
 	sections := []string{
 		buildAgentIdentitySection(session),
 		strings.TrimSpace(session.SoulPrompt),
+		strings.TrimSpace(session.AgentsPrompt),
+		buildWorkspaceAgentsSection(session.WorkspaceAgentsPrompt),
 		strings.TrimSpace(session.StaticMemoryPrompt),
 		buildRuntimeContextPrompt(session, req),
 		stageInstructionsPrompt,
@@ -58,6 +60,14 @@ func buildAgentIdentitySection(session QuerySession) string {
 		return ""
 	}
 	return strings.Join(lines, "\n")
+}
+
+func buildWorkspaceAgentsSection(prompt string) string {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return ""
+	}
+	return "Workspace AGENTS.md\n" + prompt
 }
 
 func effectivePromptAppendConfig(config PromptAppendConfig) PromptAppendConfig {
@@ -96,7 +106,7 @@ func resolveStageInstructionsPrompt(session QuerySession, stage string) string {
 			return strings.TrimSpace(session.SummaryPrompt)
 		}
 	}
-	return strings.TrimSpace(session.AgentsPrompt)
+	return ""
 }
 
 func resolveStageSystemPrompt(session QuerySession, stage string) string {

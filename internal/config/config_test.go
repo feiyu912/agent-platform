@@ -162,6 +162,57 @@ func TestLoadPromptsConfigFromFile(t *testing.T) {
 	})
 }
 
+func TestLoadCoderPromptsConfigFromFile(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"planning-prompt: |\n" +
+			"  custom coder planning\n" +
+			"  use planning_write only\n"
+		withProjectFileContents(t, filepath.Join("configs", "coder-prompts.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			want := "custom coder planning\nuse planning_write only"
+			if cfg.CoderPrompts.PlanningPrompt != want {
+				t.Fatalf("expected coder planning prompt %q, got %q", want, cfg.CoderPrompts.PlanningPrompt)
+			}
+		})
+	})
+}
+
+func TestLoadCoderSettingsMissingFileLeavesEmpty(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		withProjectFileContents(t, filepath.Join("configs", "coder-settings.yml"), nil, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.CoderSettings.WorkspaceAgents.Enabled || cfg.CoderSettings.WorkspaceAgents.File != "" {
+				t.Fatalf("expected empty coder workspace agents config, got %#v", cfg.CoderSettings.WorkspaceAgents)
+			}
+		})
+	})
+}
+
+func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"workspace-agents:\n" +
+			"  enabled: true\n" +
+			"  file: RULES.md\n"
+		withProjectFileContents(t, filepath.Join("configs", "coder-settings.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if !cfg.CoderSettings.WorkspaceAgents.Enabled || cfg.CoderSettings.WorkspaceAgents.File != "RULES.md" {
+				t.Fatalf("unexpected coder workspace agents override: %#v", cfg.CoderSettings.WorkspaceAgents)
+			}
+		})
+	})
+}
+
 func TestLoadAuthLocalPublicKeyPathUnderConfigs(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"AUTH_LOCAL_PUBLIC_KEY_FILE": "local-public-key.pem",

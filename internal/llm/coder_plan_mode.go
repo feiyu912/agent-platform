@@ -19,14 +19,6 @@ var coderPlanningModePlanTools = []string{
 	"planning_write",
 }
 
-const defaultCoderPlanningPrompt = `You are in CODER planning mode.
-
-Planning rules:
-1. You may inspect files and ask the user questions, but you must not execute or mutate anything.
-2. Use ask_user_question whenever important intent, scope, or implementation choices are unclear.
-3. Create a concrete execution plan with planning_write when you have enough information.
-4. Do not claim execution has started. The backend will ask the user to confirm the plan before any execution tools are available.`
-
 type coderPlanningStream struct {
 	engine  *LLMAgentEngine
 	ctx     context.Context
@@ -166,14 +158,25 @@ func (s *coderPlanningStream) startPlanStage() error {
 
 func (s *coderPlanningStream) planningPrompt() string {
 	custom := strings.TrimSpace(s.settings.Plan.PrimaryPrompt())
-	prompt := strings.TrimSpace(defaultCoderPlanningPrompt)
-	if custom != "" {
-		prompt = custom + "\n\n" + prompt
+	if s.engine != nil && strings.TrimSpace(s.engine.cfg.CoderPrompts.PlanningPrompt) != "" {
+		custom = joinNonEmptyPrompts(custom, s.engine.cfg.CoderPrompts.PlanningPrompt)
 	}
+	prompt := strings.TrimSpace(custom)
 	if desc := s.buildExecuteToolDescriptions(); desc != "" {
 		prompt += "\n\n" + desc
 	}
-	return prompt + "\n\nCreate a standard Markdown execution plan for the user's request. You MUST call planning_write before the planning phase finishes. The plan must include Summary, Key Changes, Plan, Test Plan, and Assumptions. When calling planning_write, emit arguments in this field order: title, summary, keyChanges, steps, testPlan, assumptions."
+	return prompt
+}
+
+func joinNonEmptyPrompts(values ...string) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			parts = append(parts, value)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func (s *coderPlanningStream) afterStageEOF() error {

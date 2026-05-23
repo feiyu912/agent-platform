@@ -106,6 +106,8 @@ func buildInjectedSystemSections(session QuerySession, req api.QueryRequest, opt
 
 	appendSection("agent-identity", "Agent Identity", "agent.identity", buildAgentIdentitySection(session))
 	appendSection("agent-soul", "Soul Prompt", "agent.soul", strings.TrimSpace(session.SoulPrompt))
+	appendSection("agent-prompt", "Agent Prompt", "agent.prompt", strings.TrimSpace(session.AgentsPrompt))
+	appendSection("workspace-agents", "Workspace AGENTS.md", "workspace.agents", buildWorkspaceAgentsSection(session.WorkspaceAgentsPrompt))
 	appendSection("static-memory", "Static Memory Prompt", "memory.static", strings.TrimSpace(session.StaticMemoryPrompt))
 
 	for _, tag := range session.ContextTags {

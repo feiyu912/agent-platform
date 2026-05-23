@@ -376,6 +376,9 @@ func resolveLocalSandboxPaths(cfg config.Config, def catalog.AgentDefinition, ch
 }
 
 func buildAgentDigests(registry catalog.Registry) []contracts.AgentDigest {
+	if registry == nil {
+		return nil
+	}
 	items := registry.Agents("")
 	digests := make([]contracts.AgentDigest, 0, len(items))
 	for _, item := range items {

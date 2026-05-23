@@ -986,6 +986,15 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 	if strings.Contains(streamBody.String(), `"type":"planning.snapshot"`) {
 		t.Fatalf("did not expect live planning.snapshot, got %s", streamBody.String())
 	}
+	planningFile := filepath.Join(fixture.cfg.Paths.ChatsDir, "plans", runID+"_planning.md")
+	planningBytes, readPlanningErr := os.ReadFile(planningFile)
+	if readPlanningErr != nil {
+		t.Fatalf("expected planning markdown file before confirmation: %v", readPlanningErr)
+	}
+	if planningText := string(planningBytes); !strings.Contains(planningText, "# Confirm Coder Plan") ||
+		!strings.Contains(planningText, "## Test Plan") {
+		t.Fatalf("unexpected planning markdown file:\n%s", planningText)
+	}
 	submitFrontendDecision(t, fixture.server, runID, confirmAwaitingID, "approve")
 
 	for {

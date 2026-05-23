@@ -15,6 +15,8 @@ type Config struct {
 	Teams          CatalogConfig
 	Skills         SkillCatalogConfig
 	Prompts        PromptsConfig
+	CoderPrompts   CoderPromptsConfig
+	CoderSettings  CoderSettingsConfig
 	Providers      CatalogConfig
 	Models         CatalogConfig
 	Schedule       ScheduleConfig
@@ -77,6 +79,19 @@ type PromptsConfig struct {
 type PromptSkillConfig struct {
 	InstructionsPrompt string
 	CatalogHeader      string
+}
+
+type CoderPromptsConfig struct {
+	PlanningPrompt string
+}
+
+type CoderSettingsConfig struct {
+	WorkspaceAgents CoderWorkspaceAgentsConfig
+}
+
+type CoderWorkspaceAgentsConfig struct {
+	Enabled bool
+	File    string
 }
 
 type ScheduleConfig struct {
@@ -627,6 +642,8 @@ func (c *Config) applyStructuredConfig() error {
 	c.applyFileToolsFile(ConfigFile("configs/file-tools.yml"))
 	c.applyCORSFile(ConfigFile("configs/cors.yml"))
 	c.applyPromptsFile(ConfigFile("configs/prompts.yml"))
+	c.applyCoderPromptsFile(ConfigFile("configs/coder-prompts.yml"))
+	c.applyCoderSettingsFile(ConfigFile("configs/coder-settings.yml"))
 	if err := c.applyChannelsFile(ConfigFile("configs/channels.yml")); err != nil {
 		return err
 	}
@@ -858,6 +875,35 @@ func (c *Config) applyPromptsFile(path string) {
 	}
 	c.Prompts.Skill.InstructionsPrompt = stringValue(anyValue(skill["instructions-prompt"], c.Prompts.Skill.InstructionsPrompt), c.Prompts.Skill.InstructionsPrompt)
 	c.Prompts.Skill.CatalogHeader = stringValue(anyValue(skill["catalog-header"], c.Prompts.Skill.CatalogHeader), c.Prompts.Skill.CatalogHeader)
+}
+
+func (c *Config) applyCoderPromptsFile(path string) {
+	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return
+	}
+	values, _ := tree.(map[string]any)
+	if len(values) == 0 {
+		return
+	}
+	c.CoderPrompts.PlanningPrompt = stringValue(anyValue(values["planning-prompt"], c.CoderPrompts.PlanningPrompt), c.CoderPrompts.PlanningPrompt)
+}
+
+func (c *Config) applyCoderSettingsFile(path string) {
+	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return
+	}
+	values, _ := tree.(map[string]any)
+	if len(values) == 0 {
+		return
+	}
+	workspaceAgents, _ := values["workspace-agents"].(map[string]any)
+	if len(workspaceAgents) == 0 {
+		return
+	}
+	c.CoderSettings.WorkspaceAgents.Enabled = boolValue(anyValue(workspaceAgents["enabled"], c.CoderSettings.WorkspaceAgents.Enabled), c.CoderSettings.WorkspaceAgents.Enabled)
+	c.CoderSettings.WorkspaceAgents.File = stringValue(anyValue(workspaceAgents["file"], c.CoderSettings.WorkspaceAgents.File), c.CoderSettings.WorkspaceAgents.File)
 }
 
 func (c *Config) applyChannelsFile(path string) error {

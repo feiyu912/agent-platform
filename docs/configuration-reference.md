@@ -350,6 +350,8 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 - `configs/channels.yml`
 - `configs/container-hub.yml`
 - `configs/cors.yml`
+- `configs/coder-prompts.yml`
+- `configs/coder-settings.yml`
 - `configs/file-tools.yml`
 - `configs/local-public-key.pem`
 - `configs/prompts.yml`
@@ -359,6 +361,8 @@ provider registry 中的 `apiKey` 支持以下两种形态：
 - `configs/` 下所有文件都是启动时静态配置，运行中修改必须重启 runtime 才会生效
 - `bash.yml` 与 `file-tools.yml` 是 Bash/FileTools 权限的唯一外部事实源
 - `cors.yml` 会直接驱动 `/api/**` 的 CORS 行为
+- `coder-prompts.yml` 管理 CODER 专属系统提示词，例如 planning 阶段提示词
+- `coder-settings.yml` 管理 CODER 专属运行策略，例如是否读取 workspace `AGENTS.md`
 - `local-public-key.pem` 会在启用 `AUTH_ENABLED=true` 且使用本地公钥模式时参与 JWT 验签
 - 当前 Go 版仍不支持 `CONFIGS_DIR`，配置目录固定为项目根下 `configs/`
 
@@ -455,3 +459,4 @@ contextConfig:
 - `PLAN_EXECUTE` 默认读取 `AGENTS.plan.md`、`AGENTS.execute.md`、`AGENTS.summary.md`
 - `planExecute.<stage>.promptFile` 可显式覆盖对应阶段
 - `PLAN_EXECUTE` 阶段缺少约定文件时，先回退顶层 `promptFile`，再回退 `AGENTS.md`
+- `mode: CODER` 会按 `configs/coder-settings.yml` 读取 `workspaceConfig.root/AGENTS.md` 并作为 workspace 规则注入系统提示词；缺失文件兼容跳过，存在但读取失败会中止 session 构建
