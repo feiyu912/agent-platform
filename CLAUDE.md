@@ -230,10 +230,10 @@ runtimeConfig:
 - `GET /api/chat/export?chatId=...`：将 active chat 导出为 Markdown
 - `GET /api/archives`、`GET /api/archive?chatId=...`、`POST /api/archives/search`：归档列表、归档详情与归档搜索
 - `POST /api/query`：返回 SSE；支持可选 `runId` 透传；缺失 `runId` 时服务端按 `base36(epochMillis)` 生成，缺失 `requestId` / `chatId` 时服务端自动生成，缺失 `agentKey` 时回退到默认 agent
-- `GET /api/attach?runId=...&lastSeq=...`：续接已注册 run 的 SSE 事件流；run 超过 retention 时返回 `SEQ_EXPIRED`
-- `POST /api/submit`：当前返回最小 ack，占位 awaiting 提交链路；请求体要求 `runId + awaitingId`
-- `POST /api/steer`：当前返回最小 ack，占位运行中 steer 链路
-- `POST /api/interrupt`：中断活跃 run 并返回 ack
+- `GET /api/attach?runId=...&agentKey=...&lastSeq=...`：续接已注册 run 的 SSE 事件流；`agentKey` 必填且需与 run 匹配；run 超过 retention 时返回 `SEQ_EXPIRED`
+- `POST /api/submit`：当前返回最小 ack，占位 awaiting 提交链路；请求体要求 `agentKey + runId + awaitingId`
+- `POST /api/steer`：当前返回最小 ack，占位运行中 steer 链路；请求体要求 `agentKey + runId + message`
+- `POST /api/interrupt`：中断活跃 run 并返回 ack；请求体要求 `agentKey + runId`
 - `POST /api/remember`：从 chat 快照生成最小 remember 文件
 - `POST /api/learn`：当前固定返回 `accepted=false`、`status="not_connected"`
 - `GET /api/viewport`：先查 `runtime/viewports` 本地模板，再查 `registries/viewport-servers` 里的远端 viewport server，最后才回退 noop viewport client
@@ -244,7 +244,7 @@ runtimeConfig:
 ### HITL 协议
 
 - 人机协作统一保留 `mode` 字段，不引入 `kind`；当前三态是 `question` / `approval` / `form`。
-- `/api/submit` 固定形状为 `{"runId":"...","awaitingId":"...","params":[...]}`。
+- `/api/submit` 固定形状为 `{"agentKey":"...","runId":"...","awaitingId":"...","params":[...]}`。
 - `params` 顶层永远是数组；前端不再提交 `mode`，后端按 `awaitingId` 反查当前等待态。
 - `/api/submit.params` 与 `awaiting.ask.{questions|approvals|forms}` 固定按下标对应：`params[i] -> ask.items[i]`。
 - `params` 每项允许携带 `id`，但 `id` 只作审计/日志用途；服务端不会据此分发，只校验数量和字段形状。

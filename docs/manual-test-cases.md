@@ -113,14 +113,14 @@ curl -N -X POST "$BASE_URL/api/query" \
 ```bash
 curl -N -X POST "$BASE_URL/api/query" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","message":"使用指定 runId 发起一次请求","agentKey":"default_agent"}'
+  -d '{"agentKey":"default_agent","runId":"replace-me","message":"使用指定 runId 发起一次请求","agentKey":"default_agent"}'
 ```
 
 ## Submit / Steer / Interrupt
 
 `/api/submit` 当前使用统一 HITL 协议：
 
-- 顶层固定是 `runId + awaitingId + params`
+- 顶层固定是 `agentKey + runId + awaitingId + params`
 - `params` 永远是数组
 - 不在 submit 里再传 `mode`
 - 后端按 `awaitingId` 反查当前是 `question / approval / form`
@@ -131,7 +131,7 @@ question:
 ```bash
 curl -X POST "$BASE_URL/api/submit" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","awaitingId":"tool_question","params":[{"id":"q1","answer":"Weekend"},{"id":"q2","answers":["产品更新","使用教程"]}]}'
+  -d '{"agentKey":"default_agent","runId":"replace-me","awaitingId":"tool_question","params":[{"id":"q1","answer":"Weekend"},{"id":"q2","answers":["产品更新","使用教程"]}]}'
 ```
 
 也可以省略 `id`，只要顺序与 `awaiting.ask.questions` 一致：
@@ -139,7 +139,7 @@ curl -X POST "$BASE_URL/api/submit" \
 ```bash
 curl -X POST "$BASE_URL/api/submit" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","awaitingId":"tool_question","params":[{"answer":"Weekend"},{"answers":["产品更新","使用教程"]}]}'
+  -d '{"agentKey":"default_agent","runId":"replace-me","awaitingId":"tool_question","params":[{"answer":"Weekend"},{"answers":["产品更新","使用教程"]}]}'
 ```
 
 approval:
@@ -147,7 +147,7 @@ approval:
 ```bash
 curl -X POST "$BASE_URL/api/submit" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","awaitingId":"await_tool_bash","params":[{"id":"tool_bash","decision":"approve_rule_run","reason":"同规则本轮一并放行"}]}'
+  -d '{"agentKey":"default_agent","runId":"replace-me","awaitingId":"await_tool_bash","params":[{"id":"tool_bash","decision":"approve_rule_run","reason":"同规则本轮一并放行"}]}'
 ```
 
 form:
@@ -155,7 +155,7 @@ form:
 ```bash
 curl -X POST "$BASE_URL/api/submit" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","awaitingId":"await_tool_bash","params":[{"id":"form-1","payload":{"applicant":{"name":"Lin","department":"engineering","employee_id":"E1001"},"leave_type":"事假","start_date":"2026-04-21","end_date":"2026-04-22","duration_days":2,"reason":"family_trip","urgent_contact":"Amy","urgent_phone":"13800138000","backup_person":"E2001","notes":"请协助处理审批"}}]}'
+  -d '{"agentKey":"default_agent","runId":"replace-me","awaitingId":"await_tool_bash","params":[{"id":"form-1","payload":{"applicant":{"name":"Lin","department":"engineering","employee_id":"E1001"},"leave_type":"事假","start_date":"2026-04-21","end_date":"2026-04-22","duration_days":2,"reason":"family_trip","urgent_contact":"Amy","urgent_phone":"13800138000","backup_person":"E2001","notes":"请协助处理审批"}}]}'
 ```
 
 整批取消：
@@ -163,19 +163,19 @@ curl -X POST "$BASE_URL/api/submit" \
 ```bash
 curl -X POST "$BASE_URL/api/submit" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","awaitingId":"tool_question","params":[]}'
+  -d '{"agentKey":"default_agent","runId":"replace-me","awaitingId":"tool_question","params":[]}'
 ```
 
 ```bash
 curl -X POST "$BASE_URL/api/steer" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me","message":"换个角度总结"}'
+  -d '{"agentKey":"default_agent","runId":"replace-me","message":"换个角度总结"}'
 ```
 
 ```bash
 curl -X POST "$BASE_URL/api/interrupt" \
   -H "Content-Type: application/json" \
-  -d '{"runId":"replace-me"}'
+  -d '{"agentKey":"default_agent","runId":"replace-me"}'
 ```
 
 ## Remember / Learn

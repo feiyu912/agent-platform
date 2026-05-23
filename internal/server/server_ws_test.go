@@ -495,7 +495,8 @@ func TestWebSocketRunStreamClosesDuringShutdown(t *testing.T) {
 		Type:  "/api/attach",
 		ID:    "req_shutdown_stream",
 		Payload: ws.MarshalPayload(map[string]any{
-			"runId": runID,
+			"agentKey": "mock-agent",
+			"runId":    runID,
 		}),
 	}); err != nil {
 		t.Fatalf("write run stream request: %v", err)
@@ -595,7 +596,7 @@ func TestWebSocketPushAwaitingAskAndAnswerSyncPendingChatSummary(t *testing.T) {
 	}
 
 	submitRec := httptest.NewRecorder()
-	submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"runId":"`+flow.runID+`","awaitingId":"`+flow.awaitingID+`","params":[{"id":"q1","answer":"Approve"}]}`))
+	submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"`+flow.runID+`","awaitingId":"`+flow.awaitingID+`","params":[{"id":"q1","answer":"Approve"}]}`))
 	submitReq.Header.Set("Content-Type", "application/json")
 	flow.fixture.server.ServeHTTP(submitRec, submitReq)
 	if submitRec.Code != http.StatusOK {
@@ -640,7 +641,7 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 			act: func(t *testing.T, flow *awaitingPushQuestionFlow, awaitAskData map[string]any) {
 				t.Helper()
 				submitRec := httptest.NewRecorder()
-				submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"runId":"`+flow.runID+`","awaitingId":"`+flow.awaitingID+`","params":[]}`))
+				submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"`+flow.runID+`","awaitingId":"`+flow.awaitingID+`","params":[]}`))
 				submitReq.Header.Set("Content-Type", "application/json")
 				flow.fixture.server.ServeHTTP(submitRec, submitReq)
 				if submitRec.Code != http.StatusOK {
@@ -703,7 +704,7 @@ func TestWebSocketPushAwaitingAnswerRunInterruptedClearsPendingChatSummary(t *te
 	}
 
 	interruptRec := httptest.NewRecorder()
-	interruptReq := httptest.NewRequest(http.MethodPost, "/api/interrupt", bytes.NewBufferString(`{"runId":"`+flow.runID+`"}`))
+	interruptReq := httptest.NewRequest(http.MethodPost, "/api/interrupt", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"`+flow.runID+`"}`))
 	interruptReq.Header.Set("Content-Type", "application/json")
 	flow.fixture.server.ServeHTTP(interruptRec, interruptReq)
 	if interruptRec.Code != http.StatusOK {
@@ -866,13 +867,27 @@ func TestWebSocketCoderPlanningEmitsLifecycleEvents(t *testing.T) {
 		case 1:
 			writeProviderSSE(t, w,
 				providerToolCallFrame(t, "tool_plan", "planning_write", map[string]any{
-					"title":                  "WebSocket Planning",
-					"summary":                "Plan should stream over websocket.",
-					"publicEventsAndStorage": []string{"Emit planning lifecycle events"},
-					"implementationChanges":  []string{"Confirm and execute the plan"},
-					"interfaces":             []string{"Use websocket planning events"},
-					"testPlan":               []string{"Assert websocket event types"},
-					"assumptions":            []string{"The user approves the plan"},
+					"title": "WebSocket Planning",
+					"markdown": `# WebSocket Planning
+
+## Summary
+Plan should stream over websocket.
+
+## Public Events And Storage
+- Emit planning lifecycle events
+
+## Implementation Changes
+- Confirm and execute the plan
+
+## Interfaces
+- Use websocket planning events
+
+## Test Plan
+- Assert websocket event types
+
+## Assumptions
+- The user approves the plan
+`,
 				}),
 				`[DONE]`,
 			)
@@ -958,7 +973,7 @@ func TestWebSocketCoderPlanningEmitsLifecycleEvents(t *testing.T) {
 		t.Fatalf("unexpected websocket planning markdown file:\n%s", planningText)
 	}
 
-	submitBody := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"approve"}]}`
+	submitBody := `{"agentKey":"coder-ws","runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"approve"}]}`
 	submitRec, err := http.Post(server.URL+"/api/submit", "application/json", bytes.NewBufferString(submitBody))
 	if err != nil {
 		t.Fatalf("submit approval: %v", err)

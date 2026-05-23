@@ -738,7 +738,15 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid submit payload"))
 		return
 	}
-	if response, ok := s.forwardProxySubmit(req); ok {
+	if statusErr := s.validateSubmitAgentKey(req); statusErr != nil {
+		writeJSON(w, statusErr.status, api.Failure(statusErr.status, statusErr.message))
+		return
+	}
+	if response, statusErr, ok := s.forwardProxySubmit(req); ok {
+		if statusErr != nil {
+			writeJSON(w, statusErr.status, api.Failure(statusErr.status, statusErr.message))
+			return
+		}
 		writeJSON(w, http.StatusOK, api.Success(response))
 		return
 	}
@@ -754,6 +762,10 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	var req api.SteerRequest
 	if err := decodeJSON(r, &req); err != nil || req.RunID == "" || strings.TrimSpace(req.Message) == "" {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "runId and message are required"))
+		return
+	}
+	if statusErr := s.validateRunAgentKey(req.RunID, req.AgentKey); statusErr != nil {
+		writeJSON(w, statusErr.status, api.Failure(statusErr.status, statusErr.message))
 		return
 	}
 	ack := s.deps.Runs.Steer(req)
@@ -772,7 +784,15 @@ func (s *Server) handleInterrupt(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "runId is required"))
 		return
 	}
-	if response, ok := s.forwardProxyInterrupt(req); ok {
+	if statusErr := s.validateRunAgentKey(req.RunID, req.AgentKey); statusErr != nil {
+		writeJSON(w, statusErr.status, api.Failure(statusErr.status, statusErr.message))
+		return
+	}
+	if response, statusErr, ok := s.forwardProxyInterrupt(req); ok {
+		if statusErr != nil {
+			writeJSON(w, statusErr.status, api.Failure(statusErr.status, statusErr.message))
+			return
+		}
 		writeJSON(w, http.StatusOK, api.Success(response))
 		return
 	}

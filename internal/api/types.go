@@ -65,6 +65,7 @@ type Reference struct {
 
 type SubmitRequest struct {
 	RunID      string       `json:"runId"`
+	AgentKey   string       `json:"agentKey"`
 	AwaitingID string       `json:"awaitingId"`
 	Params     SubmitParams `json:"params"`
 }

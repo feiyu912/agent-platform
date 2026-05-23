@@ -31,20 +31,9 @@ type planningDraftString struct {
 	Closed  bool
 }
 
-type planningDraftArray struct {
-	Items   []planningDraftString
-	Present bool
-	Closed  bool
-}
-
 type planningDraftArgs struct {
-	Title                  planningDraftString
-	Summary                planningDraftString
-	PublicEventsAndStorage planningDraftArray
-	ImplementationChanges  planningDraftArray
-	Interfaces             planningDraftArray
-	TestPlan               planningDraftArray
-	Assumptions            planningDraftArray
+	Title    planningDraftString
+	Markdown planningDraftString
 }
 
 func (s *llmRunStream) appendToolCallDeltas(deltas []AgentDelta) {
@@ -286,13 +275,8 @@ func (s *llmRunStream) planningChatsDir() string {
 
 func parsePlanningDraftArgs(buffer string) planningDraftArgs {
 	return planningDraftArgs{
-		Title:                  parsePlanningStringField(buffer, "title"),
-		Summary:                parsePlanningStringField(buffer, "summary"),
-		PublicEventsAndStorage: parsePlanningArrayField(buffer, "publicEventsAndStorage"),
-		ImplementationChanges:  parsePlanningArrayField(buffer, "implementationChanges"),
-		Interfaces:             parsePlanningArrayField(buffer, "interfaces"),
-		TestPlan:               parsePlanningArrayField(buffer, "testPlan"),
-		Assumptions:            parsePlanningArrayField(buffer, "assumptions"),
+		Title:    parsePlanningStringField(buffer, "title"),
+		Markdown: parsePlanningStringField(buffer, "markdown"),
 	}
 }
 
@@ -308,14 +292,6 @@ func parsePlanningStringField(buffer string, key string) planningDraftString {
 	return planningDraftString{Value: value, Present: true, Closed: closed}
 }
 
-func parsePlanningArrayField(buffer string, key string) planningDraftArray {
-	valueOffset := findJSONObjectValueOffset(buffer, key)
-	if valueOffset < 0 || valueOffset >= len(buffer) || buffer[valueOffset] != '[' {
-		return planningDraftArray{}
-	}
-	return parsePlanningStringArrayAt(buffer, valueOffset)
-}
-
 func renderPlanningDraftMarkdown(args planningDraftArgs) string {
 	if !args.Title.Closed {
 		return ""
@@ -324,77 +300,28 @@ func renderPlanningDraftMarkdown(args planningDraftArgs) string {
 	if title == "" {
 		return ""
 	}
-	var b strings.Builder
-	b.WriteString("# ")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-	if !args.Summary.Present {
-		return b.String()
+	if !args.Markdown.Present {
+		return planutil.NormalizeMarkdown("", title)
 	}
-	b.WriteString("## Summary\n")
-	summary := strings.TrimSpace(args.Summary.Value)
-	if summary == "" {
-		return b.String()
+	if !args.Markdown.Closed {
+		return normalizePartialPlanningMarkdown(args.Markdown.Value, title)
 	}
-	b.WriteString(summary)
-	if !args.Summary.Closed {
-		return b.String()
-	}
-	b.WriteString("\n\n")
-	if !appendPlanningDraftSection(&b, "Public Events And Storage", args.PublicEventsAndStorage, false) {
-		return b.String()
-	}
-	if !appendPlanningDraftSection(&b, "Implementation Changes", args.ImplementationChanges, false) {
-		return b.String()
-	}
-	if !appendPlanningDraftSection(&b, "Interfaces", args.Interfaces, false) {
-		return b.String()
-	}
-	if !appendPlanningDraftSection(&b, "Test Plan", args.TestPlan, false) {
-		return b.String()
-	}
-	_ = appendPlanningDraftSection(&b, "Assumptions", args.Assumptions, true)
-	return b.String()
+	return planutil.NormalizeMarkdown(args.Markdown.Value, title)
 }
 
-func appendPlanningDraftSection(b *strings.Builder, title string, section planningDraftArray, last bool) bool {
-	if !section.Present {
-		return false
-	}
-	b.WriteString("## ")
-	b.WriteString(title)
-	b.WriteByte('\n')
-	wroteItem := false
-	for _, item := range section.Items {
-		line := cleanPlanningDraftLine(item.Value)
-		if line == "" {
-			if !item.Closed {
-				return false
-			}
-			continue
+func normalizePartialPlanningMarkdown(markdown string, title string) string {
+	markdown = strings.TrimSpace(markdown)
+	title = strings.TrimSpace(title)
+	if markdown == "" {
+		if title == "" {
+			return ""
 		}
-		wroteItem = true
-		b.WriteString("- ")
-		b.WriteString(line)
-		if !item.Closed {
-			return false
-		}
-		b.WriteByte('\n')
+		return "# " + title + "\n"
 	}
-	if !section.Closed {
-		return false
+	if !strings.HasPrefix(strings.TrimSpace(markdown), "#") && title != "" {
+		return "# " + title + "\n\n" + markdown
 	}
-	if !wroteItem {
-		b.WriteString("- None specified.\n")
-	}
-	if !last {
-		b.WriteByte('\n')
-	}
-	return true
-}
-
-func cleanPlanningDraftLine(line string) string {
-	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
+	return markdown
 }
 
 func partialPlanningWriteArgs(buffer string) map[string]any {
@@ -407,35 +334,10 @@ func partialPlanningWriteArgs(buffer string) map[string]any {
 	if draft.Title.Closed {
 		out["title"] = draft.Title.Value
 	}
-	if draft.Summary.Closed {
-		out["summary"] = draft.Summary.Value
-	}
-	if draft.PublicEventsAndStorage.Closed {
-		out["publicEventsAndStorage"] = closedPlanningDraftItems(draft.PublicEventsAndStorage)
-	}
-	if draft.ImplementationChanges.Closed {
-		out["implementationChanges"] = closedPlanningDraftItems(draft.ImplementationChanges)
-	}
-	if draft.Interfaces.Closed {
-		out["interfaces"] = closedPlanningDraftItems(draft.Interfaces)
-	}
-	if draft.TestPlan.Closed {
-		out["testPlan"] = closedPlanningDraftItems(draft.TestPlan)
-	}
-	if draft.Assumptions.Closed {
-		out["assumptions"] = closedPlanningDraftItems(draft.Assumptions)
+	if draft.Markdown.Closed {
+		out["markdown"] = draft.Markdown.Value
 	}
 	return out
-}
-
-func closedPlanningDraftItems(section planningDraftArray) []any {
-	items := make([]any, 0, len(section.Items))
-	for _, item := range section.Items {
-		if item.Closed {
-			items = append(items, item.Value)
-		}
-	}
-	return items
 }
 
 func findJSONObjectValueOffset(text string, key string) int {
@@ -535,74 +437,6 @@ func parseJSONUnicodeEscape(text string, slash int) (rune, int, bool) {
 		}
 	}
 	return r, next, true
-}
-
-func parsePlanningStringArrayAt(text string, start int) planningDraftArray {
-	array := planningDraftArray{Present: true}
-	if start < 0 || start >= len(text) || text[start] != '[' {
-		return planningDraftArray{}
-	}
-	for i := start + 1; i < len(text); {
-		i = skipJSONSpaces(text, i)
-		if i >= len(text) {
-			return array
-		}
-		switch text[i] {
-		case ']':
-			array.Closed = true
-			return array
-		case ',':
-			i++
-			continue
-		case '"':
-			value, end, closed, ok := parseJSONStringFragmentAt(text, i)
-			if !ok {
-				return array
-			}
-			array.Items = append(array.Items, planningDraftString{
-				Value:   value,
-				Present: true,
-				Closed:  closed,
-			})
-			if !closed {
-				return array
-			}
-			i = end + 1
-		default:
-			return array
-		}
-	}
-	return array
-}
-
-func parsePartialJSONStringArray(text string, start int) ([]string, bool) {
-	if start < 0 || start >= len(text) || text[start] != '[' {
-		return nil, false
-	}
-	items := make([]string, 0)
-	for i := start + 1; i < len(text); {
-		i = skipJSONSpaces(text, i)
-		if i >= len(text) {
-			return items, false
-		}
-		switch text[i] {
-		case ']':
-			return items, true
-		case ',':
-			i++
-			continue
-		case '"':
-			value, end, ok := parseJSONStringAt(text, i)
-			if !ok {
-				return items, false
-			}
-			items = append(items, value)
-			i = end + 1
-		default:
-			return items, false
-		}
-	}
-	return items, false
 }
 
 func skipJSONSpaces(text string, start int) int {

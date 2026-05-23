@@ -480,10 +480,13 @@ func (s *Server) publishProxyError(
 	}
 }
 
-func (s *Server) forwardProxySubmit(req api.SubmitRequest) (api.SubmitResponse, bool) {
+func (s *Server) forwardProxySubmit(req api.SubmitRequest) (api.SubmitResponse, *statusError, bool) {
 	route, ok := s.lookupProxyRun(req.RunID)
 	if !ok {
-		return api.SubmitResponse{}, false
+		return api.SubmitResponse{}, nil, false
+	}
+	if strings.TrimSpace(req.AgentKey) != strings.TrimSpace(route.agentKey) {
+		return api.SubmitResponse{}, &statusError{status: http.StatusForbidden, message: "agentKey does not match run"}, true
 	}
 	payload := map[string]any{
 		"runId":      req.RunID,
@@ -504,7 +507,7 @@ func (s *Server) forwardProxySubmit(req api.SubmitRequest) (api.SubmitResponse, 
 			RunID:      req.RunID,
 			AwaitingID: req.AwaitingID,
 			Detail:     "Proxy run is no longer active",
-		}, true
+		}, nil, true
 	}
 	return api.SubmitResponse{
 		Accepted:   true,
@@ -512,13 +515,16 @@ func (s *Server) forwardProxySubmit(req api.SubmitRequest) (api.SubmitResponse, 
 		RunID:      req.RunID,
 		AwaitingID: req.AwaitingID,
 		Detail:     "Proxy submit forwarded",
-	}, true
+	}, nil, true
 }
 
-func (s *Server) forwardProxyInterrupt(req api.InterruptRequest) (api.InterruptResponse, bool) {
+func (s *Server) forwardProxyInterrupt(req api.InterruptRequest) (api.InterruptResponse, *statusError, bool) {
 	route, ok := s.lookupProxyRun(req.RunID)
 	if !ok {
-		return api.InterruptResponse{}, false
+		return api.InterruptResponse{}, nil, false
+	}
+	if strings.TrimSpace(req.AgentKey) != strings.TrimSpace(route.agentKey) {
+		return api.InterruptResponse{}, &statusError{status: http.StatusForbidden, message: "agentKey does not match run"}, true
 	}
 	payload := map[string]any{
 		"requestId": req.RequestID,
@@ -538,14 +544,14 @@ func (s *Server) forwardProxyInterrupt(req api.InterruptRequest) (api.InterruptR
 			Status:   "unmatched",
 			RunID:    req.RunID,
 			Detail:   "Proxy run is no longer active",
-		}, true
+		}, nil, true
 	}
 	return api.InterruptResponse{
 		Accepted: true,
 		Status:   "accepted",
 		RunID:    req.RunID,
 		Detail:   "Proxy interrupt forwarded",
-	}, true
+	}, nil, true
 }
 
 func sendProxyRouteMessage(route *proxyRunRoute, payload map[string]any) bool {

@@ -1,6 +1,6 @@
 name: planning_write
 label: 写入规划
-description: Write the CODER planning-mode Markdown plan. This tool is only available during CODER planning mode and must be called exactly once when the plan is ready for user confirmation. Do not send a full Markdown document inside any argument; provide structured plain-text fields only.
+description: Write the CODER planning-mode Markdown plan. This tool is only available during CODER planning mode and must be called exactly once when the plan is ready for user confirmation.
 type: function
 clientVisible: true
 inputSchema:
@@ -9,40 +9,10 @@ inputSchema:
     title:
       type: string
       description: Required. Short plain-text title for the plan. Do not include Markdown headings.
-    summary:
+    markdown:
       type: string
-      description: Required. One brief plain-text paragraph describing the goal and intended outcome. Do not include Markdown section headings or a complete plan.
-    publicEventsAndStorage:
-      type: array
-      description: Required. Public event, storage, replay, persistence, or compatibility changes. Each item must be plain text without bullet prefixes or Markdown headings.
-      items:
-        type: string
-    implementationChanges:
-      type: array
-      description: Required. Main internal implementation changes or execution steps. Each item must be plain text without bullet prefixes or Markdown headings.
-      items:
-        type: string
-    interfaces:
-      type: array
-      description: Required. API, schema, tool argument, config, type, or interface changes. Each item must be plain text without bullet prefixes or Markdown headings.
-      items:
-        type: string
-    testPlan:
-      type: array
-      description: Required. Test cases and verification commands. Each item must be plain text without bullet prefixes or Markdown headings.
-      items:
-        type: string
-    assumptions:
-      type: array
-      description: Required. Assumptions, defaults, and out-of-scope notes. Each item must be plain text without bullet prefixes or Markdown headings.
-      items:
-        type: string
+      description: Required. Complete Markdown plan following the active CODER planning prompt. Include the title as the top-level heading.
   required:
     - title
-    - summary
-    - publicEventsAndStorage
-    - implementationChanges
-    - interfaces
-    - testPlan
-    - assumptions
+    - markdown
   additionalProperties: false

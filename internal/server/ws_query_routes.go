@@ -111,11 +111,17 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 
 func (s *Server) wsAttach(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
 	payload, err := ws.DecodePayload[struct {
-		RunID   string `json:"runId"`
-		LastSeq int64  `json:"lastSeq"`
+		RunID    string `json:"runId"`
+		AgentKey string `json:"agentKey"`
+		LastSeq  int64  `json:"lastSeq"`
 	}](req)
-	if err != nil || strings.TrimSpace(payload.RunID) == "" {
-		conn.SendError(req.ID, "invalid_request", 400, "runId is required", nil)
+	if err != nil {
+		conn.SendError(req.ID, "invalid_request", 400, "invalid attach payload", nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	if statusErr := s.validateRunAgentKey(payload.RunID, payload.AgentKey); statusErr != nil {
+		s.sendWSStatusError(conn, req.ID, statusErr)
 		conn.CompleteRequest(req.ID)
 		return
 	}
@@ -151,7 +157,17 @@ func (s *Server) wsSubmit(_ context.Context, conn *ws.Conn, req ws.RequestFrame)
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	if response, ok := s.forwardProxySubmit(payload); ok {
+	if statusErr := s.validateSubmitAgentKey(payload); statusErr != nil {
+		s.sendWSStatusError(conn, req.ID, statusErr)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	if response, statusErr, ok := s.forwardProxySubmit(payload); ok {
+		if statusErr != nil {
+			s.sendWSStatusError(conn, req.ID, statusErr)
+			conn.CompleteRequest(req.ID)
+			return
+		}
 		conn.SendResponse(req.Type, req.ID, 0, "success", response)
 		conn.CompleteRequest(req.ID)
 		return
@@ -173,6 +189,11 @@ func (s *Server) wsSteer(_ context.Context, conn *ws.Conn, req ws.RequestFrame) 
 		conn.CompleteRequest(req.ID)
 		return
 	}
+	if statusErr := s.validateRunAgentKey(payload.RunID, payload.AgentKey); statusErr != nil {
+		s.sendWSStatusError(conn, req.ID, statusErr)
+		conn.CompleteRequest(req.ID)
+		return
+	}
 	ack := s.deps.Runs.Steer(payload)
 	conn.SendResponse(req.Type, req.ID, 0, "success", api.SteerResponse{
 		Accepted: ack.Accepted,
@@ -191,7 +212,17 @@ func (s *Server) wsInterrupt(_ context.Context, conn *ws.Conn, req ws.RequestFra
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	if response, ok := s.forwardProxyInterrupt(payload); ok {
+	if statusErr := s.validateRunAgentKey(payload.RunID, payload.AgentKey); statusErr != nil {
+		s.sendWSStatusError(conn, req.ID, statusErr)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	if response, statusErr, ok := s.forwardProxyInterrupt(payload); ok {
+		if statusErr != nil {
+			s.sendWSStatusError(conn, req.ID, statusErr)
+			conn.CompleteRequest(req.ID)
+			return
+		}
 		conn.SendResponse(req.Type, req.ID, 0, "success", response)
 		conn.CompleteRequest(req.ID)
 		return
@@ -204,6 +235,22 @@ func (s *Server) wsInterrupt(_ context.Context, conn *ws.Conn, req ws.RequestFra
 		Detail:   ack.Detail,
 	})
 	conn.CompleteRequest(req.ID)
+}
+
+func (s *Server) sendWSStatusError(conn *ws.Conn, requestID string, err *statusError) {
+	if err == nil {
+		return
+	}
+	code := "invalid_request"
+	switch err.status {
+	case http.StatusForbidden:
+		code = "forbidden"
+	case http.StatusNotFound:
+		code = "run_not_found"
+	case http.StatusInternalServerError:
+		code = "internal_error"
+	}
+	conn.SendError(requestID, code, err.status, err.message, nil)
 }
 
 func (s *Server) sendWSAttachError(conn *ws.Conn, requestID string, runID string, chatID string, err error) {

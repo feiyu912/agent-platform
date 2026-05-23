@@ -547,7 +547,7 @@ func TestQueryAndRunDebugEventsDisabledByDefault(t *testing.T) {
 	}
 
 	runRec := httptest.NewRecorder()
-	fixture.server.ServeHTTP(runRec, httptest.NewRequest(http.MethodGet, "/api/attach?runId="+runID, nil))
+	fixture.server.ServeHTTP(runRec, httptest.NewRequest(http.MethodGet, "/api/attach?runId="+runID+"&agentKey=mock-agent", nil))
 	if runRec.Code != http.StatusOK {
 		t.Fatalf("expected run stream 200, got %d: %s", runRec.Code, runRec.Body.String())
 	}
@@ -640,7 +640,7 @@ func TestQueryAndRunDebugEventsEnabledWhenEnabled(t *testing.T) {
 	}
 
 	runRec := httptest.NewRecorder()
-	fixture.server.ServeHTTP(runRec, httptest.NewRequest(http.MethodGet, "/api/attach?runId="+runID, nil))
+	fixture.server.ServeHTTP(runRec, httptest.NewRequest(http.MethodGet, "/api/attach?runId="+runID+"&agentKey=mock-agent", nil))
 	if runRec.Code != http.StatusOK {
 		t.Fatalf("expected run stream 200, got %d: %s", runRec.Code, runRec.Body.String())
 	}
@@ -884,15 +884,27 @@ func TestCoderPlanningModeQuestionsConfirmThenExecutes(t *testing.T) {
 						ID:   "tool_plan",
 						Name: "planning_write",
 						Args: map[string]any{
-							"title":                  "Confirm Coder Plan",
-							"summary":                "Plan first, then check the current time before reporting.",
-							"publicEventsAndStorage": []string{"Keep planning lifecycle events before confirmation"},
-							"implementationChanges":  []string{"Check the current time before reporting"},
-							"interfaces":             []string{"Use datetime after confirmation"},
-							"testPlan":               []string{"Verify the stream completes"},
-							"assumptions": []string{
-								"The user confirms before execution starts",
-							},
+							"title": "Confirm Coder Plan",
+							"markdown": `# Confirm Coder Plan
+
+## Summary
+Plan first, then check the current time before reporting.
+
+## Public Events And Storage
+- Keep planning lifecycle events before confirmation
+
+## Implementation Changes
+- Check the current time before reporting
+
+## Interfaces
+- Use datetime after confirmation
+
+## Test Plan
+- Verify the stream completes
+
+## Assumptions
+- The user confirms before execution starts
+`,
 						},
 					},
 					{
@@ -1049,13 +1061,27 @@ func TestCoderPlanningModeCancelDoesNotExecuteTasks(t *testing.T) {
 			assertCoderPlanningToolSet(t, providerRequestToolNames(payload["tools"]))
 			writeProviderSSE(t, w,
 				providerToolCallFrame(t, "tool_plan", "planning_write", map[string]any{
-					"title":                  "Cancel Coder Plan",
-					"summary":                "Plan should be canceled before execution.",
-					"publicEventsAndStorage": []string{"No execution events should start"},
-					"implementationChanges":  []string{"This task must not start"},
-					"interfaces":             []string{"Use planning confirmation before execution"},
-					"testPlan":               []string{"Ensure no mutating tool is called"},
-					"assumptions":            []string{"The user cancels at confirmation"},
+					"title": "Cancel Coder Plan",
+					"markdown": `# Cancel Coder Plan
+
+## Summary
+Plan should be canceled before execution.
+
+## Public Events And Storage
+- No execution events should start
+
+## Implementation Changes
+- This task must not start
+
+## Interfaces
+- Use planning confirmation before execution
+
+## Test Plan
+- Ensure no mutating tool is called
+
+## Assumptions
+- The user cancels at confirmation
+`,
 				}),
 				`[DONE]`,
 			)
@@ -1221,7 +1247,7 @@ func awaitingApprovalID(payload map[string]any) string {
 
 func submitFrontendAnswer(t *testing.T, server http.Handler, runID string, awaitingID string, answer string) {
 	t.Helper()
-	body := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"answer":"` + answer + `"}]}`
+	body := `{"agentKey":"coder-app","runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"answer":"` + answer + `"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1240,7 +1266,7 @@ func submitFrontendAnswer(t *testing.T, server http.Handler, runID string, await
 
 func submitFrontendDecision(t *testing.T, server http.Handler, runID string, awaitingID string, decision string) {
 	t.Helper()
-	body := `{"runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"` + decision + `"}]}`
+	body := `{"agentKey":"coder-app","runId":"` + runID + `","awaitingId":"` + awaitingID + `","params":[{"id":"confirm","decision":"` + decision + `"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1602,7 +1628,7 @@ func TestInterruptCancelsActiveRunAndSkipsRunComplete(t *testing.T) {
 	}
 
 	interruptRec := httptest.NewRecorder()
-	fixture.server.ServeHTTP(interruptRec, httptest.NewRequest(http.MethodPost, "/api/interrupt", bytes.NewBufferString(`{"runId":"`+runID+`"}`)))
+	fixture.server.ServeHTTP(interruptRec, httptest.NewRequest(http.MethodPost, "/api/interrupt", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"`+runID+`"}`)))
 	if interruptRec.Code != http.StatusOK {
 		t.Fatalf("interrupt expected 200, got %d: %s", interruptRec.Code, interruptRec.Body.String())
 	}

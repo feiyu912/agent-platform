@@ -45,7 +45,7 @@ func TestDeferredSubmitHTTPRestoresPendingAwaitingAfterRestart(t *testing.T) {
 		t.Fatalf("new restarted server: %v", err)
 	}
 
-	reqBody := bytes.NewBufferString(`{"runId":"run-http","awaitingId":"await-http","params":[{"id":"q1","answer":"Approve"}]}`)
+	reqBody := bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"run-http","awaitingId":"await-http","params":[{"id":"q1","answer":"Approve"}]}`)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/submit", reqBody)
 	req.Header.Set("Content-Type", "application/json")
@@ -144,6 +144,7 @@ func TestDeferredSubmitWSRestoresPendingAwaitingAfterRestart(t *testing.T) {
 		Type:  "/api/submit",
 		ID:    "req_submit_deferred",
 		Payload: ws.MarshalPayload(map[string]any{
+			"agentKey":   "mock-agent",
 			"runId":      "run-ws",
 			"awaitingId": "await-ws",
 			"params": []map[string]any{
@@ -241,7 +242,7 @@ func TestDeferredSubmitRejectsExpiredAwaiting(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"runId":"run-expired","awaitingId":"await-expired","params":[{"id":"q1","answer":"Approve"}]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"run-expired","awaitingId":"await-expired","params":[{"id":"q1","answer":"Approve"}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	restarted.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -307,7 +308,7 @@ func TestHydrationSkipsExpiredAwaitings(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"runId":"run-fresh","awaitingId":"await-fresh","params":[{"id":"q1","answer":"Approve"}]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"run-fresh","awaitingId":"await-fresh","params":[{"id":"q1","answer":"Approve"}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	restarted.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -344,7 +345,7 @@ func TestDeferredSubmitAcceptsWithinTimeout(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"runId":"run-within","awaitingId":"await-within","params":[{"id":"q1","answer":"Approve"}]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"run-within","awaitingId":"await-within","params":[{"id":"q1","answer":"Approve"}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	restarted.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

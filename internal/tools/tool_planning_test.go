@@ -35,13 +35,8 @@ func TestPlanningWriteCreatesMarkdownFile(t *testing.T) {
 	}
 
 	result, err := executor.Invoke(context.Background(), "planning_write", map[string]any{
-		"title":                  "改造 CODER planningMode",
-		"summary":                "Write a standard planning document.",
-		"publicEventsAndStorage": []any{"Keep planning lifecycle events unchanged"},
-		"implementationChanges":  []any{"Write the markdown file"},
-		"interfaces":             []any{"Use planning_write structured fields"},
-		"testPlan":               []any{"Run go test"},
-		"assumptions":            []any{"Use CHATS_DIR/plans"},
+		"title":    "改造 CODER planningMode",
+		"markdown": standardPlanningMarkdown("改造 CODER planningMode"),
 	}, execCtx)
 	if err != nil {
 		t.Fatalf("invoke planning_write: %v", err)
@@ -62,15 +57,7 @@ func TestPlanningWriteCreatesMarkdownFile(t *testing.T) {
 		t.Fatalf("read planning file: %v", readErr)
 	}
 	text := string(data)
-	expected := planutil.RenderMarkdown(planutil.Spec{
-		Title:                  "改造 CODER planningMode",
-		Summary:                "Write a standard planning document.",
-		PublicEventsAndStorage: []string{"Keep planning lifecycle events unchanged"},
-		ImplementationChanges:  []string{"Write the markdown file"},
-		Interfaces:             []string{"Use planning_write structured fields"},
-		TestPlan:               []string{"Run go test"},
-		Assumptions:            []string{"Use CHATS_DIR/plans"},
-	})
+	expected := standardPlanningMarkdown("改造 CODER planningMode")
 	if text != expected {
 		t.Fatalf("planning file mismatch\nwant:\n%s\ngot:\n%s", expected, text)
 	}
@@ -95,13 +82,8 @@ func TestPlanningWriteRejectsSecondWrite(t *testing.T) {
 		PlanningState: &PlanningRuntimeState{Markdown: "# Existing\n"},
 	}
 	result, err := executor.Invoke(context.Background(), "planning_write", map[string]any{
-		"title":                  "Plan",
-		"summary":                "Summary",
-		"publicEventsAndStorage": []any{"Event"},
-		"implementationChanges":  []any{"Change"},
-		"interfaces":             []any{"Interface"},
-		"testPlan":               []any{"Test"},
-		"assumptions":            []any{"Assumption"},
+		"title":    "Plan",
+		"markdown": standardPlanningMarkdown("Plan"),
 	}, execCtx)
 	if err != nil {
 		t.Fatalf("invoke planning_write: %v", err)
@@ -111,7 +93,7 @@ func TestPlanningWriteRejectsSecondWrite(t *testing.T) {
 	}
 }
 
-func TestPlanningWriteRejectsNestedMarkdownPlan(t *testing.T) {
+func TestPlanningWriteRejectsEmptyMarkdown(t *testing.T) {
 	executor := &RuntimeToolExecutor{cfg: config.Config{Paths: config.PathsConfig{ChatsDir: t.TempDir()}}}
 	execCtx := &ExecutionContext{
 		Request: api.QueryRequest{Message: "plan"},
@@ -121,18 +103,36 @@ func TestPlanningWriteRejectsNestedMarkdownPlan(t *testing.T) {
 		},
 	}
 	result, err := executor.Invoke(context.Background(), "planning_write", map[string]any{
-		"title":                  "Plan",
-		"summary":                "First plan\n\n## Public Events And Storage\nNested section",
-		"publicEventsAndStorage": []any{"Event"},
-		"implementationChanges":  []any{"Change"},
-		"interfaces":             []any{"Interface"},
-		"testPlan":               []any{"Test"},
-		"assumptions":            []any{"Assumption"},
+		"title":    "Plan",
+		"markdown": "",
 	}, execCtx)
 	if err != nil {
 		t.Fatalf("invoke planning_write: %v", err)
 	}
-	if result.Error != "invalid_planning_content" || result.ExitCode == 0 {
-		t.Fatalf("expected invalid planning content error, got %#v", result)
+	if result.Error != "missing_markdown" || result.ExitCode == 0 {
+		t.Fatalf("expected missing markdown error, got %#v", result)
 	}
+}
+
+func standardPlanningMarkdown(title string) string {
+	return planutil.NormalizeMarkdown(`# `+title+`
+
+## Summary
+Write a standard planning document.
+
+## Public Events And Storage
+- Keep planning lifecycle events unchanged
+
+## Implementation Changes
+- Write the markdown file
+
+## Interfaces
+- Use planning_write markdown field
+
+## Test Plan
+- Run go test
+
+## Assumptions
+- Use CHATS_DIR/plans
+`, title)
 }

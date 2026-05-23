@@ -12,8 +12,9 @@ import (
 
 func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 	runID := strings.TrimSpace(r.URL.Query().Get("runId"))
-	if runID == "" {
-		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "runId is required"))
+	agentKey := strings.TrimSpace(r.URL.Query().Get("agentKey"))
+	if statusErr := s.validateRunAgentKey(runID, agentKey); statusErr != nil {
+		writeJSON(w, statusErr.status, api.Failure(statusErr.status, statusErr.message))
 		return
 	}
 	lastSeqStr := strings.TrimSpace(r.URL.Query().Get("lastSeq"))

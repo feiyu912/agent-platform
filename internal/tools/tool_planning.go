@@ -21,9 +21,6 @@ func (t *RuntimeToolExecutor) invokePlanningWrite(args map[string]any, execCtx *
 	if execCtx.PlanningState != nil && strings.TrimSpace(execCtx.PlanningState.Markdown) != "" {
 		return ToolExecutionResult{Output: "失败: planning_write 已经写入过规划", Error: "planning_write_already_exists", ExitCode: -1}, nil
 	}
-	if invalidField := invalidPlanningMarkdownField(args); invalidField != "" {
-		return ToolExecutionResult{Output: "失败: planning_write 字段不能包含 Markdown 标题或完整规划片段: " + invalidField, Error: "invalid_planning_content", ExitCode: -1}, nil
-	}
 	chatsDir := strings.TrimSpace(t.cfg.Paths.ChatsDir)
 	if chatsDir == "" {
 		chatsDir = strings.TrimSpace(execCtx.Session.RuntimeContext.LocalPaths.ChatsDir)
@@ -33,13 +30,13 @@ func (t *RuntimeToolExecutor) invokePlanningWrite(args map[string]any, execCtx *
 	}
 
 	spec := planutil.SpecFromArgs(args, execCtx.Request.Message)
-	if len(spec.ImplementationChanges) == 0 {
-		return ToolExecutionResult{Output: "失败: implementationChanges 至少需要一项", Error: "missing_implementation_changes", ExitCode: -1}, nil
+	markdown := planutil.RenderMarkdown(spec)
+	if strings.TrimSpace(markdown) == "" || strings.TrimSpace(markdown) == "# "+strings.TrimSpace(spec.Title) {
+		return ToolExecutionResult{Output: "失败: markdown 不能为空", Error: "missing_markdown", ExitCode: -1}, nil
 	}
 
 	planningID := planutil.PlanningID(spec.Title, planningRunID(execCtx))
 	planningFile := planutil.PlanningFile(chatsDir, planningID)
-	markdown := planutil.RenderMarkdown(spec)
 	if err := os.MkdirAll(filepath.Dir(planningFile), 0o755); err != nil {
 		return ToolExecutionResult{Output: "失败: 创建 plans 目录失败: " + err.Error(), Error: "planning_write_failed", ExitCode: -1}, nil
 	}
@@ -67,52 +64,6 @@ func (t *RuntimeToolExecutor) invokePlanningWrite(args map[string]any, execCtx *
 	result := structuredResultWithExit(payload, 0)
 	result.Output = fmt.Sprintf("planning written: %s", planningFile)
 	return result, nil
-}
-
-func invalidPlanningMarkdownField(args map[string]any) string {
-	for _, key := range []string{"title", "summary", "publicEventsAndStorage", "implementationChanges", "interfaces", "testPlan", "assumptions"} {
-		for _, value := range planningFieldStrings(args[key]) {
-			if containsPlanningMarkdownHeading(value) {
-				return key
-			}
-		}
-	}
-	return ""
-}
-
-func planningFieldStrings(raw any) []string {
-	switch value := raw.(type) {
-	case string:
-		return []string{value}
-	case []string:
-		return append([]string(nil), value...)
-	case []any:
-		out := make([]string, 0, len(value))
-		for _, item := range value {
-			if text, ok := item.(string); ok {
-				out = append(out, text)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-func containsPlanningMarkdownHeading(value string) bool {
-	for _, line := range strings.Split(value, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "#") {
-			return true
-		}
-		lower := strings.ToLower(line)
-		for _, heading := range []string{"summary", "public events and storage", "implementation changes", "interfaces", "test plan", "assumptions"} {
-			if strings.HasPrefix(lower, heading+":") {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func planningRunID(execCtx *ExecutionContext) string {

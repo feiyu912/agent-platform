@@ -49,7 +49,7 @@ func TestHandleAttachDefaultsMissingLastSeqToZero(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/attach?runId="+session.RunID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/attach?runId="+session.RunID+"&agentKey="+session.AgentKey, nil)
 	rec := httptest.NewRecorder()
 
 	server.handleAttach(rec, req)

@@ -1,16 +1,78 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
 	"agent-platform/internal/contracts"
 )
 
 func validateSubmitIdentity(req api.SubmitRequest) error {
 	if strings.TrimSpace(req.RunID) == "" || strings.TrimSpace(req.AwaitingID) == "" {
 		return fmt.Errorf("runId and awaitingId are required")
+	}
+	if strings.TrimSpace(req.AgentKey) == "" {
+		return fmt.Errorf("agentKey is required")
+	}
+	return nil
+}
+
+func (s *Server) validateRunAgentKey(runID string, agentKey string) *statusError {
+	runID = strings.TrimSpace(runID)
+	agentKey = strings.TrimSpace(agentKey)
+	if runID == "" {
+		return &statusError{status: http.StatusBadRequest, message: "runId is required"}
+	}
+	if agentKey == "" {
+		return &statusError{status: http.StatusBadRequest, message: "agentKey is required"}
+	}
+	if s == nil || s.deps.Runs == nil {
+		return &statusError{status: http.StatusNotFound, message: "run not found"}
+	}
+	status, ok := s.deps.Runs.RunStatus(runID)
+	if !ok {
+		return &statusError{status: http.StatusNotFound, message: "run not found"}
+	}
+	if strings.TrimSpace(status.AgentKey) != agentKey {
+		return &statusError{status: http.StatusForbidden, message: "agentKey does not match run"}
+	}
+	return nil
+}
+
+func (s *Server) validateSubmitAgentKey(req api.SubmitRequest) *statusError {
+	if strings.TrimSpace(req.RunID) == "" || strings.TrimSpace(req.AwaitingID) == "" {
+		return &statusError{status: http.StatusBadRequest, message: "runId and awaitingId are required"}
+	}
+	if strings.TrimSpace(req.AgentKey) == "" {
+		return &statusError{status: http.StatusBadRequest, message: "agentKey is required"}
+	}
+	if s.deps.Runs != nil {
+		status, ok := s.deps.Runs.RunStatus(req.RunID)
+		if ok {
+			if strings.TrimSpace(status.AgentKey) != strings.TrimSpace(req.AgentKey) {
+				return &statusError{status: http.StatusForbidden, message: "agentKey does not match run"}
+			}
+			return nil
+		}
+	}
+	if s.deferredAwaitings != nil {
+		deferred, ok := s.deferredAwaitings.Lookup(req.AwaitingID)
+		if ok && strings.TrimSpace(deferred.RunID) == strings.TrimSpace(req.RunID) {
+			summary, err := s.deps.Chats.Summary(deferred.ChatID)
+			if err == nil && summary != nil {
+				if strings.TrimSpace(summary.AgentKey) != strings.TrimSpace(req.AgentKey) {
+					return &statusError{status: http.StatusForbidden, message: "agentKey does not match run"}
+				}
+				return nil
+			}
+			if err != nil && !errors.Is(err, chat.ErrChatNotFound) {
+				return &statusError{status: http.StatusInternalServerError, message: err.Error()}
+			}
+		}
 	}
 	return nil
 }
