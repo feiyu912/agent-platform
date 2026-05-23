@@ -24,6 +24,18 @@ func buildPromptAppendConfig(global config.PromptsConfig, def catalog.AgentDefin
 	if strings.TrimSpace(global.Skill.CatalogHeader) != "" {
 		config.Skill.CatalogHeader = strings.TrimSpace(global.Skill.CatalogHeader)
 	}
+	if strings.TrimSpace(global.Skill.DisclosureHeader) != "" {
+		config.Skill.DisclosureHeader = strings.TrimSpace(global.Skill.DisclosureHeader)
+	}
+	if strings.TrimSpace(global.Skill.InstructionsLabel) != "" {
+		config.Skill.InstructionsLabel = strings.TrimSpace(global.Skill.InstructionsLabel)
+	}
+	if strings.TrimSpace(global.ToolAppendix.ToolDescriptionTitle) != "" {
+		config.Tool.ToolDescriptionTitle = strings.TrimSpace(global.ToolAppendix.ToolDescriptionTitle)
+	}
+	if strings.TrimSpace(global.ToolAppendix.AfterCallHintTitle) != "" {
+		config.Tool.AfterCallHintTitle = strings.TrimSpace(global.ToolAppendix.AfterCallHintTitle)
+	}
 	if strings.TrimSpace(def.RuntimePrompts.Skill.CatalogHeader) != "" {
 		config.Skill.CatalogHeader = strings.TrimSpace(def.RuntimePrompts.Skill.CatalogHeader)
 	}
