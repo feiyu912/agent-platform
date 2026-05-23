@@ -288,8 +288,7 @@ runtimeConfig:
 
 事件顺序约定：
 
-- question：`tool.start -> awaiting.ask -> tool.args* -> tool.end -> request.submit -> awaiting.answer -> tool.result`
-- approval / form：`tool.start -> tool.args* -> tool.end -> awaiting.ask -> request.submit -> awaiting.answer -> tool.result`
+- question / approval / form：`tool.start -> tool.args* -> tool.end -> awaiting.ask -> request.submit -> awaiting.answer -> tool.result`
 - `request.submit` 透传前端原始数组，便于审计；`awaiting.answer` 才是后端归一化后的结构化结果。
 - 历史 `events.jsonl` 中旧的 `cancelled/reason` 形状不再兼容；新前端会按未知旧态回退展示。
 
