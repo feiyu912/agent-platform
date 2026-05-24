@@ -110,6 +110,39 @@ func TestAgentProxyCRUDAllowsProxyConfigWithoutModelConfig(t *testing.T) {
 	}
 }
 
+func TestAgentPlanExecuteCRUDUsesAPIModeContract(t *testing.T) {
+	fixture := newTestFixture(t)
+
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "plan-agent",
+		"definition": map[string]any{
+			"key":         "plan-agent",
+			"name":        "Plan Agent",
+			"role":        "Planner",
+			"description": "plan execute test agent",
+			"mode":        "PLAN-EXECUTE",
+			"modelConfig": map[string]any{"modelKey": "mock-model"},
+		},
+	})
+	if created.Mode != "PLAN-EXECUTE" || created.Definition["mode"] != "PLAN-EXECUTE" {
+		t.Fatalf("expected PLAN-EXECUTE create response, got %#v", created)
+	}
+
+	detail := getAgentDetail(t, fixture.server, "plan-agent")
+	if detail.Mode != "PLAN-EXECUTE" || detail.Definition["mode"] != "PLAN-EXECUTE" {
+		t.Fatalf("expected PLAN-EXECUTE detail response, got %#v", detail)
+	}
+
+	detail.Definition["description"] = "updated plan execute test agent"
+	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/update", map[string]any{
+		"key":        "plan-agent",
+		"definition": detail.Definition,
+	})
+	if updated.Mode != "PLAN-EXECUTE" || updated.Definition["mode"] != "PLAN-EXECUTE" {
+		t.Fatalf("expected PLAN-EXECUTE update response, got %#v", updated)
+	}
+}
+
 func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	fixture := newTestFixture(t)
 	workspaceDir := t.TempDir()
@@ -176,7 +209,11 @@ func TestAgentEditorOptionsHTTP(t *testing.T) {
 	if len(response.Data.Models) != 1 || response.Data.Models[0].Key != "mock-model" {
 		t.Fatalf("expected mock model option, got %#v", response.Data.Models)
 	}
-	if got := response.Data.Modes; len(got) != 4 || got[0].Label != "REACT" || got[1].Label != "CODER" || got[2].Label != "PLAN-EXECUTE" || got[3].Label != "PROXY" {
+	if got := response.Data.Modes; len(got) != 4 ||
+		got[0].Key != "REACT" || got[0].Label != "REACT" ||
+		got[1].Key != "PLAN-EXECUTE" || got[1].Label != "PLAN-EXECUTE" ||
+		got[2].Key != "CODER" || got[2].Label != "CODER" ||
+		got[3].Key != "PROXY" || got[3].Label != "PROXY" {
 		t.Fatalf("unexpected modes %#v", got)
 	}
 	if len(response.Data.ContextTags) != 4 || response.Data.ContextTags[0].Key != "system" || response.Data.ContextTags[3].Key != "all-agents" {
@@ -318,7 +355,8 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode options data: %v", err)
 	}
-	if optionsFrame.Frame != ws.FrameResponse || optionsFrame.ID != "agent-options" || len(options.Modes) != 4 || options.Modes[3].Label != "PROXY" {
+	if optionsFrame.Frame != ws.FrameResponse || optionsFrame.ID != "agent-options" ||
+		len(options.Modes) != 4 || options.Modes[1].Key != "PLAN-EXECUTE" || options.Modes[3].Key != "PROXY" {
 		t.Fatalf("unexpected options frame %#v data=%#v", optionsFrame, options)
 	}
 

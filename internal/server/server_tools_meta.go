@@ -232,7 +232,7 @@ func (s *Server) buildAgentDetailResponse(def catalog.AgentDefinition) api.Agent
 		Type:        def.Type,
 		Wonders:     append([]string(nil), def.Wonders...),
 		Model:       modelName,
-		Mode:        def.Mode,
+		Mode:        catalog.AgentModeForAPI(def.Mode),
 		Tools:       effectiveAgentTools(def),
 		Skills:      append([]string{}, def.Skills...),
 		Controls:    cloneListMaps(def.Controls),

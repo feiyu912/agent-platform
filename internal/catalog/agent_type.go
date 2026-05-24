@@ -40,6 +40,31 @@ type agentModeProfile struct {
 	ReactMaxSteps int
 }
 
+func NormalizeAgentModeForRuntime(value string) string {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "":
+		return "REACT"
+	case "ACP-PROXY", "ACP_PROXY":
+		return "PROXY"
+	case "PLAN-EXECUTE", "PLAN_EXECUTE":
+		return "PLAN_EXECUTE"
+	default:
+		return strings.ToUpper(strings.TrimSpace(value))
+	}
+}
+
+func AgentModeForAPI(value string) string {
+	runtimeMode := NormalizeAgentModeForRuntime(value)
+	switch runtimeMode {
+	case "PLAN_EXECUTE":
+		return "PLAN-EXECUTE"
+	case "", "ONESHOT":
+		return "REACT"
+	default:
+		return runtimeMode
+	}
+}
+
 func normalizeAgentType(value string) (string, error) {
 	agentType := strings.ToUpper(strings.TrimSpace(value))
 	if agentType == "" {

@@ -186,7 +186,7 @@ func normalizedSystemInitMode(mode string) string {
 	switch strings.ToUpper(strings.TrimSpace(mode)) {
 	case "ONESHOT":
 		return "oneshot"
-	case "PLAN_EXECUTE":
+	case "PLAN_EXECUTE", "PLAN-EXECUTE":
 		return "plan-execute"
 	case "CODER":
 		return "coder"

@@ -270,7 +270,7 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		Description:       stringNode(root["description"]),
 		Role:              stringNode(root["role"]),
 		Wonders:           normalizeWonderStrings(root["wonders"]),
-		Mode:              strings.ToUpper(defaultString(stringNode(root["mode"]), "REACT")),
+		Mode:              NormalizeAgentModeForRuntime(stringNode(root["mode"])),
 		VisibilityScopes:  parseAgentVisibilityScopes(root["visibility"]),
 		KanbanConcurrency: 1,
 	}

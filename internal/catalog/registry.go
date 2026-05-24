@@ -257,18 +257,19 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 		if !AgentVisibleForScope(def, scope) {
 			continue
 		}
+		apiMode := AgentModeForAPI(def.Mode)
 		summary := api.AgentSummary{
 			Key:          def.Key,
 			Name:         def.Name,
 			Icon:         def.Icon,
-			Mode:         def.Mode,
+			Mode:         apiMode,
 			WorkspaceDir: def.Workspace.Root,
 			Description:  def.Description,
 			Role:         def.Role,
 			Type:         def.Type,
 			Meta: map[string]any{
 				"model":  def.ModelKey,
-				"mode":   def.Mode,
+				"mode":   apiMode,
 				"tools":  append([]string(nil), def.Tools...),
 				"skills": append([]string(nil), def.Skills...),
 			},

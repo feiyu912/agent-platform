@@ -239,13 +239,11 @@ func normalizeEditableDefinition(definition map[string]any) map[string]any {
 		return nil
 	}
 	normalized := contracts.CloneMap(definition)
-	switch strings.ToUpper(strings.TrimSpace(stringNode(normalized["mode"]))) {
-	case "ACP-PROXY", "ACP_PROXY":
-		normalized["mode"] = "PROXY"
-	case "PLAN-EXECUTE":
-		normalized["mode"] = "PLAN_EXECUTE"
+	switch NormalizeAgentModeForRuntime(stringNode(normalized["mode"])) {
 	case "ONESHOT":
 		normalized["mode"] = "REACT"
+	default:
+		normalized["mode"] = AgentModeForAPI(stringNode(normalized["mode"]))
 	}
 	return normalized
 }

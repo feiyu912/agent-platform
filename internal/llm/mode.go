@@ -16,7 +16,7 @@ func resolveAgentMode(mode string) AgentMode {
 	switch strings.ToUpper(strings.TrimSpace(mode)) {
 	case "ONESHOT":
 		return oneshotMode{}
-	case "PLAN_EXECUTE":
+	case "PLAN_EXECUTE", "PLAN-EXECUTE":
 		return planExecuteMode{}
 	case "CODER":
 		return coderMode{}

@@ -285,8 +285,8 @@ func (s *Server) buildAgentEditorOptions() api.AgentEditorOptionsResponse {
 		},
 		Modes: []api.AgentEditorOption{
 			{Key: "REACT", Label: "REACT"},
+			{Key: "PLAN-EXECUTE", Label: "PLAN-EXECUTE"},
 			{Key: "CODER", Label: "CODER"},
-			{Key: "PLAN_EXECUTE", Label: "PLAN-EXECUTE"},
 			{Key: "PROXY", Label: "PROXY"},
 		},
 		ProxyConfigSchema: api.AgentEditorProxyConfigSchema{
@@ -343,7 +343,7 @@ func applyEditableAgentFiles(response *api.AgentDetailResponse, files catalog.Ed
 	if response == nil {
 		return
 	}
-	response.Definition = files.Definition
+	response.Definition = editableDefinitionForAPI(files.Definition)
 	response.SoulPrompt = files.SoulPrompt
 	response.AgentsPrompt = files.AgentsPrompt
 	response.Source = &api.AgentSource{
@@ -351,6 +351,20 @@ func applyEditableAgentFiles(response *api.AgentDetailResponse, files catalog.Ed
 		Path:     files.Source.Path,
 		AgentDir: files.Source.AgentDir,
 	}
+}
+
+func editableDefinitionForAPI(definition map[string]any) map[string]any {
+	if definition == nil {
+		return nil
+	}
+	out := make(map[string]any, len(definition))
+	for key, value := range definition {
+		out[key] = value
+	}
+	if _, ok := out["mode"]; ok {
+		out["mode"] = catalog.AgentModeForAPI(stringValue(out["mode"]))
+	}
+	return out
 }
 
 func mapAgentEditError(err error) error {

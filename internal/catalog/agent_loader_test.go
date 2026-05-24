@@ -89,6 +89,32 @@ func TestParseAgentFileDefaultsModeVisibilityAndKanban(t *testing.T) {
 	}
 }
 
+func TestParseAgentFileAcceptsPlanExecuteModeAliases(t *testing.T) {
+	for _, mode := range []string{"PLAN-EXECUTE", "PLAN_EXECUTE"} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "agent.yml")
+			content := "" +
+				"key: demo\n" +
+				"name: Demo\n" +
+				"mode: " + mode + "\n" +
+				"modelConfig:\n" +
+				"  modelKey: demo-model\n"
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatalf("write agent file: %v", err)
+			}
+
+			def, err := parseAgentFile(path)
+			if err != nil {
+				t.Fatalf("parse agent file: %v", err)
+			}
+			if def.Mode != "PLAN_EXECUTE" {
+				t.Fatalf("mode = %q, want PLAN_EXECUTE", def.Mode)
+			}
+		})
+	}
+}
+
 func TestParseAgentFileReadsVisibilityAndKanban(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")
