@@ -291,15 +291,19 @@ type MemoryUsageSummary struct {
 }
 
 type AgentSummary struct {
-	Key         string                `json:"key"`
-	Name        string                `json:"name"`
-	Icon        any                   `json:"icon,omitempty"`
-	Description string                `json:"description,omitempty"`
-	Role        string                `json:"role,omitempty"`
-	Type        string                `json:"type,omitempty"`
-	Stats       AgentChatStats        `json:"stats"`
-	Chats       []ChatSummaryResponse `json:"chats,omitempty"`
-	Meta        map[string]any        `json:"meta,omitempty"`
+	Key          string                `json:"key"`
+	Name         string                `json:"name"`
+	Icon         any                   `json:"icon,omitempty"`
+	Mode         string                `json:"mode,omitempty"`
+	WorkspaceDir string                `json:"workspaceDir,omitempty"`
+	Visibility   map[string]any        `json:"visibility,omitempty"`
+	Kanban       map[string]any        `json:"kanban,omitempty"`
+	Description  string                `json:"-"`
+	Role         string                `json:"-"`
+	Type         string                `json:"type,omitempty"`
+	Stats        AgentChatStats        `json:"stats"`
+	Chats        []ChatSummaryResponse `json:"chats,omitempty"`
+	Meta         map[string]any        `json:"meta,omitempty"`
 }
 
 type AgentChatStats struct {

@@ -310,7 +310,7 @@ func TestListAgentSummariesIncludesChatStats(t *testing.T) {
 		t.Fatalf("mark chat-b1 read: %v", err)
 	}
 
-	items, err := server.listAgentSummaries(0)
+	items, err := server.listAgentSummaries(0, "")
 	if err != nil {
 		t.Fatalf("list agent summaries: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestListAgentSummariesIncludesChatStats(t *testing.T) {
 		t.Fatalf("unexpected agent-b stats: %#v", got)
 	}
 
-	items, err = server.listAgentSummaries(1)
+	items, err = server.listAgentSummaries(1, "")
 	if err != nil {
 		t.Fatalf("list agent summaries with chats: %v", err)
 	}

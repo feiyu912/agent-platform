@@ -20,8 +20,8 @@ func toAPIAgentStats(state chat.AgentChatStats) api.AgentChatStats {
 	}
 }
 
-func (s *Server) listAgentSummaries(includeChats int) ([]api.AgentSummary, error) {
-	items := s.deps.Registry.Agents("")
+func (s *Server) listAgentSummaries(includeChats int, scope string) ([]api.AgentSummary, error) {
+	items := s.deps.Registry.Agents(scope)
 	if s.deps.Chats == nil {
 		return items, nil
 	}

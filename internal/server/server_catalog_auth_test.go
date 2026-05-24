@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/catalog"
+	"agent-platform/internal/chat"
 	"agent-platform/internal/config"
 )
 
@@ -198,6 +200,114 @@ func TestBuildAgentDetailResponseIncludesCoderModeAndWorkspace(t *testing.T) {
 	})
 	if len(response.Controls) != 1 || response.Controls[0]["type"] != "custom" {
 		t.Fatalf("expected explicit planningMode control to be preserved, got %#v", response.Controls)
+	}
+}
+
+func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`)
+	}, testFixtureOptions{
+		setupRuntime: func(root string, cfg *config.Config) {
+			workspace := filepath.Join(root, "workspace")
+			if err := os.MkdirAll(workspace, 0o755); err != nil {
+				t.Fatalf("mkdir workspace: %v", err)
+			}
+			for key, body := range map[string]string{
+				"internal-agent": strings.Join([]string{
+					"key: internal-agent",
+					"name: Internal Agent",
+					"mode: REACT",
+					"visibility:",
+					"  scopes:",
+					"    - internal",
+				}, "\n"),
+				"invoke-agent": strings.Join([]string{
+					"key: invoke-agent",
+					"name: Invoke Agent",
+					"mode: PROXY",
+					"visibility:",
+					"  scopes:",
+					"    - invoke",
+				}, "\n"),
+				"coder-agent": strings.Join([]string{
+					"key: coder-agent",
+					"name: Coder Agent",
+					"description: should stay out of summary json",
+					"role: should stay out too",
+					"mode: CODER",
+					"icon:",
+					"  name: terminal",
+					"  color: '#336699'",
+					"runtimeConfig:",
+					"  workspaceRoot: " + filepath.ToSlash(workspace),
+					"kanban:",
+					"  concurrency: 2",
+				}, "\n"),
+			} {
+				agentDir := filepath.Join(cfg.Paths.AgentsDir, key)
+				if err := os.MkdirAll(agentDir, 0o755); err != nil {
+					t.Fatalf("mkdir %s: %v", key, err)
+				}
+				if err := os.WriteFile(filepath.Join(agentDir, "agent.yml"), []byte(body), 0o644); err != nil {
+					t.Fatalf("write %s: %v", key, err)
+				}
+			}
+		},
+	})
+	if _, _, err := fixture.chats.EnsureChat("chat-coder", "coder-agent", "", "coder chat"); err != nil {
+		t.Fatalf("ensure coder chat: %v", err)
+	}
+	if err := fixture.chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-coder", RunID: "run-coder", UpdatedAtMillis: 1000}); err != nil {
+		t.Fatalf("complete coder chat: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agents?includeChats=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response api.ApiResponse[[]api.AgentSummary]
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode agents response: %v", err)
+	}
+	keys := make([]string, 0, len(response.Data))
+	var coder api.AgentSummary
+	for _, item := range response.Data {
+		keys = append(keys, item.Key)
+		if item.Key == "coder-agent" {
+			coder = item
+		}
+	}
+	if containsString(keys, "internal-agent") || containsString(keys, "invoke-agent") || !containsString(keys, "coder-agent") {
+		t.Fatalf("default scope keys = %#v", keys)
+	}
+	if coder.Mode != catalog.AgentModeCoder || coder.WorkspaceDir == "" {
+		t.Fatalf("coder summary = %#v", coder)
+	}
+	if coder.Kanban["concurrency"] != float64(2) {
+		t.Fatalf("coder kanban = %#v", coder.Kanban)
+	}
+	if len(coder.Chats) != 1 || coder.Chats[0].ChatID != "chat-coder" {
+		t.Fatalf("coder chats = %#v", coder.Chats)
+	}
+	if strings.Contains(rec.Body.String(), "should stay out") || strings.Contains(rec.Body.String(), `"description"`) || strings.Contains(rec.Body.String(), `"role"`) {
+		t.Fatalf("agents response should omit description/role, got %s", rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agents?scope=invoke", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for invoke scope, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode invoke agents response: %v", err)
+	}
+	keys = keys[:0]
+	for _, item := range response.Data {
+		keys = append(keys, item.Key)
+	}
+	if !containsString(keys, "invoke-agent") || !containsString(keys, "mock-agent") || containsString(keys, "internal-agent") {
+		t.Fatalf("invoke scope keys = %#v", keys)
 	}
 }
 

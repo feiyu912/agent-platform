@@ -127,6 +127,10 @@ func (o *frameOrchestrator) handleSubAgentBatch(mainStream contracts.AgentStream
 			o.injectMainToolError(main, invoke.MainToolID, "sub-agent must be REACT/ONESHOT/CODER/PROXY")
 			return nil
 		}
+		if !catalog.AgentInvocable(agentDef) {
+			o.injectMainToolError(main, invoke.MainToolID, "sub-agent is not invocable")
+			return nil
+		}
 		if containsInvokeAgentsTool(agentDef.Tools) {
 			o.injectMainToolError(main, invoke.MainToolID, "nested sub-agent invocation is not allowed")
 			return nil

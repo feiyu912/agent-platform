@@ -28,28 +28,30 @@ type Registry interface {
 }
 
 type AgentDefinition struct {
-	Key            string
-	Name           string
-	Icon           any
-	Description    string
-	Role           string
-	Type           string
-	Wonders        []string
-	ModelKey       string
-	Mode           string
-	Tools          []string
-	Skills         []string
-	Controls       []map[string]any
-	Runtime        map[string]any
-	Workspace      AgentWorkspaceConfig
-	Project        AgentProjectConfig
-	ReactMaxSteps  int
-	ContextTags    []string
-	Budget         map[string]any
-	StageSettings  map[string]any
-	ToolOverrides  map[string]api.ToolDetailResponse
-	RuntimePrompts AgentRuntimePrompts
-	AgentDir       string
+	Key               string
+	Name              string
+	Icon              any
+	Description       string
+	Role              string
+	Type              string
+	Wonders           []string
+	ModelKey          string
+	Mode              string
+	VisibilityScopes  []string
+	KanbanConcurrency int
+	Tools             []string
+	Skills            []string
+	Controls          []map[string]any
+	Runtime           map[string]any
+	Workspace         AgentWorkspaceConfig
+	Project           AgentProjectConfig
+	ReactMaxSteps     int
+	ContextTags       []string
+	Budget            map[string]any
+	StageSettings     map[string]any
+	ToolOverrides     map[string]api.ToolDetailResponse
+	RuntimePrompts    AgentRuntimePrompts
+	AgentDir          string
 
 	// PROXY mode: forward /api/query to a remote AGW-compatible service.
 	ProxyConfig *ProxyConfig
@@ -243,19 +245,31 @@ func (r *FileRegistry) Reload(_ context.Context, reason string) error {
 	return nil
 }
 
-func (r *FileRegistry) Agents(tag string) []api.AgentSummary {
+func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	keys := sortedKeys(r.agents)
 	items := make([]api.AgentSummary, 0, len(keys))
-	needle := strings.ToLower(strings.TrimSpace(tag))
+	scope = normalizeAgentSummaryScope(scope)
 	for _, key := range keys {
 		def := r.agents[key]
+		if !AgentVisibleForScope(def, scope) {
+			continue
+		}
+		visibilityScopes := EffectiveAgentVisibilityScopes(def)
 		summary := api.AgentSummary{
-			Key:         def.Key,
-			Name:        def.Name,
-			Icon:        def.Icon,
+			Key:          def.Key,
+			Name:         def.Name,
+			Icon:         def.Icon,
+			Mode:         def.Mode,
+			WorkspaceDir: def.Workspace.Root,
+			Visibility: map[string]any{
+				"scopes": visibilityScopes,
+			},
+			Kanban: map[string]any{
+				"concurrency": EffectiveAgentKanbanConcurrency(def),
+			},
 			Description: def.Description,
 			Role:        def.Role,
 			Type:        def.Type,
@@ -304,12 +318,49 @@ func (r *FileRegistry) Agents(tag string) []api.AgentSummary {
 		if hasRuntimeSandboxDefinition(def.Runtime) {
 			summary.Meta["sandbox"] = runtimeSandboxSummaryMeta(def.Runtime)
 		}
-		if needle != "" && !matchesAgentTag(summary, needle) {
-			continue
-		}
 		items = append(items, summary)
 	}
 	return items
+}
+
+func normalizeAgentSummaryScope(scope string) string {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "nav", "copilot", "invoke", "internal", "all":
+		return strings.ToLower(strings.TrimSpace(scope))
+	default:
+		return ""
+	}
+}
+
+func AgentVisibleForScope(def AgentDefinition, scope string) bool {
+	scope = normalizeAgentSummaryScope(scope)
+	if scope == "all" {
+		return true
+	}
+	scopes := EffectiveAgentVisibilityScopes(def)
+	if scope != "" {
+		return containsString(scopes, scope)
+	}
+	return containsString(scopes, "nav") || containsString(scopes, "copilot")
+}
+
+func AgentInvocable(def AgentDefinition) bool {
+	scopes := EffectiveAgentVisibilityScopes(def)
+	return containsString(scopes, "invoke") || containsString(scopes, "internal")
+}
+
+func EffectiveAgentVisibilityScopes(def AgentDefinition) []string {
+	if len(def.VisibilityScopes) == 0 {
+		return append([]string(nil), defaultAgentVisibilityScopes...)
+	}
+	return append([]string(nil), def.VisibilityScopes...)
+}
+
+func EffectiveAgentKanbanConcurrency(def AgentDefinition) int {
+	if def.KanbanConcurrency <= 0 {
+		return 1
+	}
+	return def.KanbanConcurrency
 }
 
 func projectPromptFilesMeta(files []AgentProjectPromptFile) []map[string]any {

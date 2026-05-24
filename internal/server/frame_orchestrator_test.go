@@ -231,6 +231,59 @@ func TestFrameOrchestratorRejectsInvalidSubAgentMode(t *testing.T) {
 	}
 }
 
+func TestFrameOrchestratorRejectsSubAgentWithoutInvokeScope(t *testing.T) {
+	mainStream := &stubOrchestratableStream{
+		deltas: []contracts.AgentDelta{
+			newInvokeAgentsDelta(contracts.SubAgentTaskSpec{
+				SubAgentKey: "nav-only",
+				TaskText:    "run hidden task",
+			}),
+		},
+	}
+	var emitted []contracts.AgentDelta
+	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{}, map[string]catalog.AgentDefinition{
+		"nav-only": {Key: "nav-only", Mode: "REACT", VisibilityScopes: []string{"nav"}},
+	}, &emitted, nil)
+
+	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
+	if err != nil || streamFailed || streamInterrupted {
+		t.Fatalf("unexpected orchestrator result err=%v failed=%v interrupted=%v", err, streamFailed, streamInterrupted)
+	}
+	if len(emitted) != 0 {
+		t.Fatalf("expected no task lifecycle deltas on scope reject, got %#v", emitted)
+	}
+	if len(mainStream.injected) != 1 || !mainStream.injected[0].isError || mainStream.injected[0].text != "sub-agent is not invocable" {
+		t.Fatalf("expected scope error tool result, got %#v", mainStream.injected)
+	}
+}
+
+func TestFrameOrchestratorAllowsInternalSubAgent(t *testing.T) {
+	mainStream := &stubOrchestratableStream{
+		deltas: []contracts.AgentDelta{
+			newInvokeAgentsDelta(contracts.SubAgentTaskSpec{
+				SubAgentKey: "internal-worker",
+				TaskText:    "run internal task",
+			}),
+		},
+	}
+	var emitted []contracts.AgentDelta
+	child := &stubOrchestratableStream{
+		deltas:    []contracts.AgentDelta{contracts.DeltaContent{Text: "internal output"}},
+		finalText: "internal done",
+	}
+	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{streams: []contracts.AgentStream{child}}, map[string]catalog.AgentDefinition{
+		"internal-worker": {Key: "internal-worker", Mode: "REACT", VisibilityScopes: []string{"internal"}},
+	}, &emitted, nil)
+
+	streamFailed, streamInterrupted, err := orchestrator.Run(mainStream)
+	if err != nil || streamFailed || streamInterrupted {
+		t.Fatalf("unexpected orchestrator result err=%v failed=%v interrupted=%v", err, streamFailed, streamInterrupted)
+	}
+	if len(mainStream.injected) != 1 || mainStream.injected[0].isError {
+		t.Fatalf("expected internal sub-agent result, got %#v", mainStream.injected)
+	}
+}
+
 func TestFrameOrchestratorRunsProxySubAgent(t *testing.T) {
 	var upstreamPayload map[string]any
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -9,6 +9,8 @@ import (
 const AgentModeCoder = "CODER"
 const AgentWorkspaceRootChat = "@chat"
 
+var defaultAgentVisibilityScopes = []string{"nav", "copilot", "invoke"}
+
 var coderAgentProfile = agentModeProfile{
 	Tools: []string{
 		"bash",
@@ -57,6 +59,52 @@ func parseAgentWorkspaceRoot(value any) AgentWorkspaceConfig {
 		return AgentWorkspaceConfig{}
 	}
 	return AgentWorkspaceConfig{Root: cleanWorkspaceRoot(root)}
+}
+
+func parseAgentVisibilityScopes(value any) []string {
+	node := mapNode(value)
+	scopes := listStrings(node["scopes"])
+	if len(scopes) == 0 {
+		return append([]string(nil), defaultAgentVisibilityScopes...)
+	}
+	out := make([]string, 0, len(scopes))
+	seen := map[string]struct{}{}
+	for _, raw := range scopes {
+		scope := normalizeAgentVisibilityScope(raw)
+		if scope == "" {
+			continue
+		}
+		if _, ok := seen[scope]; ok {
+			continue
+		}
+		seen[scope] = struct{}{}
+		out = append(out, scope)
+	}
+	if len(out) == 0 {
+		return append([]string(nil), defaultAgentVisibilityScopes...)
+	}
+	return out
+}
+
+func normalizeAgentVisibilityScope(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "nav", "copilot", "invoke", "internal":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return ""
+	}
+}
+
+func parseAgentKanbanConcurrency(value any) (int, error) {
+	node := mapNode(value)
+	if len(node) == 0 {
+		return 1, nil
+	}
+	concurrency := intNode(node["concurrency"])
+	if concurrency <= 0 {
+		return 0, fmt.Errorf("kanban.concurrency must be greater than or equal to 1")
+	}
+	return concurrency, nil
 }
 
 func parseAgentProjectConfig(value any) AgentProjectConfig {

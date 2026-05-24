@@ -127,7 +127,8 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 
 func (s *Server) wsAgents(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
 	payload, err := ws.DecodePayload[struct {
-		IncludeChats int `json:"includeChats"`
+		IncludeChats int    `json:"includeChats"`
+		Scope        string `json:"scope"`
 	}](req)
 	if err != nil {
 		conn.SendError(req.ID, "invalid_request", 400, "invalid payload", nil)
@@ -139,7 +140,7 @@ func (s *Server) wsAgents(_ context.Context, conn *ws.Conn, req ws.RequestFrame)
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	items, listErr := s.listAgentSummaries(payload.IncludeChats)
+	items, listErr := s.listAgentSummaries(payload.IncludeChats, payload.Scope)
 	if listErr != nil {
 		conn.SendError(req.ID, "internal_error", 500, listErr.Error(), nil)
 		conn.CompleteRequest(req.ID)

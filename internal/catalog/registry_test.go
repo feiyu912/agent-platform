@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
@@ -696,5 +697,66 @@ func TestTeamsLogsInvalidAgentKeys(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "invalidAgentKeys=[missing_agent]") {
 		t.Fatalf("expected invalid agent key warning, got %q", buf.String())
+	}
+}
+
+func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "project")
+	registry := &FileRegistry{
+		agents: map[string]AgentDefinition{
+			"assistant": {
+				Key:               "assistant",
+				Name:              "Assistant",
+				Icon:              map[string]any{"name": "bot", "color": "#336699"},
+				Description:       "hidden from json",
+				Role:              "also hidden",
+				Mode:              "REACT",
+				Workspace:         AgentWorkspaceConfig{Root: workspace},
+				VisibilityScopes:  []string{"nav", "copilot"},
+				KanbanConcurrency: 2,
+			},
+			"worker": {
+				Key:              "worker",
+				Name:             "Worker",
+				Mode:             AgentModeCoder,
+				VisibilityScopes: []string{"internal"},
+			},
+			"invoker": {
+				Key:              "invoker",
+				Name:             "Invoker",
+				Mode:             "PROXY",
+				VisibilityScopes: []string{"invoke"},
+			},
+		},
+	}
+
+	items := registry.Agents("")
+	if len(items) != 1 || items[0].Key != "assistant" {
+		t.Fatalf("default agents = %#v", items)
+	}
+	if items[0].Mode != "REACT" || items[0].WorkspaceDir != workspace {
+		t.Fatalf("summary mode/workspace = %#v", items[0])
+	}
+	if !reflect.DeepEqual(items[0].Visibility["scopes"], []string{"nav", "copilot"}) {
+		t.Fatalf("visibility = %#v", items[0].Visibility)
+	}
+	if items[0].Kanban["concurrency"] != 2 {
+		t.Fatalf("kanban = %#v", items[0].Kanban)
+	}
+	data, err := json.Marshal(items[0])
+	if err != nil {
+		t.Fatalf("marshal agent summary: %v", err)
+	}
+	if strings.Contains(string(data), "description") || strings.Contains(string(data), "role") {
+		t.Fatalf("summary json should omit description/role, got %s", data)
+	}
+
+	invokeItems := registry.Agents("invoke")
+	if len(invokeItems) != 1 || invokeItems[0].Key != "invoker" {
+		t.Fatalf("invoke agents = %#v", invokeItems)
+	}
+	allItems := registry.Agents("all")
+	if len(allItems) != 3 {
+		t.Fatalf("all agents = %#v", allItems)
 	}
 }
