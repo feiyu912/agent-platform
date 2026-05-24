@@ -9,9 +9,13 @@ import (
 	"agent-platform/internal/stream"
 )
 
-// AppendEvent writes a raw SSE event to events.jsonl (legacy path).
 func (s *FileStore) AppendEvent(chatID string, event stream.EventData) error {
-	return s.appendJSONLine(filepath.Join(s.ChatDir(chatID), "events.jsonl"), event)
+	return s.appendJSONLine(s.chatJSONLPath(chatID), EventLine{
+		Type:   "event",
+		ChatID: chatID,
+		RunID:  event.String("runId"),
+		Event:  event.Map(),
+	})
 }
 
 func (s *FileStore) AppendQueryLine(chatID string, line QueryLine) error {

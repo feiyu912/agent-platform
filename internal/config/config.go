@@ -39,9 +39,7 @@ type Config struct {
 	BashHITL       BashHITLConfig
 	Run            RunConfig
 	WebSocket      WebSocketConfig
-	GatewayWS      GatewayWSConfig
 	// Gateways 是多 gateway 反向连接列表（wecom / feishu / ding / ...）。
-	// legacy 单 gateway 配置 (GatewayWS) 在 normalize() 阶段合成为 Gateways[0]。
 	Gateways []GatewayEntry
 	// Channels 是 channel 元数据与 agent 准入配置；每条可合成一条 gateway entry。
 	Channels []ChannelConfig
@@ -372,28 +370,11 @@ type WebSocketConfig struct {
 	MaxObservesPerConn  int
 }
 
-type GatewayWSConfig struct {
-	// URL 是完整的网关入口，包含 key / channel 等 query 参数，由 deploy 侧直接填写。
-	// platform 不再二次拼接 query。
-	URL string
-	// JwtToken 是统一的鉴权凭据：既用于反向 WS 握手的 Authorization header，
-	// 也用于 /api/push（artifact 外发）和 /api/pull（用户上传文件拉取）
-	// 等 HTTP 旁路请求的 Bearer token。由用户在首次企微会话后从网关复制进 .env。
-	JwtToken           string
-	HandshakeTimeoutMs int64
-	ReconnectMinMs     int64
-	ReconnectMaxMs     int64
-	// BaseURL 用于 artifact 外发和 userUpload 下载等 HTTP 旁路操作；
-	// 未显式配置时从 URL 自动派生。
-	BaseURL string
-
-	// Gateways 支持多插件并存。每条 entry 独立反向连接、独立 reconnect。
-	// entry 的 Channel 字段作为 chatId 前缀的路由键（chatId="wecom#..." → Channel="wecom"）。
-	//
-	// 兼容策略：部署侧只配置 legacy URL/JwtToken 时，normalize() 会把这条合成为
-	// Gateways[0]（ID="default", Channel=""），路由层在"单条无 channel"场景下跳过前缀
-	// 匹配，行为与未引入多 gateway 前字节一致。
-}
+const (
+	defaultGatewayHandshakeTimeoutMs int64 = 10000
+	defaultGatewayReconnectMinMs     int64 = 1000
+	defaultGatewayReconnectMaxMs     int64 = 30000
+)
 
 // GatewayEntry 描述单个 gateway 反向连接条目。
 type GatewayEntry struct {
@@ -447,9 +428,6 @@ const (
 )
 
 func Load() (Config, error) {
-	if err := checkDeprecatedEnvVars(); err != nil {
-		return Config{}, err
-	}
 	cfg := defaultConfig()
 	if err := cfg.applyStructuredConfig(); err != nil {
 		return Config{}, err
@@ -469,19 +447,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
-}
-
-func checkDeprecatedEnvVars() error {
-	var found []string
-	for _, key := range deprecatedEnvVars {
-		if _, ok := os.LookupEnv(key); ok {
-			found = append(found, key)
-		}
-	}
-	if len(found) > 0 {
-		return fmt.Errorf("deprecated environment variable(s) detected: %s; remove or migrate them before starting", strings.Join(found, ", "))
-	}
-	return nil
 }
 
 func defaultConfig() Config {
@@ -679,11 +644,6 @@ func defaultConfig() Config {
 			WriteTimeoutMs:      15000,
 			WriteQueueSize:      256,
 			MaxObservesPerConn:  8,
-		},
-		GatewayWS: GatewayWSConfig{
-			HandshakeTimeoutMs: 10000,
-			ReconnectMinMs:     1000,
-			ReconnectMaxMs:     30000,
 		},
 	}
 }
@@ -1485,8 +1445,6 @@ func normalizeAccessPolicyApprovalAction(value string, fallback string) string {
 	}
 }
 
-// normalizeGateways 把 legacy 单 gateway 配置（GatewayWS）合成为 Gateways[0]。
-// 已有 Gateways 列表时补缺省字段（ID、reconnect 参数），不覆盖已显式设置的值。
 func (c *Config) normalizeChannels() error {
 	if len(c.Channels) == 0 {
 		return nil
@@ -1502,12 +1460,6 @@ func (c *Config) normalizeChannels() error {
 		channel := strings.TrimSpace(gateway.Channel)
 		if channel != "" {
 			existingGatewayChannels[channel] = struct{}{}
-		}
-	}
-	if strings.TrimSpace(c.GatewayWS.URL) != "" {
-		existingGatewayIDs["default"] = struct{}{}
-		if legacyChannel := deriveChannelFromURL(c.GatewayWS.URL); legacyChannel != "" {
-			existingGatewayChannels[legacyChannel] = struct{}{}
 		}
 	}
 
@@ -1548,33 +1500,19 @@ func (c *Config) normalizeChannels() error {
 }
 
 func (c *Config) normalizeGateways() error {
-	if len(c.Gateways) == 0 && strings.TrimSpace(c.GatewayWS.URL) != "" {
-		c.Gateways = append(c.Gateways, GatewayEntry{
-			ID:                 "default",
-			Channel:            deriveChannelFromURL(c.GatewayWS.URL),
-			SourceChannel:      deriveSourceChannelFromURL(c.GatewayWS.URL),
-			SourcePrefix:       deriveChannelFromURL(c.GatewayWS.URL),
-			URL:                strings.TrimSpace(c.GatewayWS.URL),
-			JwtToken:           strings.TrimSpace(c.GatewayWS.JwtToken),
-			BaseURL:            strings.TrimSpace(c.GatewayWS.BaseURL),
-			HandshakeTimeoutMs: c.GatewayWS.HandshakeTimeoutMs,
-			ReconnectMinMs:     c.GatewayWS.ReconnectMinMs,
-			ReconnectMaxMs:     c.GatewayWS.ReconnectMaxMs,
-		})
-	}
 	for i := range c.Gateways {
 		g := &c.Gateways[i]
 		if strings.TrimSpace(g.ID) == "" {
 			g.ID = fmt.Sprintf("gateway-%d", i)
 		}
 		if g.HandshakeTimeoutMs == 0 {
-			g.HandshakeTimeoutMs = c.GatewayWS.HandshakeTimeoutMs
+			g.HandshakeTimeoutMs = defaultGatewayHandshakeTimeoutMs
 		}
 		if g.ReconnectMinMs == 0 {
-			g.ReconnectMinMs = c.GatewayWS.ReconnectMinMs
+			g.ReconnectMinMs = defaultGatewayReconnectMinMs
 		}
 		if g.ReconnectMaxMs == 0 {
-			g.ReconnectMaxMs = c.GatewayWS.ReconnectMaxMs
+			g.ReconnectMaxMs = defaultGatewayReconnectMaxMs
 		}
 		if strings.TrimSpace(g.BaseURL) == "" && strings.TrimSpace(g.URL) != "" {
 			if parsed, err := neturl.Parse(strings.TrimSpace(g.URL)); err == nil && parsed.Host != "" {
@@ -1915,78 +1853,4 @@ func csvOrList(value any, fallback []string) []string {
 	default:
 		return fallback
 	}
-}
-
-var deprecatedEnvVars = []string{
-	// Gateway 连接统一迁移到 configs/channels.yml。
-	"GATEWAY_USER_ID",
-	"GATEWAY_TICKET",
-	"GATEWAY_AGENT_KEY",
-	"GATEWAY_CHANNEL",
-	"GATEWAY_UPLOAD_PATH",
-	"GATEWAY_DOWNLOAD_PATH",
-	"GATEWAY_AUTH_TOKEN",
-	"GATEWAY_WS_URL",
-	"AGENT_GATEWAY_WS_URL",
-	"GATEWAY_JWT_TOKEN",
-	"GATEWAY_BASE_URL",
-	"AGENT_GATEWAY_WS_TOKEN",
-	"AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS",
-	"AGENT_GATEWAY_WS_RECONNECT_MIN_MS",
-	"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
-	"AGENT_AUTH_ENABLED",
-	"AGENT_AUTH_JWKS_URI",
-	"AGENT_AUTH_ISSUER",
-	"AGENT_AUTH_JWKS_CACHE_SECONDS",
-	"AGENT_AUTH_LOCAL_PUBLIC_KEY_FILE",
-	"AGENT_CONTAINER_HUB_ENABLED",
-	"AGENT_CONTAINER_HUB_BASE_URL",
-	"AGENT_CONTAINER_HUB_AUTH_TOKEN",
-	"AGENT_CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID",
-	"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS",
-	"AGENT_CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL",
-	"AGENT_CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS",
-	"AGENT_CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS",
-	"AGENT_STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS",
-	"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
-	"STREAM_INCLUDE_DEBUG_EVENTS",
-	"AGENT_BASH_WORKING_DIRECTORY",
-	"AGENT_BASH_ALLOWED_PATHS",
-	"AGENT_BASH_ALLOWED_COMMANDS",
-	"AGENT_BASH_PATH_CHECKED_COMMANDS",
-	"AGENT_BASH_PATH_CHECK_BYPASS_COMMANDS",
-	"AGENT_BASH_SHELL_FEATURES_ENABLED",
-	"AGENT_BASH_SHELL_EXECUTABLE",
-	"AGENT_BASH_SHELL_ARGS",
-	"AGENT_BASH_SHELL_TIMEOUT_MS",
-	"AGENT_BASH_MAX_COMMAND_CHARS",
-	"AGENT_BASH_HITL_DEFAULT_TIMEOUT_MS",
-	"AGENT_FILE_WORKING_DIRECTORY",
-	"AGENT_FILE_ALLOWED_READ_PATHS",
-	"AGENT_FILE_ALLOWED_WRITE_PATHS",
-	"AGENT_FILE_MAX_READ_BYTES",
-	"AGENT_FILE_MAX_WRITE_BYTES",
-	"AGENT_FILE_MAX_BATCH_OPS",
-	"AGENT_FILE_REQUIRE_WRITE_APPROVAL",
-	"AGENT_FILE_REQUIRE_READ_BEFORE_WRITE",
-	"AGENT_CONFIG_DIR",
-	"AGENT_AGENTS_EXTERNAL_DIR",
-	"AGENT_TEAMS_EXTERNAL_DIR",
-	"AGENT_MODELS_EXTERNAL_DIR",
-	"AGENT_PROVIDERS_EXTERNAL_DIR",
-	"AGENT_TOOLS_EXTERNAL_DIR",
-	"AGENT_SKILLS_EXTERNAL_DIR",
-	"AGENT_VIEWPORTS_EXTERNAL_DIR",
-	"AGENT_MCP_SERVERS_REGISTRY_EXTERNAL_DIR",
-	"AGENT_VIEWPORT_SERVERS_REGISTRY_EXTERNAL_DIR",
-	"AGENT_AUTOMATION_EXTERNAL_DIR",
-	"AGENT_DATA_EXTERNAL_DIR",
-	"AGENT_MEMORY_STORAGE_DIR",
-	"CHAT_IMAGE_TOKEN_TTL_SECONDS",
-	"MEMORY_CHATS_DIR",
-	"MEMORY_CHATS_K",
-	"MEMORY_CHATS_CHARSET",
-	"MEMORY_CHATS_ACTION_TOOLS",
-	"MEMORY_CHATS_INDEX_SQLITE_FILE",
-	"MEMORY_CHATS_INDEX_AUTO_REBUILD_ON_INCOMPATIBLE_SCHEMA",
 }

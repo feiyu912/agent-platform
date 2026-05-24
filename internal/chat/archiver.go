@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -48,14 +47,6 @@ func (a *Archiver) ArchiveChat(chatID string) error {
 	if err != nil {
 		return err
 	}
-	eventsContent, err := readFileStringIfExists(filepath.Join(a.active.ChatDir(chatID), "events.jsonl"))
-	if err != nil {
-		return err
-	}
-	rawMessagesContent, err := readFileStringIfExists(filepath.Join(a.active.ChatDir(chatID), "raw_messages.jsonl"))
-	if err != nil {
-		return err
-	}
 	hasAttachments, err := chatDirHasAttachments(a.active.ChatDir(chatID))
 	if err != nil {
 		return err
@@ -75,10 +66,8 @@ func (a *Archiver) ArchiveChat(chatID string) error {
 			Usage:          summary.Usage,
 			HasAttachments: hasAttachments,
 		},
-		Runs:               runs,
-		JSONLContent:       jsonlContent,
-		EventsContent:      eventsContent,
-		RawMessagesContent: rawMessagesContent,
+		Runs:         runs,
+		JSONLContent: jsonlContent,
 	}
 	if err := a.archive.ArchiveChat(archived); err != nil {
 		return err
@@ -91,8 +80,6 @@ func (a *Archiver) ArchiveChat(chatID string) error {
 			return fmt.Errorf("move attachments: %w", err)
 		}
 		movedAttachments = true
-		_ = os.Remove(filepath.Join(a.archive.ChatDir(chatID), "events.jsonl"))
-		_ = os.Remove(filepath.Join(a.archive.ChatDir(chatID), "raw_messages.jsonl"))
 	}
 	if err := a.active.DeleteChat(chatID); err != nil {
 		log.Printf("[chat][archive] active cleanup failed chatId=%s movedAttachments=%t err=%v", chatID, movedAttachments, err)
@@ -151,11 +138,7 @@ func chatDirHasAttachments(dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if name == "events.jsonl" || name == "raw_messages.jsonl" {
-			continue
-		}
+	for range entries {
 		return true, nil
 	}
 	return false, nil

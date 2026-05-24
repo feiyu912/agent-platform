@@ -67,12 +67,6 @@ func TestArchiverMovesChatToArchiveAndPreservesAttachments(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(active.ChatDir("chat-archiver"), "artifact.txt"), []byte("artifact"), 0o644); err != nil {
 		t.Fatalf("write artifact: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(active.ChatDir("chat-archiver"), "events.jsonl"), []byte(`{"type":"legacy"}`+"\n"), 0o644); err != nil {
-		t.Fatalf("write events: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(active.ChatDir("chat-archiver"), "raw_messages.jsonl"), []byte(`{"role":"user","content":"legacy"}`+"\n"), 0o644); err != nil {
-		t.Fatalf("write raw messages: %v", err)
-	}
 
 	if err := archiver.ArchiveChat("chat-archiver"); err != nil {
 		t.Fatalf("archive chat: %v", err)
@@ -88,9 +82,6 @@ func TestArchiverMovesChatToArchiveAndPreservesAttachments(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(archive.ChatDir("chat-archiver"), "artifact.txt")); err != nil {
 		t.Fatalf("expected artifact moved to archive: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(archive.ChatDir("chat-archiver"), "events.jsonl")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected events sidecar removed from archive attachments, got %v", err)
-	}
 
 	loaded, err := archive.LoadArchived("chat-archiver")
 	if err != nil {
@@ -98,9 +89,6 @@ func TestArchiverMovesChatToArchiveAndPreservesAttachments(t *testing.T) {
 	}
 	if !loaded.Summary.HasAttachments || loaded.Summary.AgentKey != "agent-a" || len(loaded.Detail.Events) == 0 {
 		t.Fatalf("unexpected archived chat: %#v", loaded)
-	}
-	if loaded.EventsContent == "" || loaded.RawMessagesContent == "" {
-		t.Fatalf("expected sidecar contents stored in archive DB")
 	}
 }
 

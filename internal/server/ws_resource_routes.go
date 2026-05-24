@@ -283,15 +283,13 @@ func (s *Server) fetchGatewayDownload(ctx context.Context, chatID string, rawURL
 }
 
 // resolveGatewayForChat 按 chatId 查对应 gateway 的 BaseURL/Token。
-// 没设 Resolver 时退化为 legacy 单 gateway 模式（从 cfg.GatewayWS 读），
-// 保证老部署行为不变。
 func (s *Server) resolveGatewayForChat(chatID string) (baseURL string, token string) {
 	if s.deps.GatewayResolver != nil {
 		if b, t, ok := s.deps.GatewayResolver.Resolve(chatID); ok {
 			return b, t
 		}
 	}
-	return strings.TrimSpace(s.deps.Config.GatewayWS.BaseURL), strings.TrimSpace(s.deps.Config.GatewayWS.JwtToken)
+	return "", ""
 }
 
 // buildGatewayURL 把网关下发的下载地址规范化到指定 baseURL。

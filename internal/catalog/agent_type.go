@@ -51,17 +51,6 @@ func normalizeAgentType(value string) (string, error) {
 	}
 }
 
-func parseAgentWorkspaceConfig(value any) AgentWorkspaceConfig {
-	node := mapNode(value)
-	root := strings.TrimSpace(stringNode(node["root"]))
-	if root == "" {
-		return AgentWorkspaceConfig{}
-	}
-	return AgentWorkspaceConfig{
-		Root: cleanWorkspaceRoot(root),
-	}
-}
-
 func parseAgentWorkspaceRoot(value any) AgentWorkspaceConfig {
 	root := strings.TrimSpace(stringNode(value))
 	if root == "" {
@@ -75,17 +64,6 @@ func parseAgentProjectConfig(value any) AgentProjectConfig {
 	gitConfig := mapNode(node["git"])
 	return AgentProjectConfig{
 		PromptFiles: parseAgentProjectPromptFiles(node["promptFiles"]),
-		Git: AgentProjectGitConfig{
-			ExpectedBranch: stringNode(gitConfig["expectedBranch"]),
-		},
-	}
-}
-
-func parseLegacyAgentProjectConfig(value any) AgentProjectConfig {
-	node := mapNode(value)
-	gitConfig := mapNode(node["git"])
-	return AgentProjectConfig{
-		PromptFiles: parseAgentProjectPromptFiles(node["projectPromptFiles"]),
 		Git: AgentProjectGitConfig{
 			ExpectedBranch: stringNode(gitConfig["expectedBranch"]),
 		},

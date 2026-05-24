@@ -2,7 +2,6 @@ package chat
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -40,15 +39,6 @@ func (s *FileStore) LoadAwaitingAsk(chatID string, awaitingID string) (*Persiste
 			return nil, err
 		}
 		lines = nil
-	}
-	if len(lines) == 0 {
-		lines, err = readJSONLines(filepath.Join(s.ChatDir(chatID), "events.jsonl"))
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil, nil
-			}
-			return nil, err
-		}
 	}
 	return loadPersistedAwaitingAskFromLines(lines, awaitingID), nil
 }

@@ -1,8 +1,6 @@
 // Package gateway 管理多条反向 WS 连接（wecom / feishu / ding / ...），
 // 每条对应一个 channel 插件。Registry 是 connector 的索引：
 //   - 按 Channel 做路由（artifact 外推、文件下载按 chatId 前缀选择 gateway）
-//
-// legacy 单 gateway 部署是"一条 channel 空串的 entry"的特例，路由退化为总命中它。
 package gateway
 
 import (
@@ -140,11 +138,6 @@ func (r *Registry) Register(entry config.GatewayEntry) error {
 }
 
 // LookupByChatID 按 chatId 前缀（例如 "wecom#..." → channel "wecom"）查 entry。
-// 路由策略：
-//  1. 提取 chatId 第一个 '#' 前的 channel 前缀
-//  2. Registry 里有匹配 channel 的 entry 就返回
-//  3. 没匹配到时，若 Registry 只有一条 entry（典型 legacy 单 gateway），返回它作为兜底
-//  4. 多条 entry 且无匹配则返回 nil，false
 func (r *Registry) LookupByChatID(chatID string) (*Entry, bool) {
 	channelID := channel.ChannelForChatID(chatID)
 	r.mu.RLock()
@@ -155,11 +148,6 @@ func (r *Registry) LookupByChatID(chatID string) (*Entry, bool) {
 		}
 		if id, ok := r.bySourcePrefix[channelID]; ok {
 			return r.entries[id], true
-		}
-	}
-	if len(r.entries) == 1 {
-		for _, e := range r.entries {
-			return e, true
 		}
 	}
 	return nil, false

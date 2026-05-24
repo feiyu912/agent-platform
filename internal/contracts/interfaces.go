@@ -170,7 +170,6 @@ type QuerySession struct {
 	StaticMemoryPrompt    string
 	SkillCatalogPrompt    string
 	SystemInitCache       map[string]SystemInitSnapshot
-	SystemInitLegacy      bool // true for pre-system-init historical chats that should keep rebuilding prompts.
 
 	// Prompt files loaded from agent directory.
 	SoulPrompt            string

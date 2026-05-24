@@ -40,15 +40,6 @@ func TestLoadDefaults(t *testing.T) {
 		if cfg.SSE.HeartbeatIntervalMs != 15000 {
 			t.Fatalf("expected default heartbeat interval 15000, got %d", cfg.SSE.HeartbeatIntervalMs)
 		}
-		if cfg.GatewayWS.HandshakeTimeoutMs != 10000 {
-			t.Fatalf("expected default gateway ws handshake timeout 10000, got %d", cfg.GatewayWS.HandshakeTimeoutMs)
-		}
-		if cfg.GatewayWS.ReconnectMinMs != 1000 {
-			t.Fatalf("expected default gateway ws reconnect min 1000, got %d", cfg.GatewayWS.ReconnectMinMs)
-		}
-		if cfg.GatewayWS.ReconnectMaxMs != 30000 {
-			t.Fatalf("expected default gateway ws reconnect max 30000, got %d", cfg.GatewayWS.ReconnectMaxMs)
-		}
 		if cfg.H2A.Render.HeartbeatPassThrough != true {
 			t.Fatalf("expected heartbeat pass-through enabled by default")
 		}
@@ -505,39 +496,12 @@ func TestLoadMemoryLogFileEnvOverridesMemoryDirDefault(t *testing.T) {
 	})
 }
 
-func TestLoadIgnoresLegacyMemoryStorageEnv(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
-		"AGENT_MEMORY_STORAGE_DIR": filepath.Join("var", "custom-memory"),
-	}, func() {
-		_, err := Load()
-		if err == nil {
-			t.Fatalf("expected deprecated env to fail")
-		}
-		if !strings.Contains(err.Error(), "AGENT_MEMORY_STORAGE_DIR") {
-			t.Fatalf("expected error to mention deprecated env, got %v", err)
-		}
-	})
-}
-
-func TestLoadIgnoresDeprecatedEnv(t *testing.T) {
-	withIsolatedEnv(t, map[string]string{
-		"AGENT_CONFIG_DIR": "configs",
-	}, func() {
-		_, err := Load()
-		if err == nil {
-			t.Fatalf("expected deprecated env to fail")
-		}
-		if !strings.Contains(err.Error(), "AGENT_CONFIG_DIR") {
-			t.Fatalf("expected error to mention deprecated env, got %v", err)
-		}
-	})
-}
-
-func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
+func TestLoadIgnoresOldEnvVars(t *testing.T) {
 	values := map[string]string{
 		"AGENT_CONTAINER_HUB_BASE_URL":           "http://127.0.0.1:18000",
 		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS":      "true",
-		"STREAM_INCLUDE_DEBUG_EVENTS":            "true",
+		"AGENT_MEMORY_STORAGE_DIR":               filepath.Join("var", "custom-memory"),
+		"AGENT_CONFIG_DIR":                       "configs",
 		"GATEWAY_WS_URL":                         "wss://gw.example.com/ws/agent?channel=wecom",
 		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS":      "6789",
 		"MEMORY_CHATS_INDEX_SQLITE_FILE":         "old.db",
@@ -569,24 +533,26 @@ func TestLoadRejectsDeprecatedEnvVars(t *testing.T) {
 		values[key] = "deprecated"
 	}
 	withIsolatedEnv(t, values, func() {
-		_, err := Load()
-		if err == nil {
-			t.Fatalf("expected deprecated envs to fail")
-		}
-		for _, key := range append([]string{
-			"AGENT_CONTAINER_HUB_BASE_URL",
-			"AGENT_STREAM_INCLUDE_DEBUG_EVENTS",
-			"STREAM_INCLUDE_DEBUG_EVENTS",
-			"GATEWAY_WS_URL",
-			"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
-			"MEMORY_CHATS_INDEX_SQLITE_FILE",
-			"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS",
-			"AGENT_AUTH_ENABLED",
-		}, bashAndFileEnv...) {
-			if !strings.Contains(err.Error(), key) {
-				t.Fatalf("expected error to mention %s, got %v", key, err)
-			}
-		}
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), nil, func() {
+			withProjectFileContents(t, filepath.Join("configs", "container-hub.yml"), nil, func() {
+				cfg, err := Load()
+				if err != nil {
+					t.Fatalf("load config: %v", err)
+				}
+				if len(cfg.Gateways) != 0 {
+					t.Fatalf("old gateway env should not synthesize gateways, got %#v", cfg.Gateways)
+				}
+				if !cfg.Auth.Enabled {
+					t.Fatalf("old auth env should not disable auth")
+				}
+				if cfg.ContainerHub.BaseURL != "" || cfg.ContainerHub.Enabled {
+					t.Fatalf("old container hub env should not configure container hub: %#v", cfg.ContainerHub)
+				}
+				if cfg.Paths.MemoryDir == filepath.Join("var", "custom-memory") {
+					t.Fatalf("old memory storage env should not affect memory dir")
+				}
+			})
+		})
 	})
 }
 
@@ -930,7 +896,7 @@ func TestLoadLLMInteractionMaskSensitiveFromEnv(t *testing.T) {
 	})
 }
 
-func TestLoadRejectsGatewayWSConfigFromEnv(t *testing.T) {
+func TestLoadIgnoresOldGatewayEnv(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"GATEWAY_WS_URL":                        "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai",
 		"GATEWAY_JWT_TOKEN":                     "jwt-abc",
@@ -938,53 +904,19 @@ func TestLoadRejectsGatewayWSConfigFromEnv(t *testing.T) {
 		"AGENT_GATEWAY_WS_RECONNECT_MIN_MS":     "45",
 		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS":     "6789",
 	}, func() {
-		_, err := Load()
-		if err == nil {
-			t.Fatalf("expected legacy gateway env to fail")
-		}
-		for _, key := range []string{
-			"GATEWAY_WS_URL",
-			"GATEWAY_JWT_TOKEN",
-			"AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS",
-			"AGENT_GATEWAY_WS_RECONNECT_MIN_MS",
-			"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
-		} {
-			if !strings.Contains(err.Error(), key) {
-				t.Fatalf("expected error to mention %s, got %v", key, err)
+		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), nil, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
 			}
-		}
+			if len(cfg.Gateways) != 0 {
+				t.Fatalf("old gateway env should not synthesize gateways, got %#v", cfg.Gateways)
+			}
+		})
 	})
 }
 
-func TestGatewaysSynthesizedFromLegacyURL(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.GatewayWS.URL = "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai"
-	cfg.GatewayWS.JwtToken = "jwt-abc"
-	if err := cfg.normalize(); err != nil {
-		t.Fatalf("normalize config: %v", err)
-	}
-	if len(cfg.Gateways) != 1 {
-		t.Fatalf("expected legacy URL to synthesize 1 gateway entry, got %d", len(cfg.Gateways))
-	}
-	g := cfg.Gateways[0]
-	if g.ID != "default" {
-		t.Fatalf("synthesized gateway id = %q, want default", g.ID)
-	}
-	if g.Channel != "wecom" {
-		t.Fatalf("channel derived from URL = %q, want wecom", g.Channel)
-	}
-	if g.URL != "wss://gw.example.com/ws/agent?key=zenmi&channel=wecom:xiaozhai" {
-		t.Fatalf("URL not propagated: %q", g.URL)
-	}
-	if g.JwtToken != "jwt-abc" {
-		t.Fatalf("token not propagated: %q", g.JwtToken)
-	}
-	if g.BaseURL != "https://gw.example.com" {
-		t.Fatalf("baseURL not derived: %q", g.BaseURL)
-	}
-}
-
-func TestGatewaysEmptyWhenNoLegacyConfig(t *testing.T) {
+func TestGatewaysEmptyWhenNoChannelsConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{}, func() {
 		withProjectFileContents(t, filepath.Join("configs", "channels.yml"), nil, func() {
 			cfg, err := Load()
@@ -1117,7 +1049,11 @@ func TestLoadChannelsConfigRejectsInvalidType(t *testing.T) {
 
 func TestLoadChannelsConfigRejectsGatewayConflicts(t *testing.T) {
 	cfg := defaultConfig()
-	cfg.GatewayWS.URL = "ws://legacy.example.com/ws/agent?channel=wecom:corp1"
+	cfg.Gateways = []GatewayEntry{{
+		ID:      "existing",
+		Channel: "wecom",
+		URL:     "ws://existing.example.com/ws/agent?channel=wecom:corp1",
+	}}
 	cfg.Channels = []ChannelConfig{
 		{
 			ID:   "wecom",
@@ -1128,7 +1064,7 @@ func TestLoadChannelsConfigRejectsGatewayConflicts(t *testing.T) {
 		},
 	}
 	if err := cfg.normalize(); err == nil {
-		t.Fatalf("expected duplicate legacy/channel gateway conflict to fail")
+		t.Fatalf("expected duplicate channel gateway conflict to fail")
 	}
 }
 
@@ -1148,7 +1084,7 @@ func TestLoadChannelsConfigRejectsMissingGatewayURL(t *testing.T) {
 	})
 }
 
-func TestLoadGatewayWSConfig(t *testing.T) {
+func TestLoadGatewayConfigFromChannels(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
 			"channels:\n" +
@@ -1209,8 +1145,7 @@ func TestLoadFailsWhenExplicitPanDirIsFile(t *testing.T) {
 func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 	t.Helper()
 
-	keys := append([]string{}, deprecatedEnvVars...)
-	keys = append(keys,
+	keys := []string{
 		"SERVICE_CONFIG_DIR",
 		"SERVICE_DATA_DIR",
 		"RUNTIME_DIR",
@@ -1308,7 +1243,7 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_GATEWAY_WS_HANDSHAKE_TIMEOUT_MS",
 		"AGENT_GATEWAY_WS_RECONNECT_MIN_MS",
 		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS",
-	)
+	}
 	for key := range values {
 		keys = append(keys, key)
 	}

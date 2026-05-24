@@ -2,7 +2,6 @@ package chat
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strings"
 
 	"agent-platform/internal/stream"
@@ -20,29 +19,14 @@ func (s *FileStore) LoadChat(chatID string) (Detail, error) {
 		return Detail{}, ErrChatNotFound
 	}
 
-	// Read {chatId}.jsonl (flat file, Java format). Fallback to {chatId}/events.jsonl (old Go format).
 	lines, err := readJSONLines(s.chatJSONLPath(chatID))
 	if err != nil {
 		return Detail{}, err
 	}
-	if len(lines) == 0 {
-		lines, err = readJSONLines(filepath.Join(s.ChatDir(chatID), "events.jsonl"))
-		if err != nil {
-			return Detail{}, err
-		}
-	}
 
-	// Load raw messages for includeRawMessages support
 	rawMessages := s.loadRawMessagesFromJSONL(chatID)
-	if len(rawMessages) == 0 {
-		rawMessages, _ = readJSONLines(filepath.Join(s.ChatDir(chatID), "raw_messages.jsonl"))
-	}
 
-	// Detect format: new format has _type field, old format has type field.
-	if isNewFormat(lines) {
-		return parseChatNewFormat(*sum, lines, rawMessages)
-	}
-	return parseChatLegacyFormat(*sum, lines, rawMessages)
+	return parseChatNewFormat(*sum, lines, rawMessages)
 }
 
 func (s *FileStore) LoadRunTrace(chatID string, runID string) (RunTrace, error) {

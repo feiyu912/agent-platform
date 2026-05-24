@@ -3,7 +3,6 @@ package chat
 import (
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -130,13 +129,6 @@ func (s *FileStore) SearchSession(chatID string, query string, limit int) ([]Sea
 	if err != nil {
 		return nil, err
 	}
-	if len(lines) == 0 {
-		lines, err = readJSONLines(filepath.Join(s.ChatDir(chatID), "events.jsonl"))
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	hits := make([]SearchHit, 0, limit)
 	appendHit := func(hit SearchHit) {
 		if strings.TrimSpace(hit.Snippet) == "" {

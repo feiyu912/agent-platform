@@ -228,7 +228,7 @@ func toOpenAIToolSpecs(defs []api.ToolDetailResponse) []openAIToolSpec {
 	return out
 }
 
-// rawMessageToOpenAI converts a raw_messages.jsonl entry to an openAIMessage.
+// rawMessageToOpenAI converts a persisted raw message entry to an openAIMessage.
 // Format follows the Java version: role + content, with tool_calls for assistant messages.
 func rawMessageToOpenAI(raw map[string]any, preserveReasoning bool) openAIMessage {
 	role, _ := raw["role"].(string)

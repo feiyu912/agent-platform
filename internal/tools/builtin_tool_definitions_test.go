@@ -26,9 +26,6 @@ func TestLoadEmbeddedToolDefinitionsIncludesAskUserBuiltins(t *testing.T) {
 	if !byName["agent_invoke"] {
 		t.Fatal("expected agent_invoke builtin tool definition")
 	}
-	if byName["_agent_invoke_"] {
-		t.Fatal("did not expect legacy _agent_invoke_ builtin tool definition")
-	}
 }
 
 func TestAskUserToolSchemasMatchContract(t *testing.T) {

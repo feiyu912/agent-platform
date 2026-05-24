@@ -77,8 +77,7 @@ cmd/agent-platform/main.go
 Chat 默认由 `CHATS_DIR` 控制，主要包含：
 
 - `index.json`：chat 摘要索引。
-- `<chatId>/events.jsonl`：运行事件与 StepLine 回放数据。
-- `<chatId>/raw_messages.jsonl`：用户和助手原始消息。
+- `<chatId>.jsonl`：运行事件、StepLine、system init 与 raw messages。
 - `<chatId>/<uploaded-file>`：上传资源文件。
 
 Memory 默认由 `MEMORY_DIR` 控制，当前以 SQLite store 为主，支持 FTS、可选 embedding、observation / fact 生命周期与 memory tools。旧 remember API 仍作为兼容入口存在。
@@ -114,7 +113,6 @@ Memory 默认由 `MEMORY_DIR` 控制，当前以 SQLite store 为主，支持 FT
 - 配置事实源以 `internal/config/config.go` 和 `configs/*.example.yml` 为准，文档只解释和引用。
 - `.env`、真实 `configs/*.yml`、真实 `configs/*.pem`、真实 token 和私钥不得提交。
 - Bash 与 FileTools 权限分别以 `configs/bash.yml`、`configs/file-tools.yml` 为外部事实源。
-- 旧 `AGENT_BASH_*`、`AGENT_FILE_*`、旧 auth / stream / gateway 等变量会在启动阶段硬失败。
 - 新增能力优先放进对应 `internal/*` 模块，不在 server 层堆业务逻辑。
 - 新增 API 保持统一 JSON 包裹、字段命名和错误语义。
 - 测试以 `make test` / `go test ./...` 为主，协议变更优先覆盖 `internal/server`、`internal/stream`、`internal/llm`、`internal/tools`。
@@ -157,4 +155,3 @@ make test
 - [鉴权与安全边界](docs/鉴权与安全边界.md)：JWT、JWKS、本地公钥、resource ticket、CORS、敏感配置。
 - [版本化打包方案](docs/版本化打包方案.md)：README 索引的交付专题文档。
 - [手工测试用例](docs/手工测试用例.md)：curl 回归用例。
-- [兼容清理清单](docs/兼容清理清单.md)：保留兼容路径与后续删除条件。

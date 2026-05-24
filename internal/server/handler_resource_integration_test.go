@@ -27,6 +27,15 @@ import (
 	gws "github.com/gorilla/websocket"
 )
 
+type fixedGatewayResolver struct {
+	baseURL string
+	token   string
+}
+
+func (r fixedGatewayResolver) Resolve(chatID string) (string, string, bool) {
+	return r.baseURL, r.token, r.baseURL != ""
+}
+
 func TestUploadAndResourceRoundTrip(t *testing.T) {
 	fixture := newTestFixture(t)
 	server := fixture.server
@@ -140,10 +149,8 @@ func TestUploadIDSeedsFromExistingRootUploadFiles(t *testing.T) {
 		t.Fatalf("create legacy chat dir: %v", err)
 	}
 	for name, content := range map[string]string{
-		"legacy-one.txt":     "one",
-		"legacy-two.txt":     "two",
-		"events.jsonl":       "{}\n",
-		"raw_messages.jsonl": "{}\n",
+		"existing-one.txt": "one",
+		"existing-two.txt": "two",
 	} {
 		if err := os.WriteFile(filepath.Join(chatDir, name), []byte(content), 0o644); err != nil {
 			t.Fatalf("write fixture file %s: %v", name, err)
@@ -315,7 +322,6 @@ func TestWebSocketUploadDownloadsGatewayURLAndReturnsUploadTicket(t *testing.T) 
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
 			cfg.WebSocket.PingIntervalMs = 30000
-			cfg.GatewayWS.JwtToken = "gateway-upload-token"
 		},
 	})
 
@@ -332,6 +338,10 @@ func TestWebSocketUploadDownloadsGatewayURLAndReturnsUploadTicket(t *testing.T) 
 		_, _ = w.Write(fileBody)
 	}))
 	defer gateway.Close()
+	fixture.server.deps.GatewayResolver = fixedGatewayResolver{
+		baseURL: gateway.URL,
+		token:   "gateway-upload-token",
+	}
 
 	server := newLoopbackServer(t, fixture.server)
 	defer server.Close()
@@ -428,7 +438,6 @@ func TestWebSocketResourcePushesLocalFileToGateway(t *testing.T) {
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
 			cfg.WebSocket.PingIntervalMs = 30000
-			cfg.GatewayWS.JwtToken = "gateway-resource-token"
 		},
 	})
 
@@ -449,7 +458,10 @@ func TestWebSocketResourcePushesLocalFileToGateway(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer gateway.Close()
-	fixture.server.deps.Config.GatewayWS.BaseURL = gateway.URL
+	fixture.server.deps.GatewayResolver = fixedGatewayResolver{
+		baseURL: gateway.URL,
+		token:   "gateway-resource-token",
+	}
 
 	server := newLoopbackServer(t, fixture.server)
 	defer server.Close()
@@ -590,7 +602,6 @@ func TestWebSocketUploadRejectsInvalidUploadMetadata(t *testing.T) {
 				configure: func(cfg *config.Config) {
 					cfg.WebSocket.WriteQueueSize = 4
 					cfg.WebSocket.PingIntervalMs = 30000
-					cfg.GatewayWS.BaseURL = ""
 				},
 			})
 

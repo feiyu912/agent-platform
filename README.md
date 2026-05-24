@@ -208,21 +208,6 @@ Provider `apiKey` 支持两种写法：
 - Bash / FileTools: 代码默认值 `<` `configs/bash.yml` / `configs/file-tools.yml`
 - 其它配置: 代码默认值 `<` yml `<` 仍受支持的环境变量
 
-### 当前明确拒绝的旧变量
-
-以下遗留变量如果显式设置，服务会在启动时直接报错，而不是静默忽略：
-
-- 旧 `AGENT_CONTAINER_HUB_*`（改用 `CONTAINER_HUB_*`；`Enabled` 由 `CONTAINER_HUB_BASE_URL` 是否非空派生）
-- 旧 `AGENT_AUTH_*`（改用 `AUTH_*`）
-- 旧 `AGENT_STREAM_*`（改用 `STREAM_*`）
-- 旧 `AGENT_BASH_*`（改用 `configs/bash.yml`）
-- 旧 `AGENT_FILE_*`（改用 `configs/file-tools.yml`）
-- 旧单 gateway env：`GATEWAY_WS_URL`、`AGENT_GATEWAY_WS_URL`、`GATEWAY_JWT_TOKEN`、`GATEWAY_BASE_URL`、`AGENT_GATEWAY_WS_*`
-- 旧 `AGENT_CONFIG_DIR`
-- 旧 `AGENT_MEMORY_STORAGE_DIR`
-- 旧 `MEMORY_CHATS_*`
-- 旧 `*_EXTERNAL_DIR`
-
 详细配置见 [配置化说明](./docs/配置化说明.md)。
 
 ## 4. 部署
@@ -333,4 +318,3 @@ docker compose logs -f
 - [鉴权与安全边界](./docs/鉴权与安全边界.md)
 - [版本化打包方案](./docs/版本化打包方案.md)
 - [手工测试用例](./docs/手工测试用例.md)
-- [兼容清理清单](./docs/兼容清理清单.md)

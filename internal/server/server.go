@@ -58,8 +58,7 @@ type Dependencies struct {
 	AutomationOrchestrator *automation.Orchestrator
 	AutomationRegistry     *automation.Registry
 	AutomationExecutions   *automation.ExecutionStore
-	// GatewayResolver 按 chatId 查对应 gateway 的 BaseURL/Token，ws_routes 的文件下载
-	// 路径用它替代旧的 cfg.GatewayWS.BaseURL/JwtToken。nil 时 /api/pull 走 legacy 单 gateway 的 cfg 字段（兼容老部署）。
+	// GatewayResolver 按 chatId 查对应 gateway 的 BaseURL/Token。
 	GatewayResolver GatewayResolver
 }
 

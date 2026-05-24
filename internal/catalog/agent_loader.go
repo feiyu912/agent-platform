@@ -277,8 +277,6 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		return AgentDefinition{}, nil, err
 	}
 	def.Type = agentType
-	legacyWorkspace := parseAgentWorkspaceConfig(root["workspaceConfig"])
-	legacyProject := parseLegacyAgentProjectConfig(root["workspaceConfig"])
 	modelConfig := mapNode(root["modelConfig"])
 	def.ModelKey = stringNode(modelConfig["modelKey"])
 	toolConfig := mapNode(root["toolConfig"])
@@ -319,25 +317,13 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 			def.StageSettings["taskExecutionPromptTemplate"] = def.RuntimePrompts.PlanExecute.TaskExecutionPromptTemplate
 		}
 	}
-	runtimeConfig, hasRuntimeConfig := mapNode(root["runtimeConfig"]), false
-	if _, ok := root["runtimeConfig"]; ok {
-		hasRuntimeConfig = true
-	}
-	if !hasRuntimeConfig {
-		// TODO(compat-cleanup): remove sandboxConfig fallback after all agent definitions use runtimeConfig.
-		runtimeConfig = mapNode(root["sandboxConfig"])
-	}
-	legacyRuntimeProject := AgentProjectConfig{}
+	runtimeConfig := mapNode(root["runtimeConfig"])
 	if len(runtimeConfig) > 0 {
 		def.Runtime = map[string]any{
 			"environmentId": stringNode(runtimeConfig["environmentId"]),
 			"level":         strings.ToLower(stringNode(runtimeConfig["level"])),
 		}
 		def.Workspace = parseAgentWorkspaceRoot(runtimeConfig["workspaceRoot"])
-		if strings.TrimSpace(def.Workspace.Root) == "" {
-			def.Workspace = parseAgentWorkspaceConfig(runtimeConfig["workspace"])
-		}
-		legacyRuntimeProject = parseLegacyAgentProjectConfig(runtimeConfig["workspace"])
 		runtimeEnv, err := parseRuntimeEnv(runtimeConfig["env"])
 		if err != nil {
 			return AgentDefinition{}, nil, err
@@ -349,22 +335,7 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 			def.Runtime["extraMounts"] = cloneListMaps(mounts)
 		}
 	}
-	if strings.TrimSpace(def.Workspace.Root) == "" {
-		def.Workspace = legacyWorkspace
-	}
 	def.Project = parseAgentProjectConfig(root["projectConfig"])
-	if len(def.Project.PromptFiles) == 0 {
-		def.Project.PromptFiles = legacyRuntimeProject.PromptFiles
-	}
-	if len(def.Project.PromptFiles) == 0 {
-		def.Project.PromptFiles = legacyProject.PromptFiles
-	}
-	if strings.TrimSpace(def.Project.Git.ExpectedBranch) == "" {
-		def.Project.Git = legacyRuntimeProject.Git
-	}
-	if strings.TrimSpace(def.Project.Git.ExpectedBranch) == "" {
-		def.Project.Git = legacyProject.Git
-	}
 	if err := validateAgentWorkspace(def.Workspace); err != nil {
 		return AgentDefinition{}, nil, err
 	}

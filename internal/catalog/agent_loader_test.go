@@ -180,36 +180,7 @@ func TestParseAgentFileLoadsRuntimeEnv(t *testing.T) {
 	}
 }
 
-func TestParseAgentFileFallsBackToLegacySandboxConfig(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "agent.yml")
-	content := "" +
-		"key: demo\n" +
-		"name: Demo\n" +
-		"modelConfig:\n" +
-		"  modelKey: demo-model\n" +
-		"sandboxConfig:\n" +
-		"  environmentId: shell\n" +
-		"  env:\n" +
-		"    HTTP_PROXY: legacy\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write agent file: %v", err)
-	}
-
-	def, err := parseAgentFile(path)
-	if err != nil {
-		t.Fatalf("parse agent file: %v", err)
-	}
-	if got := def.Runtime["environmentId"]; got != "shell" {
-		t.Fatalf("environmentId = %#v, want shell", got)
-	}
-	got, ok := def.Runtime["env"].(map[string]string)
-	if !ok || got["HTTP_PROXY"] != "legacy" {
-		t.Fatalf("runtime env = %#v, want legacy HTTP_PROXY", def.Runtime["env"])
-	}
-}
-
-func TestParseAgentFileRuntimeConfigWinsOverSandboxConfig(t *testing.T) {
+func TestParseAgentFileUsesRuntimeConfig(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")
 	content := "" +
@@ -220,11 +191,7 @@ func TestParseAgentFileRuntimeConfigWinsOverSandboxConfig(t *testing.T) {
 		"runtimeConfig:\n" +
 		"  environmentId: runtime\n" +
 		"  env:\n" +
-		"    HTTP_PROXY: runtime\n" +
-		"sandboxConfig:\n" +
-		"  environmentId: legacy\n" +
-		"  env:\n" +
-		"    HTTP_PROXY: legacy\n"
+		"    HTTP_PROXY: runtime\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write agent file: %v", err)
 	}
@@ -416,38 +383,13 @@ func TestParseAgentFileAcceptsChatWorkspaceRoot(t *testing.T) {
 	}
 }
 
-func TestParseAgentFileFallsBackToLegacyWorkspaceConfig(t *testing.T) {
+func TestParseAgentFileRuntimeWorkspaceRootSetsCoderWorkspace(t *testing.T) {
 	root := t.TempDir()
-	workspace := filepath.Join(root, "legacy-project")
-	path := filepath.Join(root, "agent.yml")
-	content := "" +
-		"key: coder\n" +
-		"mode: CODER\n" +
-		"workspaceConfig:\n" +
-		"  root: " + filepath.ToSlash(workspace) + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write agent file: %v", err)
-	}
-
-	def, err := parseAgentFile(path)
-	if err != nil {
-		t.Fatalf("parse agent file: %v", err)
-	}
-	if def.Workspace.Root != filepath.Clean(workspace) {
-		t.Fatalf("workspace root = %q, want legacy %q", def.Workspace.Root, filepath.Clean(workspace))
-	}
-}
-
-func TestParseAgentFileRuntimeWorkspaceOverridesLegacyWorkspaceConfig(t *testing.T) {
-	root := t.TempDir()
-	legacyWorkspace := filepath.Join(root, "legacy-project")
 	runtimeWorkspace := filepath.Join(root, "runtime-project")
 	path := filepath.Join(root, "agent.yml")
 	content := "" +
 		"key: coder\n" +
 		"mode: CODER\n" +
-		"workspaceConfig:\n" +
-		"  root: " + filepath.ToSlash(legacyWorkspace) + "\n" +
 		"runtimeConfig:\n" +
 		"  workspaceRoot: " + filepath.ToSlash(runtimeWorkspace) + "\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -463,7 +405,7 @@ func TestParseAgentFileRuntimeWorkspaceOverridesLegacyWorkspaceConfig(t *testing
 	}
 }
 
-func TestParseAgentFileFallsBackToLegacyRuntimeWorkspaceProjectConfig(t *testing.T) {
+func TestParseAgentFileLoadsProjectConfig(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "project")
 	path := filepath.Join(root, "agent.yml")
@@ -471,13 +413,13 @@ func TestParseAgentFileFallsBackToLegacyRuntimeWorkspaceProjectConfig(t *testing
 		"key: coder\n" +
 		"mode: CODER\n" +
 		"runtimeConfig:\n" +
-		"  workspace:\n" +
-		"    root: " + filepath.ToSlash(workspace) + "\n" +
-		"    projectPromptFiles:\n" +
-		"      - AGENTS.md\n" +
-		"      - agent:AGENTS.md\n" +
-		"    git:\n" +
-		"      expectedBranch: main\n"
+		"  workspaceRoot: " + filepath.ToSlash(workspace) + "\n" +
+		"projectConfig:\n" +
+		"  promptFiles:\n" +
+		"    - AGENTS.md\n" +
+		"    - agent:AGENTS.md\n" +
+		"  git:\n" +
+		"    expectedBranch: main\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write agent file: %v", err)
 	}

@@ -1,26 +1,18 @@
 package chat
 
 import (
-	"path/filepath"
 	"strings"
 )
 
-// LoadRawMessages loads conversation history from {chatId}.jsonl step lines,
-// falling back to {chatId}/raw_messages.jsonl for old chats.
+// LoadRawMessages loads conversation history from {chatId}.jsonl step lines.
 func (s *FileStore) LoadRawMessages(chatID string, k int) ([]map[string]any, error) {
 	if k <= 0 {
 		k = 20
 	}
 
-	// Try loading from step lines in {chatId}.jsonl (Java-compatible path)
 	messages := s.loadRawMessagesFromJSONL(chatID)
 	if len(messages) == 0 {
-		// Fallback to old raw_messages.jsonl
-		var err error
-		messages, err = readJSONLines(filepath.Join(s.ChatDir(chatID), "raw_messages.jsonl"))
-		if err != nil || len(messages) == 0 {
-			return nil, err
-		}
+		return nil, nil
 	}
 
 	// Group by runId, keep last K runs (sliding window)

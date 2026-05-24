@@ -76,8 +76,7 @@ func TestLookupBySourceChannelSupportsCustomChannelIDs(t *testing.T) {
 	}
 }
 
-func TestLookupByChatIDLegacySingleGatewayFallback(t *testing.T) {
-	// 单 gateway、channel 空：任何 chatId 都应路由到它（legacy 兼容）
+func TestLookupByChatIDRequiresExplicitMatch(t *testing.T) {
 	r := &Registry{
 		entries:         map[string]*Entry{},
 		byChannel:       map[string]string{},
@@ -87,9 +86,8 @@ func TestLookupByChatIDLegacySingleGatewayFallback(t *testing.T) {
 	r.entries["default"] = &Entry{ID: "default", Channel: ""}
 
 	for _, chatID := range []string{"wecom#x#y#z", "feishu#x#y#z", "anything", ""} {
-		e, ok := r.LookupByChatID(chatID)
-		if !ok || e.ID != "default" {
-			t.Errorf("legacy fallback failed for chatId=%q: ok=%v entry=%+v", chatID, ok, e)
+		if e, ok := r.LookupByChatID(chatID); ok {
+			t.Errorf("unexpected gateway match for chatId=%q: entry=%+v", chatID, e)
 		}
 	}
 }

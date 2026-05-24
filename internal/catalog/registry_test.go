@@ -292,7 +292,7 @@ func TestLoadAgentsDoesNotExposeSandboxInContextTagsMeta(t *testing.T) {
 			"contextTags:\n"+
 			"  - sandbox\n"+
 			"  - memory\n"+
-			"sandboxConfig:\n"+
+			"runtimeConfig:\n"+
 			"  environmentId: shell\n",
 	), 0o644); err != nil {
 		t.Fatalf("write agent file: %v", err)

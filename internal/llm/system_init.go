@@ -282,7 +282,7 @@ func cachedSystemMessageToOpenAI(raw map[string]any) (openAIMessage, bool) {
 }
 
 func resolveCachedSystemInit(session QuerySession, cacheKey string) (openAIMessage, []openAIToolSpec, bool) {
-	if session.SystemInitLegacy || len(session.SystemInitCache) == 0 {
+	if len(session.SystemInitCache) == 0 {
 		return openAIMessage{}, nil, false
 	}
 	snapshot, ok := session.SystemInitCache[cacheKey]

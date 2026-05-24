@@ -243,19 +243,7 @@ func (s *ArchiveStore) LoadArchived(chatID string) (*ArchivedChat, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(lines) == 0 {
-		lines, err = readJSONLinesContent(archived.EventsContent)
-		if err != nil {
-			return nil, err
-		}
-	}
-	rawMessages, err := readJSONLinesContent(archived.RawMessagesContent)
-	if err != nil {
-		return nil, err
-	}
-	if len(rawMessages) == 0 {
-		rawMessages = rawMessagesFromJSONLLines(lines)
-	}
+	rawMessages := rawMessagesFromJSONLLines(lines)
 	summary := Summary{
 		ChatID:         archived.Summary.ChatID,
 		ChatName:       archived.Summary.ChatName,
@@ -267,11 +255,7 @@ func (s *ArchiveStore) LoadArchived(chatID string) (*ArchivedChat, error) {
 		LastRunContent: archived.Summary.LastRunContent,
 		Usage:          archived.Summary.Usage,
 	}
-	if isNewFormat(lines) {
-		archived.Detail, err = parseChatNewFormat(summary, lines, rawMessages)
-	} else {
-		archived.Detail, err = parseChatLegacyFormat(summary, lines, rawMessages)
-	}
+	archived.Detail, err = parseChatNewFormat(summary, lines, rawMessages)
 	if err != nil {
 		return nil, err
 	}

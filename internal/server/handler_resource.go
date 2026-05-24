@@ -281,7 +281,7 @@ func countExistingRootUploads(chatDir string) (int, error) {
 
 func isUploadMetadataFile(name string) bool {
 	switch name {
-	case uploadManifestName, "events.jsonl", "raw_messages.jsonl":
+	case uploadManifestName:
 		return true
 	default:
 		return false

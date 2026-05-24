@@ -31,11 +31,6 @@ func (s *Server) prepareSystemInitCache(req api.QueryRequest, session *contracts
 			return nil, err
 		}
 	}
-	if !created && len(systemInits) == 0 {
-		session.SystemInitLegacy = true
-		return nil, nil
-	}
-
 	cache := make(map[string]contracts.SystemInitSnapshot, len(profiles))
 	pendingSystems := make([]chat.QueryLineSystemInit, 0, len(profiles))
 	for _, profile := range profiles {
