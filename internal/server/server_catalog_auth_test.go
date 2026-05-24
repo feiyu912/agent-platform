@@ -285,14 +285,11 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 	if coder.Mode != catalog.AgentModeCoder || coder.WorkspaceDir == "" {
 		t.Fatalf("coder summary = %#v", coder)
 	}
-	if coder.Kanban["concurrency"] != float64(2) {
-		t.Fatalf("coder kanban = %#v", coder.Kanban)
-	}
 	if len(coder.Chats) != 1 || coder.Chats[0].ChatID != "chat-coder" {
 		t.Fatalf("coder chats = %#v", coder.Chats)
 	}
-	if strings.Contains(rec.Body.String(), "should stay out") || strings.Contains(rec.Body.String(), `"description"`) || strings.Contains(rec.Body.String(), `"role"`) {
-		t.Fatalf("agents response should omit description/role, got %s", rec.Body.String())
+	if strings.Contains(rec.Body.String(), "should stay out") || strings.Contains(rec.Body.String(), `"description"`) || strings.Contains(rec.Body.String(), `"role"`) || strings.Contains(rec.Body.String(), `"visibility"`) || strings.Contains(rec.Body.String(), `"kanban"`) {
+		t.Fatalf("agents response should omit backend fields, got %s", rec.Body.String())
 	}
 
 	rec = httptest.NewRecorder()

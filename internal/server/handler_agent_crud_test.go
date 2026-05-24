@@ -110,6 +110,57 @@ func TestAgentProxyCRUDAllowsProxyConfigWithoutModelConfig(t *testing.T) {
 	}
 }
 
+func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
+	fixture := newTestFixture(t)
+	workspaceDir := t.TempDir()
+
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "coder-project",
+		"definition": map[string]any{
+			"key":  "coder-project",
+			"name": "coder-project",
+			"mode": "CODER",
+			"workspace": map[string]any{
+				"root": workspaceDir,
+			},
+			"runtimeConfig": map[string]any{
+				"workspaceRoot": workspaceDir,
+			},
+			"visibility": map[string]any{
+				"scopes": []any{"nav", "copilot"},
+			},
+		},
+	})
+	if created.Key != "coder-project" || created.Mode != "CODER" {
+		t.Fatalf("unexpected coder create response %#v", created)
+	}
+
+	var openedPath string
+	previousOpen := openWorkspacePath
+	openWorkspacePath = func(path string) error {
+		openedPath = path
+		return nil
+	}
+	t.Cleanup(func() { openWorkspacePath = previousOpen })
+
+	opened := postAgentJSON[api.OpenAgentWorkspaceResponse](t, fixture.server, "/api/agent/open-workspace", map[string]any{
+		"agentKey": "coder-project",
+	})
+	if !opened.Opened || opened.WorkspaceDir != workspaceDir || openedPath != workspaceDir {
+		t.Fatalf("unexpected open response=%#v openedPath=%q", opened, openedPath)
+	}
+}
+
+func TestAgentOpenWorkspaceRejectsUnknownWorkspace(t *testing.T) {
+	fixture := newTestFixture(t)
+	rec := httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"workspaceDir":"/tmp/not-an-agent-workspace"}`)
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/agent/open-workspace", body))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestAgentEditorOptionsHTTP(t *testing.T) {
 	fixture := newTestFixture(t)
 

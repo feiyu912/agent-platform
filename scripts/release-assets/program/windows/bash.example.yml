@@ -1,6 +1,5 @@
-# Windows host shell preset. The historical tool name remains `bash`, but host
-# commands run through Windows PowerShell by default. Path policy lives in
-# configs/access-policy.yml.
+# Windows host shell config. Path policy: configs/access-policy.yml.
+# The historical tool name remains `bash`; commands run through PowerShell.
 working-directory: .
 allowed-commands: '*'
 shell-features-enabled: true

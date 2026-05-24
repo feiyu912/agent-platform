@@ -1,51 +1,41 @@
-channels:
-  personal-bridge:
-    name: 个人企业微信 Bridge
-    type: bridge
-    default-agent: customer-service
-    agents: "*"
-    gateway:
-      url: ${PERSONAL_BRIDGE_WS_URL}
-      jwt-token: ${PERSONAL_BRIDGE_JWT_TOKEN}
-      push-artifact: true
+# channels:
+#   personal-bridge:
+#     name: 个人企业微信 Bridge
+#     type: bridge
+#     default-agent: customer-service
+#     agents: "*"
+#     gateway:
+#       url: ${PERSONAL_BRIDGE_WS_URL}
+#       jwt-token: ${PERSONAL_BRIDGE_JWT_TOKEN}
+#       push-artifact: true
 
-#  weixin:
-#    name: 微信
-#    type: bridge
-#    default-agent: assistant
-#    agents: "*"
-#    gateway:
-#      url: ${WEIXIN_BRIDGE_WS_URL}
-#      jwt-token: ${WEIXIN_BRIDGE_JWT_TOKEN}
-#      push-artifact: false
+#   weixin:
+#     name: 微信
+#     type: bridge
+#     default-agent: assistant
+#     agents: "*"
+#     gateway:
+#       url: ${WEIXIN_BRIDGE_WS_URL}
+#       jwt-token: ${WEIXIN_BRIDGE_JWT_TOKEN}
+#       push-artifact: false
 
-#  company-gateway:
-#    name: 公司内网 Gateway
-#    type: bridge
-#    default-agent: customer-service
-#    agents: "*"
-#    gateway:
-#      url: ${COMPANY_GATEWAY_WS_URL}
-#      push-artifact: true
-#      jwt-token: ${COMPANY_GATEWAY_JWT_TOKEN}
+#   company-gateway:
+#     name: 公司内网 Gateway
+#     type: bridge
+#     default-agent: customer-service
+#     agents: "*"
+#     gateway:
+#       url: ${COMPANY_GATEWAY_WS_URL}
+#       push-artifact: true
+#       jwt-token: ${COMPANY_GATEWAY_JWT_TOKEN}
 
-  common-gateway:
-    name: WebClient
-    type: gateway
-    default-agent: ""
-    agents: "*"
-    gateway:
-      url: ${COMMON_GATEWAY_WS_URL}
-      push-artifact: true
-      jwt-token: ${COMMON_GATEWAY_JWT_TOKEN}
-
-#  wecom:
-#    name: 微信
-#    type: bridge
-#    default-agent: customer-service
-#    agents: "*"
-#    gateway:
-#      url: ${WECOM_BRIDGE_WS_URL}
-#      auth-mode: ticket
-#      push-artifact: true
-#      jwt-token: ${WECOM_BRIDGE_JWT_TOKEN}
+#   wecom:
+#     name: 微信
+#     type: bridge
+#     default-agent: customer-service
+#     agents: "*"
+#     gateway:
+#       url: ${WECOM_BRIDGE_WS_URL}
+#       auth-mode: ticket
+#       push-artifact: true
+#       jwt-token: ${WECOM_BRIDGE_JWT_TOKEN}

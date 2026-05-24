@@ -1,37 +1,46 @@
-# Host shell 默认预设：Unix/macOS 使用 bash -lc；Windows 产物会替换为 PowerShell 预设。
-# 目录权限统一放在 configs/access-policy.yml；这里仅保留 shell / 命令 / 超时配置。
-# Default host shell preset: Unix/macOS use bash -lc; Windows bundles replace this with a PowerShell preset.
-# Path policy lives in configs/access-policy.yml.
-working-directory: .
+# Host shell config. Path policy: configs/access-policy.yml.
+#
+# Advanced fields:
+# - working-directory: default cwd when callers do not pass cwd. This is not a path permission rule.
+# - shell-features-enabled: true allows shell syntax such as &&, pipes, and redirects; false only allows simple allowlisted commands.
+# - shell-executable/shell-args: host shell override. Unix/macOS default is bash -lc "{{command}}"; Windows default is PowerShell.
+
+# Default preset: allow common developer commands.
 allowed-commands: ls,pwd,cat,head,tail,top,free,df,git,rg,find,echo,printf,sed,awk,grep,wc,sort,uniq,tr,cut,xargs,cd,stat,file,du,test,which,mkdir,touch,cp,mv,rm,ln,chmod,env,date,bash,sh,make,go,npm,yarn,pnpm,node,python,python3,pip,curl,wget
-shell-features-enabled: true
-shell-executable: bash
-shell-args:
-  - -lc
-  - "{{command}}"
 shell-timeout-ms: 30000
 max-command-chars: 16000
 
-# Bash 收紧预设：如需回到 strict mode，可保留完整命令白名单但关闭 shell features。
-# Strict-mode preset: keep a command allowlist but disable shell features when operators need tighter control.
-# working-directory: .
+# Strict preset: keep common commands but disable shell syntax.
 # allowed-commands: ls,pwd,cat,head,tail,top,free,df,git,rg,find,echo,printf,sed,awk,grep,wc,sort,uniq,tr,cut,xargs,cd,stat,file,du,test,which,mkdir,touch,cp,mv,rm,ln,chmod,env,date,bash,sh,make,go,npm,yarn,pnpm,node,python,python3,pip,curl,wget
 # shell-features-enabled: false
-# shell-executable: bash
-# shell-args:
-#   - -lc
-#   - "{{command}}"
 # shell-timeout-ms: 20000
 # max-command-chars: 24000
 
-# Bash 命令全开预设：只放开命令白名单；路径是否全开由请求 accessLevel=full_access 或 access-policy 配置决定。
-# Command-open preset: this only opens the command allowlist; paths are controlled by request accessLevel or access-policy config.
-# working-directory: .
+# Command-open preset: only opens the command allowlist. Paths stay in access-policy.yml.
 # allowed-commands: '*'
 # shell-features-enabled: true
+# shell-timeout-ms: 30000
+# max-command-chars: 32000
+
+# Unix/macOS shell override example.
 # shell-executable: bash
 # shell-args:
 #   - -lc
 #   - "{{command}}"
-# shell-timeout-ms: 30000
-# max-command-chars: 32000
+
+# Windows PowerShell override example.
+# shell-executable: powershell.exe
+# shell-args:
+#   - -NoProfile
+#   - -ExecutionPolicy
+#   - Bypass
+#   - -Command
+#   - "{{command}}"
+
+# Windows cmd.exe override example.
+# shell-executable: cmd.exe
+# shell-args:
+#   - /d
+#   - /s
+#   - /c
+#   - "{{command}}"

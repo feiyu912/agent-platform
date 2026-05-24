@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -128,6 +132,16 @@ func (s *Server) handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 	s.writeAgentHTTPResponse(w, response, err)
 }
 
+func (s *Server) handleAgentOpenWorkspace(w http.ResponseWriter, r *http.Request) {
+	var req api.OpenAgentWorkspaceRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid payload"))
+		return
+	}
+	response, err := s.openAgentWorkspace(req)
+	s.writeAgentHTTPResponse(w, response, err)
+}
+
 func (s *Server) handleAgentEditorOptions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, api.Success(s.buildAgentEditorOptions()))
 }
@@ -205,6 +219,46 @@ func (s *Server) deleteAgent(ctx context.Context, req api.DeleteAgentRequest) (m
 		}
 	}
 	return map[string]any{"key": key, "deleted": true}, nil
+}
+
+func (s *Server) openAgentWorkspace(req api.OpenAgentWorkspaceRequest) (api.OpenAgentWorkspaceResponse, error) {
+	agentKey := firstNonBlank(req.AgentKey, req.Key)
+	workspaceDir, err := s.resolveOpenWorkspacePath(agentKey, req.WorkspaceDir)
+	if err != nil {
+		return api.OpenAgentWorkspaceResponse{}, err
+	}
+	if err := openWorkspacePath(workspaceDir); err != nil {
+		return api.OpenAgentWorkspaceResponse{}, newAgentStatusError(http.StatusInternalServerError, "open_failed", err.Error())
+	}
+	return api.OpenAgentWorkspaceResponse{
+		AgentKey:     agentKey,
+		WorkspaceDir: workspaceDir,
+		Opened:       true,
+	}, nil
+}
+
+func (s *Server) resolveOpenWorkspacePath(agentKey string, requestedWorkspaceDir string) (string, error) {
+	if s.deps.Registry == nil {
+		return "", newAgentStatusError(http.StatusServiceUnavailable, "unavailable", "agent registry is not configured")
+	}
+	agentKey = strings.TrimSpace(agentKey)
+	requestedWorkspaceDir = strings.TrimSpace(requestedWorkspaceDir)
+	if agentKey == "" && requestedWorkspaceDir == "" {
+		return "", newAgentStatusError(http.StatusBadRequest, "invalid_request", "agentKey or workspaceDir is required")
+	}
+	if agentKey != "" {
+		def, ok := s.deps.Registry.AgentDefinition(agentKey)
+		if !ok {
+			return "", newAgentStatusError(http.StatusNotFound, "not_found", "agent not found")
+		}
+		return validatedWorkspaceDir(def.Workspace.Root)
+	}
+	for _, item := range s.deps.Registry.Agents("all") {
+		if samePath(item.WorkspaceDir, requestedWorkspaceDir) {
+			return validatedWorkspaceDir(item.WorkspaceDir)
+		}
+	}
+	return "", newAgentStatusError(http.StatusForbidden, "forbidden", "workspaceDir must match a registered agent workspace")
 }
 
 func (s *Server) buildAgentEditorOptions() api.AgentEditorOptionsResponse {
@@ -312,6 +366,52 @@ func mapAgentEditError(err error) error {
 	default:
 		return newAgentStatusError(http.StatusBadRequest, "invalid_request", message)
 	}
+}
+
+var openWorkspacePath = defaultOpenWorkspacePath
+
+func validatedWorkspaceDir(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", newAgentStatusError(http.StatusBadRequest, "invalid_request", "agent workspace is empty")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", newAgentStatusError(http.StatusBadRequest, "invalid_request", err.Error())
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", newAgentStatusError(http.StatusNotFound, "not_found", "workspace directory not found")
+		}
+		return "", newAgentStatusError(http.StatusBadRequest, "invalid_request", err.Error())
+	}
+	if !info.IsDir() {
+		return "", newAgentStatusError(http.StatusBadRequest, "invalid_request", "workspace path is not a directory")
+	}
+	return abs, nil
+}
+
+func samePath(left string, right string) bool {
+	leftAbs, leftErr := filepath.Abs(strings.TrimSpace(left))
+	rightAbs, rightErr := filepath.Abs(strings.TrimSpace(right))
+	if leftErr != nil || rightErr != nil {
+		return false
+	}
+	return filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
+}
+
+func defaultOpenWorkspacePath(path string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("explorer", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	return cmd.Start()
 }
 
 func (s *Server) writeAgentHTTPResponse(w http.ResponseWriter, response any, err error) {

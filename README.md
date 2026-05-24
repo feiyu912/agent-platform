@@ -237,11 +237,11 @@ docker compose up --build
 - 容器内 runtime 根目录固定为 `/opt/runtime`，应用通过 `RUNTIME_DIR=/opt/runtime` 解析子目录
 - `./configs` 只读挂载到 `/opt/configs`
 
-Container Hub 默认基础挂载当前固定为 7 个：
+Container Hub 默认基础挂载当前最多 7 个：
 
 - `/workspace` -> `CHATS_DIR/<chatId>`（`rw`）
 - `/root` -> `ROOT_DIR`（`rw`）
-- `/skills` -> `AGENTS_DIR/<agentKey>/skills`（`run/agent`）或 `SKILLS_MARKET_DIR`（`global`），`ro`
+- `/skills` -> `AGENTS_DIR/<agentKey>/skills`（仅 `run/agent`，`global` 默认不挂载），`ro`
 - `/pan` -> `PAN_DIR`（`rw`）
 - `/agent` -> `AGENTS_DIR/<agentKey>`（`ro`，必挂载；目录缺失会 fail-fast）
 - `/owner` -> `OWNER_DIR`（`ro`，目录缺失时自动创建）
@@ -249,9 +249,11 @@ Container Hub 默认基础挂载当前固定为 7 个：
 
 `runtimeConfig.extraMounts` 会真实影响 Container Hub session mounts：
 
-- `platform + mode`：恢复按需平台挂载，或覆盖默认 `/agent`、`/owner`、`/memory` 模式
+- `platform + mode`：恢复按需平台挂载，或覆盖默认 `/agent`、`/owner`、`/memory` 模式；`platform: skills-market` 会显式挂载 `/skills-market`
 - `destination + mode`：覆盖默认基础挂载模式
 - `source + destination + mode`：新增自定义挂载，不能拿来覆盖默认基础挂载路径
+
+`configs/container-hub.example.yml` 只默认展开 `base-url`；其它超时、默认 environment 和 sandbox level 都已有代码默认值，模板中以注释形式保留，按需取消注释覆盖。`auth-token` 未在模板中展示，但代码仍支持 `CONTAINER_HUB_AUTH_TOKEN` / `auth-token`，用于对接 `agent-container-hub` 的 `AUTH_TOKEN` Bearer 鉴权。
 
 `context tags` 不是全局默认集合，而是每个 agent 从 `contextConfig.tags` 或 `contextTags` 读取。当前支持/归一化后的标签有 `system`、`context`、`owner`、`auth`、`all-agents`、`memory`；其中 `agent_identity`、`run_session`、`scene`、`references`、`execution_policy`、`skills` 会归一化为 `context`，`memory_context` 会归一化为 `memory`。
 

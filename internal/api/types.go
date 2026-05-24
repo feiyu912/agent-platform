@@ -296,8 +296,6 @@ type AgentSummary struct {
 	Icon         any                   `json:"icon,omitempty"`
 	Mode         string                `json:"mode,omitempty"`
 	WorkspaceDir string                `json:"workspaceDir,omitempty"`
-	Visibility   map[string]any        `json:"visibility,omitempty"`
-	Kanban       map[string]any        `json:"kanban,omitempty"`
 	Description  string                `json:"-"`
 	Role         string                `json:"-"`
 	Type         string                `json:"type,omitempty"`
@@ -355,6 +353,18 @@ type UpdateAgentRequest struct {
 type DeleteAgentRequest struct {
 	Key      string `json:"key"`
 	AgentKey string `json:"agentKey,omitempty"`
+}
+
+type OpenAgentWorkspaceRequest struct {
+	Key          string `json:"key,omitempty"`
+	AgentKey     string `json:"agentKey,omitempty"`
+	WorkspaceDir string `json:"workspaceDir,omitempty"`
+}
+
+type OpenAgentWorkspaceResponse struct {
+	AgentKey     string `json:"agentKey,omitempty"`
+	WorkspaceDir string `json:"workspaceDir"`
+	Opened       bool   `json:"opened"`
 }
 
 type AgentEditorOptionsResponse struct {

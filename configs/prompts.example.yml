@@ -13,12 +13,12 @@ skill:
     5. Multi-skill coordination: When a task requires multiple skills, invoke them in dependency order - complete prerequisites before dependents - then synthesize a unified response.
     6. Graceful fallback: If no skill matches the request, respond using your general capabilities. Do not force a skill invocation when none is appropriate.
   catalog-header: "Available skills (catalog summary, use on demand, do not fabricate non-existent skills or scripts):"
-  disclosure-header: "以下是你刚刚调用到的 skill 完整说明（仅本轮补充，不要忽略）:"
+  disclosure-header: "Below are the full instructions for the skill you just invoked (supplemental for this turn only; do not ignore):"
   instructions-label: "instructions"
 
 tool-appendix:
-  tool-description-title: "工具说明:"
-  after-call-hint-title: "工具调用后推荐指令:"
+  tool-description-title: "Tool description:"
+  after-call-hint-title: "Recommended instructions after tool call:"
 
 plan-execute:
   task-execution-prompt-template: |

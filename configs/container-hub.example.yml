@@ -1,23 +1,22 @@
 base-url: ${CONTAINER_HUB_BASE_URL:http://host.docker.internal:11960}
-auth-token:
-default-environment-id:
-request-timeout-ms: 300000
-# 默认沙箱级别: run / agent / global
-default-sandbox-level: run
-# agent 级别会话空闲超时（ms），超时后自动驱逐
-agent-idle-timeout-ms: 1800000
-# run 级别会话异步销毁延迟（ms）
-destroy-queue-delay-ms: 5000
-# 目录挂载统一来自 runtime 全局目录配置：
-# - /workspace -> CHATS_DIR        (default: rw)
-# - /root      -> ROOT_DIR         (default: rw)
-# - /skills    -> AGENTS_DIR/<agentKey>/skills for RUN/AGENT, SKILLS_MARKET_DIR for GLOBAL (default: ro)
-# - /pan       -> PAN_DIR          (default: rw)
-# - /agent     -> AGENTS_DIR/<agentKey> (default: ro, required; missing directory fails fast)
-# - /owner     -> OWNER_DIR         (default: ro, auto-created when missing)
-# - /memory    -> MEMORY_DIR/<agentKey> (default: ro, auto-created when missing)
-# runtimeConfig.extraMounts 会真实影响 Container Hub session mounts：
-# - platform + mode               -> 恢复按需平台挂载，或覆盖 /agent、/owner、/memory 默认模式
-# - destination + mode            -> 仅覆盖默认基础挂载模式
-# - source + destination + mode   -> 新增自定义挂载
-# 所有 extraMounts 项都必须显式声明 mode: ro|rw
+
+# 可选覆盖；不配置时使用代码默认值。
+# default-environment-id:
+# request-timeout-ms: 300000
+# default-sandbox-level: run
+# agent-idle-timeout-ms: 600000
+# destroy-queue-delay-ms: 5000
+
+# 默认挂载来自 runtime 全局目录配置：
+# /workspace -> CHATS_DIR/<chatId> (rw)
+# /root      -> ROOT_DIR (rw)
+# /skills    -> AGENTS_DIR/<agentKey>/skills (ro, only run/agent; global skips it)
+# /pan       -> PAN_DIR (rw)
+# /agent     -> AGENTS_DIR/<agentKey> (ro, required)
+# /owner     -> OWNER_DIR (ro)
+# /memory    -> MEMORY_DIR/<agentKey> (ro)
+#
+# runtimeConfig.extraMounts 支持：
+# platform + mode             -> 按需平台挂载；skills-market 显式挂到 /skills-market
+# destination + mode          -> 覆盖默认挂载模式
+# source + destination + mode -> 新增自定义挂载

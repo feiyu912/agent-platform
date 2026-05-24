@@ -257,22 +257,15 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 		if !AgentVisibleForScope(def, scope) {
 			continue
 		}
-		visibilityScopes := EffectiveAgentVisibilityScopes(def)
 		summary := api.AgentSummary{
 			Key:          def.Key,
 			Name:         def.Name,
 			Icon:         def.Icon,
 			Mode:         def.Mode,
 			WorkspaceDir: def.Workspace.Root,
-			Visibility: map[string]any{
-				"scopes": visibilityScopes,
-			},
-			Kanban: map[string]any{
-				"concurrency": EffectiveAgentKanbanConcurrency(def),
-			},
-			Description: def.Description,
-			Role:        def.Role,
-			Type:        def.Type,
+			Description:  def.Description,
+			Role:         def.Role,
+			Type:         def.Type,
 			Meta: map[string]any{
 				"model":  def.ModelKey,
 				"mode":   def.Mode,
@@ -341,7 +334,7 @@ func AgentVisibleForScope(def AgentDefinition, scope string) bool {
 	if scope != "" {
 		return containsString(scopes, scope)
 	}
-	return containsString(scopes, "nav") || containsString(scopes, "copilot")
+	return containsString(scopes, "nav")
 }
 
 func AgentInvocable(def AgentDefinition) bool {

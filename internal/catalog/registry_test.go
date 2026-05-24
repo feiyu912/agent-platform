@@ -737,18 +737,12 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 	if items[0].Mode != "REACT" || items[0].WorkspaceDir != workspace {
 		t.Fatalf("summary mode/workspace = %#v", items[0])
 	}
-	if !reflect.DeepEqual(items[0].Visibility["scopes"], []string{"nav", "copilot"}) {
-		t.Fatalf("visibility = %#v", items[0].Visibility)
-	}
-	if items[0].Kanban["concurrency"] != 2 {
-		t.Fatalf("kanban = %#v", items[0].Kanban)
-	}
 	data, err := json.Marshal(items[0])
 	if err != nil {
 		t.Fatalf("marshal agent summary: %v", err)
 	}
-	if strings.Contains(string(data), "description") || strings.Contains(string(data), "role") {
-		t.Fatalf("summary json should omit description/role, got %s", data)
+	if strings.Contains(string(data), "description") || strings.Contains(string(data), "role") || strings.Contains(string(data), "visibility") || strings.Contains(string(data), "kanban") {
+		t.Fatalf("summary json should omit backend fields, got %s", data)
 	}
 
 	invokeItems := registry.Agents("invoke")
