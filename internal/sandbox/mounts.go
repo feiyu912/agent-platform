@@ -298,7 +298,7 @@ func validateMountDirectory(mountName string, source string, destination string)
 
 func (r *ContainerHubMountResolver) skillsSource(agentKey string, level string) (string, error) {
 	if strings.EqualFold(level, "global") {
-		return hostPath("SKILLS_MARKET_DIR", r.paths.SkillsMarketDir)
+		return "", nil
 	}
 	agentDir, err := hostPath("AGENTS_DIR", r.paths.AgentsDir)
 	if err != nil {
@@ -306,11 +306,12 @@ func (r *ContainerHubMountResolver) skillsSource(agentKey string, level string) 
 	}
 	if agentKey != "" {
 		localSkills := filepath.Join(agentDir, agentKey, "skills")
-		if err := os.MkdirAll(localSkills, 0o755); err == nil {
-			return localSkills, nil
+		if err := os.MkdirAll(localSkills, 0o755); err != nil {
+			return "", fmt.Errorf("container-hub mount validation failed for skills-dir: %w", err)
 		}
+		return localSkills, nil
 	}
-	return hostPath("SKILLS_MARKET_DIR", r.paths.SkillsMarketDir)
+	return "", nil
 }
 
 func (r *ContainerHubMountResolver) agentSource(agentKey string) (string, error) {

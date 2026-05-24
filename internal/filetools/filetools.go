@@ -143,7 +143,6 @@ func ConfigWithSessionReadRoots(cfg config.FileToolsConfig, mode AccessMode, ses
 	for _, root := range []string{
 		local.AgentDir,
 		local.SkillsDir,
-		local.SkillsMarketDir,
 	} {
 		root = strings.TrimSpace(root)
 		if root == "" {

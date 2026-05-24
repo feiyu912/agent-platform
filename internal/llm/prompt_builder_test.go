@@ -438,6 +438,62 @@ func TestBuildSystemEnvironmentSectionUsesSandboxPathsWhenSandboxEnabled(t *test
 	assertLastField(t, section, "pan_dir:")
 }
 
+func TestBuildSystemEnvironmentSectionOmitsSkillsMarketByDefault(t *testing.T) {
+	localSection := buildSystemEnvironmentSection(QuerySession{
+		RuntimeContext: RuntimeRequestContext{
+			LocalPaths: LocalPaths{
+				WorkingDirectory: "/workspace/local",
+				AgentDir:         "/agents/demo",
+				SkillsDir:        "/agents/demo/skills",
+			},
+		},
+	})
+	if strings.Contains(localSection, "skills_market_dir:") {
+		t.Fatalf("expected local system environment to omit skills_market_dir, got %q", localSection)
+	}
+
+	sandboxSection := buildSystemEnvironmentSection(QuerySession{
+		AgentHasRuntimeSandbox: true,
+		RuntimeContext: RuntimeRequestContext{
+			SandboxPaths: SandboxPaths{
+				WorkspaceDir: "/workspace",
+				AgentDir:     "/agent",
+				SkillsDir:    "/skills",
+			},
+		},
+	})
+	if strings.Contains(sandboxSection, "skills_market_dir:") {
+		t.Fatalf("expected sandbox system environment to omit skills_market_dir, got %q", sandboxSection)
+	}
+}
+
+func TestBuildSystemEnvironmentSectionIncludesExplicitSkillsMarket(t *testing.T) {
+	localSection := buildSystemEnvironmentSection(QuerySession{
+		RuntimeContext: RuntimeRequestContext{
+			LocalPaths: LocalPaths{
+				WorkingDirectory: "/workspace/local",
+				SkillsMarketDir:  "/runtime/skills-market",
+			},
+		},
+	})
+	if !strings.Contains(localSection, "skills_market_dir: /runtime/skills-market") {
+		t.Fatalf("expected explicit local skills_market_dir, got %q", localSection)
+	}
+
+	sandboxSection := buildSystemEnvironmentSection(QuerySession{
+		AgentHasRuntimeSandbox: true,
+		RuntimeContext: RuntimeRequestContext{
+			SandboxPaths: SandboxPaths{
+				WorkspaceDir:    "/workspace",
+				SkillsMarketDir: "/skills-market",
+			},
+		},
+	})
+	if !strings.Contains(sandboxSection, "skills_market_dir: /skills-market") {
+		t.Fatalf("expected explicit sandbox skills_market_dir, got %q", sandboxSection)
+	}
+}
+
 func TestBuildSystemPromptSeparatesSystemEnvironmentAndSessionContext(t *testing.T) {
 	prompt := buildSystemPrompt(QuerySession{
 		ChatID:      "chat-1",

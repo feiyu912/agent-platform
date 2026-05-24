@@ -119,6 +119,7 @@ func TestConfigWithSessionReadRootsOnlyExtendsReadAccess(t *testing.T) {
 	root := t.TempDir()
 	agentDir := filepath.Join(t.TempDir(), "agent-a")
 	skillsDir := filepath.Join(agentDir, "skills")
+	skillsMarketDir := filepath.Join(t.TempDir(), "skills-market")
 	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
 		t.Fatalf("mkdir skills: %v", err)
 	}
@@ -129,14 +130,20 @@ func TestConfigWithSessionReadRootsOnlyExtendsReadAccess(t *testing.T) {
 	}
 	session := contracts.QuerySession{RuntimeContext: contracts.RuntimeRequestContext{
 		LocalPaths: contracts.LocalPaths{
-			AgentDir:  agentDir,
-			SkillsDir: skillsDir,
+			AgentDir:        agentDir,
+			SkillsDir:       skillsDir,
+			SkillsMarketDir: skillsMarketDir,
 		},
 	}}
 
 	readCfg := ConfigWithSessionReadRoots(cfg, ReadAccess, session)
 	if len(readCfg.AllowedReadPaths) != 3 {
 		t.Fatalf("expected session read roots appended, got %#v", readCfg.AllowedReadPaths)
+	}
+	for _, root := range readCfg.AllowedReadPaths {
+		if root == filepath.Clean(skillsMarketDir) {
+			t.Fatalf("expected skills market dir to stay out of session read roots, got %#v", readCfg.AllowedReadPaths)
+		}
 	}
 	writeCfg := ConfigWithSessionReadRoots(cfg, WriteAccess, session)
 	if strings.Join(writeCfg.AllowedReadPaths, ",") != "." || strings.Join(writeCfg.AllowedWritePaths, ",") != "." {

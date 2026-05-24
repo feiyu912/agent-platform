@@ -67,6 +67,10 @@ type runtimeRequestContextInput struct {
 }
 
 func (s *Server) buildRuntimeRequestContext(input runtimeRequestContextInput) (contracts.RuntimeRequestContext, error) {
+	localPaths := resolveLocalPaths(s.deps.Config.Paths, input.chatID, input.definition.AgentDir, input.definition.Workspace.Root)
+	if promptContextHasPlatformMount(input.definition.Runtime["extraMounts"], "skills-market") {
+		localPaths.SkillsMarketDir = cleanOrEmpty(s.deps.Config.Paths.SkillsMarketDir)
+	}
 	context := contracts.RuntimeRequestContext{
 		AgentKey:     input.agentKey,
 		AgentType:    strings.TrimSpace(input.definition.Type),
@@ -76,7 +80,7 @@ func (s *Server) buildRuntimeRequestContext(input runtimeRequestContextInput) (c
 		LocalMode:    s.deps.Config.IsLocalMode(),
 		Scene:        input.scene,
 		References:   append([]api.Reference(nil), input.references...),
-		LocalPaths:   resolveLocalPaths(s.deps.Config.Paths, input.chatID, input.definition.AgentDir, input.definition.Workspace.Root),
+		LocalPaths:   localPaths,
 		SandboxPaths: resolveSandboxPaths(s.deps.Config, input.definition, input.chatID),
 		AgentDigests: buildAgentDigests(s.deps.Registry),
 	}
@@ -221,7 +225,6 @@ func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string,
 		MemoryDir:          cleanOrEmpty(paths.MemoryDir),
 		DataDir:            cleanOrEmpty(paths.ChatsDir),
 		SkillsDir:          agentSkillsDir,
-		SkillsMarketDir:    cleanOrEmpty(paths.SkillsMarketDir),
 		AutomationsDir:     cleanOrEmpty(paths.AutomationsDir),
 		OwnerDir:           cleanOrEmpty(paths.OwnerDir),
 		ModelsDir:          cleanOrEmpty(filepath.Join(paths.RegistriesDir, "models")),
@@ -278,11 +281,7 @@ func resolveContainerSandboxPaths(cfg config.Config, def catalog.AgentDefinition
 		level = "run"
 	}
 	hasAgentDir := def.AgentDir != ""
-	hasGlobalSkillsDir := strings.TrimSpace(cfg.Paths.SkillsMarketDir) != ""
-	hasSkillsDir := hasGlobalSkillsDir
-	if level != "global" && hasAgentDir {
-		hasSkillsDir = true
-	}
+	hasSkillsDir := level != "global" && hasAgentDir
 
 	var skillsMarketDir string
 	ownerDir := ifNonEmpty(cfg.Paths.OwnerDir, "/owner")
@@ -356,11 +355,7 @@ func resolveLocalSandboxPaths(cfg config.Config, def catalog.AgentDefinition, ch
 		level = "run"
 	}
 	hasAgentDir := strings.TrimSpace(def.AgentDir) != ""
-	hasGlobalSkillsDir := strings.TrimSpace(cfg.Paths.SkillsMarketDir) != ""
-	hasSkillsDir := hasGlobalSkillsDir
-	if level != "global" && hasAgentDir {
-		hasSkillsDir = true
-	}
+	hasSkillsDir := level != "global" && hasAgentDir
 
 	workspaceDir := resolveLocalWorkspaceDir(cfg.Paths, chatID)
 	paths := contracts.SandboxPaths{
@@ -629,7 +624,20 @@ func resolveLocalSkillsDir(hasSkillsDir bool, level string, agentDir string, ski
 	if level != "global" && strings.TrimSpace(agentDir) != "" {
 		return absOrEmpty(filepath.Join(agentDir, "skills"))
 	}
-	return absOrEmpty(skillsMarketDir)
+	return ""
+}
+
+func promptContextHasPlatformMount(extraMounts any, platform string) bool {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	if platform == "" {
+		return false
+	}
+	for _, mount := range promptContextSandboxMounts(extraMounts) {
+		if strings.EqualFold(strings.TrimSpace(anyString(mount["platform"])), platform) {
+			return true
+		}
+	}
+	return false
 }
 
 func ifNonEmpty(path string, target string) string {

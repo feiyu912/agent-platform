@@ -112,8 +112,8 @@ func TestResolveLocalPathsIncludesAgentAndRegistryPaths(t *testing.T) {
 	if paths.SkillsDir != filepath.Join(agentDir, "skills") {
 		t.Fatalf("skills dir = %q", paths.SkillsDir)
 	}
-	if paths.SkillsMarketDir != cfg.Paths.SkillsMarketDir {
-		t.Fatalf("skills market dir = %q", paths.SkillsMarketDir)
+	if paths.SkillsMarketDir != "" {
+		t.Fatalf("expected no default skills market dir, got %q", paths.SkillsMarketDir)
 	}
 	if paths.TeamsDir != cfg.Paths.TeamsDir {
 		t.Fatalf("teams dir = %q", paths.TeamsDir)
@@ -328,6 +328,49 @@ func TestBuildRuntimeContextKeepsLocalPathsWithoutSandboxConfigInContainerMode(t
 	}
 	if context.SandboxPaths.WorkspaceDir != "/workspace" {
 		t.Fatalf("sandbox workspace dir = %q", context.SandboxPaths.WorkspaceDir)
+	}
+	if context.LocalPaths.SkillsMarketDir != "" {
+		t.Fatalf("expected local skills market dir to be omitted by default, got %q", context.LocalPaths.SkillsMarketDir)
+	}
+}
+
+func TestBuildRuntimeContextIncludesSkillsMarketOnlyWithExplicitMount(t *testing.T) {
+	t.Parallel()
+
+	cfg := testPromptContextConfig(t)
+	cfg.ContainerHub.Enabled = true
+	cfg.ContainerHub.ResolvedEngine = "docker"
+	s := &Server{
+		deps: Dependencies{
+			Config:   cfg,
+			Registry: testCatalogRegistry{},
+		},
+	}
+
+	context, err := s.buildRuntimeRequestContext(runtimeRequestContextInput{
+		agentKey: "demo-agent",
+		teamID:   "team-1",
+		role:     "assistant",
+		chatID:   "chat-1",
+		chatName: "Chat 1",
+		definition: catalog.AgentDefinition{
+			Key:      "demo-agent",
+			AgentDir: filepath.Join(cfg.Paths.AgentsDir, "demo-agent"),
+			Runtime: map[string]any{
+				"extraMounts": []map[string]any{
+					{"platform": "skills-market", "mode": "ro"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildRuntimeRequestContext() error = %v", err)
+	}
+	if context.LocalPaths.SkillsMarketDir != cfg.Paths.SkillsMarketDir {
+		t.Fatalf("local skills market dir = %q", context.LocalPaths.SkillsMarketDir)
+	}
+	if context.SandboxPaths.SkillsMarketDir != "/skills-market" {
+		t.Fatalf("sandbox skills market dir = %q", context.SandboxPaths.SkillsMarketDir)
 	}
 }
 
@@ -637,7 +680,7 @@ func testPromptContextDefinition(paths config.PathsConfig) catalog.AgentDefiniti
 		Runtime: map[string]any{
 			"level": "run",
 			"extraMounts": []map[string]any{
-				{"platform": "skills-market"},
+				{"platform": "skills-market", "mode": "ro"},
 				{"platform": "agents"},
 				{"platform": "teams"},
 				{"platform": "automations"},
