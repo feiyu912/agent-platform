@@ -41,7 +41,7 @@ GET /ws -> request / response / stream / push / error frames
 | GET | `/api/skill-candidates` | query: `agentKey` | skill candidate 列表 |
 | GET | `/api/tools` | query: `kind` | tool 列表 |
 | GET | `/api/tool` | query: `toolName` | 单个 tool 详情 |
-| GET | `/api/model-options` | query: `agentKey` | CODER 聊天运行时可选模型与思考深度 |
+| GET | `/api/model-options` | 无 | 聊天运行时可选模型与思考深度 |
 
 ### Agent 编辑
 
@@ -236,7 +236,7 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 | `/api/agent/update` | agent 更新字段 | `response` |
 | `/api/agent/delete` | `agentKey` | `response` |
 | `/api/agent/editor-options` | 无 | `response` |
-| `/api/model-options` | `agentKey` | `response` |
+| `/api/model-options` | 无 | `response` |
 | `/api/teams` | 无 | `response` |
 | `/api/skills` | 无 | `response` |
 | `/api/tools` | `kind` | `response` |
