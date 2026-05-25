@@ -229,12 +229,9 @@ func (s *Server) loadArchiveDetail(ctx context.Context, chatID string, includeRa
 	if archived.Detail.Artifact != nil {
 		response.Artifact = archived.Detail.Artifact
 	}
-	if archived.Summary.Usage != nil && archived.Summary.Usage.TotalTokens > 0 {
-		response.Usage = &api.ChatUsageData{
-			PromptTokens:     archived.Summary.Usage.PromptTokens,
-			CompletionTokens: archived.Summary.Usage.CompletionTokens,
-			TotalTokens:      archived.Summary.Usage.TotalTokens,
-		}
+	response.Usage = mapUsageDataPtr(archived.Summary.Usage)
+	if usage := latestChatUsageFromEvents(archived.Detail.Events); usage != nil {
+		response.Usage = usage
 	}
 	return response, nil
 }
@@ -292,32 +289,23 @@ func mapArchivedSummary(item chat.ArchivedSummary) api.ArchivedSummaryResponse {
 		LastRunContent: item.LastRunContent,
 		HasAttachments: item.HasAttachments,
 	}
-	if item.Usage != nil && item.Usage.TotalTokens > 0 {
-		resp.Usage = &api.ChatUsageData{
-			PromptTokens:     item.Usage.PromptTokens,
-			CompletionTokens: item.Usage.CompletionTokens,
-			TotalTokens:      item.Usage.TotalTokens,
-		}
+	if usage := mapUsageDataPtr(item.Usage); usage != nil {
+		resp.Usage = usage
 	}
 	return resp
 }
 
 func mapRunSummary(run chat.RunSummary) api.RunSummary {
 	return api.RunSummary{
-		RunID:          run.RunID,
-		ChatID:         run.ChatID,
-		AgentKey:       run.AgentKey,
-		InitialMessage: run.InitialMessage,
-		AssistantText:  run.AssistantText,
-		FinishReason:   run.FinishReason,
-		StartedAt:      run.StartedAt,
-		CompletedAt:    run.CompletedAt,
-		Usage: api.ChatUsageData{
-			PromptTokens:           run.Usage.PromptTokens,
-			CompletionTokens:       run.Usage.CompletionTokens,
-			TotalTokens:            run.Usage.TotalTokens,
-			LlmChatCompletionCount: run.Usage.LlmChatCompletionCount,
-		},
+		RunID:           run.RunID,
+		ChatID:          run.ChatID,
+		AgentKey:        run.AgentKey,
+		InitialMessage:  run.InitialMessage,
+		AssistantText:   run.AssistantText,
+		FinishReason:    run.FinishReason,
+		StartedAt:       run.StartedAt,
+		CompletedAt:     run.CompletedAt,
+		Usage:           mapUsageData(run.Usage),
 		FeedbackType:    run.FeedbackType,
 		FeedbackComment: run.FeedbackComment,
 		FeedbackAt:      run.FeedbackAt,

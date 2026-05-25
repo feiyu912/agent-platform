@@ -57,9 +57,14 @@ func TestServerSharedHelpersUseCommonChatAndMemoryStores(t *testing.T) {
 		InitialMessage:  "hello",
 		UpdatedAtMillis: time.Now().UnixMilli(),
 		Usage: chat.UsageData{
-			PromptTokens:     3,
-			CompletionTokens: 5,
-			TotalTokens:      8,
+			PromptTokens:           3,
+			CompletionTokens:       5,
+			TotalTokens:            8,
+			CachedTokens:           2,
+			ReasoningTokens:        4,
+			PromptCacheHitTokens:   2,
+			PromptCacheMissTokens:  1,
+			LlmChatCompletionCount: 1,
 		},
 	}); err != nil {
 		t.Fatalf("persist run completion: %v", err)
@@ -75,6 +80,12 @@ func TestServerSharedHelpersUseCommonChatAndMemoryStores(t *testing.T) {
 	if summaries[0].LastRunID != "run-1" || summaries[0].Usage == nil || summaries[0].Usage.TotalTokens != 8 {
 		t.Fatalf("unexpected chat summary %#v", summaries[0])
 	}
+	if summaries[0].Usage.PromptTokensDetails == nil || summaries[0].Usage.PromptTokensDetails.CachedTokens != 2 ||
+		summaries[0].Usage.CompletionTokensDetails == nil || summaries[0].Usage.CompletionTokensDetails.ReasoningTokens != 4 ||
+		summaries[0].Usage.PromptCacheHitTokens != 2 || summaries[0].Usage.PromptCacheMissTokens != 1 ||
+		summaries[0].Usage.LlmChatCompletionCount != 1 {
+		t.Fatalf("expected detailed chat summary usage, got %#v", summaries[0].Usage)
+	}
 	if summaries[0].Read.IsRead {
 		t.Fatalf("expected completed chat to be unread, got %#v", summaries[0].Read)
 	}
@@ -85,6 +96,18 @@ func TestServerSharedHelpersUseCommonChatAndMemoryStores(t *testing.T) {
 	}
 	if detail.ChatID != "chat-1" || len(detail.Events) == 0 || len(detail.RawMessages) < 2 {
 		t.Fatalf("unexpected chat detail %#v", detail)
+	}
+	if detail.Usage == nil || detail.Usage.PromptTokensDetails == nil || detail.Usage.PromptTokensDetails.CachedTokens != 2 ||
+		detail.Usage.CompletionTokensDetails == nil || detail.Usage.CompletionTokensDetails.ReasoningTokens != 4 ||
+		detail.Usage.PromptCacheHitTokens != 2 || detail.Usage.PromptCacheMissTokens != 1 ||
+		detail.Usage.LlmChatCompletionCount != 1 {
+		t.Fatalf("expected detailed chat detail usage, got %#v", detail.Usage)
+	}
+	if len(detail.Runs) != 1 || detail.Runs[0].Usage.PromptTokensDetails == nil || detail.Runs[0].Usage.PromptTokensDetails.CachedTokens != 2 ||
+		detail.Runs[0].Usage.CompletionTokensDetails == nil || detail.Runs[0].Usage.CompletionTokensDetails.ReasoningTokens != 4 ||
+		detail.Runs[0].Usage.PromptCacheHitTokens != 2 || detail.Runs[0].Usage.PromptCacheMissTokens != 1 ||
+		detail.Runs[0].Usage.LlmChatCompletionCount != 1 {
+		t.Fatalf("expected detailed run summary usage, got %#v", detail.Runs)
 	}
 
 	rememberResp, err := server.executeRemember(api.RememberRequest{

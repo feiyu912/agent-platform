@@ -39,10 +39,16 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 	}
 
 	_, err := s.db.Exec(`UPDATE CHATS SET LAST_RUN_ID_=?, LAST_RUN_CONTENT_=?, UPDATED_AT_=?,
-		USAGE_PROMPT_TOKENS_=USAGE_PROMPT_TOKENS_+?, USAGE_COMPLETION_TOKENS_=USAGE_COMPLETION_TOKENS_+?, USAGE_TOTAL_TOKENS_=USAGE_TOTAL_TOKENS_+?
+		USAGE_PROMPT_TOKENS_=USAGE_PROMPT_TOKENS_+?, USAGE_COMPLETION_TOKENS_=USAGE_COMPLETION_TOKENS_+?, USAGE_TOTAL_TOKENS_=USAGE_TOTAL_TOKENS_+?,
+		USAGE_CACHED_TOKENS_=USAGE_CACHED_TOKENS_+?, USAGE_REASONING_TOKENS_=USAGE_REASONING_TOKENS_+?,
+		USAGE_PROMPT_CACHE_HIT_TOKENS_=USAGE_PROMPT_CACHE_HIT_TOKENS_+?, USAGE_PROMPT_CACHE_MISS_TOKENS_=USAGE_PROMPT_CACHE_MISS_TOKENS_+?,
+		USAGE_LLM_CHAT_COMPLETION_COUNT_=USAGE_LLM_CHAT_COMPLETION_COUNT_+?
 		WHERE CHAT_ID_=?`,
 		completion.RunID, assistantText, completion.UpdatedAtMillis,
 		completion.Usage.PromptTokens, completion.Usage.CompletionTokens, completion.Usage.TotalTokens,
+		completion.Usage.CachedTokens, completion.Usage.ReasoningTokens,
+		completion.Usage.PromptCacheHitTokens, completion.Usage.PromptCacheMissTokens,
+		completion.Usage.LlmChatCompletionCount,
 		completion.ChatID)
 	if err != nil {
 		return err
@@ -50,8 +56,9 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 	_, err = s.db.Exec(`INSERT INTO RUNS (
 			RUN_ID_, CHAT_ID_, AGENT_KEY_, INITIAL_MESSAGE_, ASSISTANT_TEXT_, FINISH_REASON_,
 			STARTED_AT_, COMPLETED_AT_,
-			USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, USAGE_CACHED_TOKENS_, USAGE_REASONING_TOKENS_,
+			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(RUN_ID_) DO UPDATE SET
 			CHAT_ID_=excluded.CHAT_ID_,
 			AGENT_KEY_=excluded.AGENT_KEY_,
@@ -62,10 +69,18 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 			COMPLETED_AT_=excluded.COMPLETED_AT_,
 			USAGE_PROMPT_TOKENS_=excluded.USAGE_PROMPT_TOKENS_,
 			USAGE_COMPLETION_TOKENS_=excluded.USAGE_COMPLETION_TOKENS_,
-			USAGE_TOTAL_TOKENS_=excluded.USAGE_TOTAL_TOKENS_`,
+			USAGE_TOTAL_TOKENS_=excluded.USAGE_TOTAL_TOKENS_,
+			USAGE_CACHED_TOKENS_=excluded.USAGE_CACHED_TOKENS_,
+			USAGE_REASONING_TOKENS_=excluded.USAGE_REASONING_TOKENS_,
+			USAGE_PROMPT_CACHE_HIT_TOKENS_=excluded.USAGE_PROMPT_CACHE_HIT_TOKENS_,
+			USAGE_PROMPT_CACHE_MISS_TOKENS_=excluded.USAGE_PROMPT_CACHE_MISS_TOKENS_,
+			USAGE_LLM_CHAT_COMPLETION_COUNT_=excluded.USAGE_LLM_CHAT_COMPLETION_COUNT_`,
 		completion.RunID, completion.ChatID, agentKey, initialMessage, assistantText, completion.FinishReason,
 		completion.StartedAtMillis, completion.UpdatedAtMillis,
-		completion.Usage.PromptTokens, completion.Usage.CompletionTokens, completion.Usage.TotalTokens)
+		completion.Usage.PromptTokens, completion.Usage.CompletionTokens, completion.Usage.TotalTokens,
+		completion.Usage.CachedTokens, completion.Usage.ReasoningTokens,
+		completion.Usage.PromptCacheHitTokens, completion.Usage.PromptCacheMissTokens,
+		completion.Usage.LlmChatCompletionCount)
 	return err
 }
 

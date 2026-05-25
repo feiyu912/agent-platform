@@ -41,12 +41,8 @@ func mapChatSummaries(items []chat.Summary) []api.ChatSummaryResponse {
 				CreatedAt:  item.PendingAwaiting.CreatedAt,
 			}
 		}
-		if item.Usage != nil && item.Usage.TotalTokens > 0 {
-			resp.Usage = &api.ChatUsageData{
-				PromptTokens:     item.Usage.PromptTokens,
-				CompletionTokens: item.Usage.CompletionTokens,
-				TotalTokens:      item.Usage.TotalTokens,
-			}
+		if usage := mapUsageDataPtr(item.Usage); usage != nil {
+			resp.Usage = usage
 		}
 		response = append(response, resp)
 	}
@@ -94,12 +90,11 @@ func (s *Server) loadChatDetail(ctx context.Context, chatID string, includeRawMe
 	if detail.Artifact != nil {
 		response.Artifact = detail.Artifact
 	}
-	if summary != nil && summary.Usage != nil && summary.Usage.TotalTokens > 0 {
-		response.Usage = &api.ChatUsageData{
-			PromptTokens:     summary.Usage.PromptTokens,
-			CompletionTokens: summary.Usage.CompletionTokens,
-			TotalTokens:      summary.Usage.TotalTokens,
-		}
+	if summary != nil {
+		response.Usage = mapUsageDataPtr(summary.Usage)
+	}
+	if usage := latestChatUsageFromEvents(detail.Events); usage != nil {
+		response.Usage = usage
 	}
 	if s.deps.Runs != nil {
 		activeRun, ok, activeErr := s.deps.Runs.ActiveRunForChat(chatID)

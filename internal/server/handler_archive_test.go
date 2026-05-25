@@ -51,6 +51,13 @@ func TestHandleChatArchiveArchivesChatAndBroadcasts(t *testing.T) {
 	if archives.Data.Total != 1 || archives.Data.Items[0].ChatID != "chat-http-archive" {
 		t.Fatalf("unexpected archives response: %#v", archives.Data)
 	}
+	usage := archives.Data.Items[0].Usage
+	if usage == nil || usage.PromptTokensDetails == nil || usage.PromptTokensDetails.CachedTokens != 2 ||
+		usage.CompletionTokensDetails == nil || usage.CompletionTokensDetails.ReasoningTokens != 4 ||
+		usage.PromptCacheHitTokens != 2 || usage.PromptCacheMissTokens != 1 ||
+		usage.LlmChatCompletionCount != 1 {
+		t.Fatalf("expected detailed archive usage, got %#v", usage)
+	}
 }
 
 func TestHandleChatArchiveReportsActiveRunConflictPerItem(t *testing.T) {
@@ -124,6 +131,16 @@ func seedArchiveHandlerChat(t *testing.T, store *chat.FileStore, chatID string) 
 		FinishReason:    "complete",
 		StartedAtMillis: 1000,
 		UpdatedAtMillis: 2000,
+		Usage: chat.UsageData{
+			PromptTokens:           3,
+			CompletionTokens:       5,
+			TotalTokens:            8,
+			CachedTokens:           2,
+			ReasoningTokens:        4,
+			PromptCacheHitTokens:   2,
+			PromptCacheMissTokens:  1,
+			LlmChatCompletionCount: 1,
+		},
 	}); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
