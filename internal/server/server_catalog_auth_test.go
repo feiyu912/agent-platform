@@ -236,6 +236,12 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 					"description: should stay out of summary json",
 					"role: should stay out too",
 					"mode: CODER",
+					"modelConfig:",
+					"  modelKey: agent-model",
+					"stageSettings:",
+					"  execute:",
+					"    modelKey: execute-model",
+					"    reasoningEffort: HIGH",
 					"icon:",
 					"  name: terminal",
 					"  color: '#336699'",
@@ -284,6 +290,9 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 	}
 	if coder.Mode != catalog.AgentModeCoder || coder.WorkspaceDir == "" {
 		t.Fatalf("coder summary = %#v", coder)
+	}
+	if coder.DefaultModelKey != "execute-model" || coder.DefaultReasoningEffort != "HIGH" {
+		t.Fatalf("coder defaults = %#v", coder)
 	}
 	if len(coder.Chats) != 1 || coder.Chats[0].ChatID != "chat-coder" {
 		t.Fatalf("coder chats = %#v", coder.Chats)

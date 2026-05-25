@@ -83,7 +83,7 @@ func TestCoderModelOptionsHTTP(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/model-options?agentKey=mock-agent", nil))
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/model-options", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("options returned %d: %s", rec.Code, rec.Body.String())
 	}
@@ -91,7 +91,7 @@ func TestCoderModelOptionsHTTP(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode options response: %v", err)
 	}
-	if response.Data.DefaultModelKey != "mock-model" || response.Data.DefaultReasoningEffort != "LOW" {
+	if response.Data.DefaultModelKey != "mock-model" || response.Data.DefaultReasoningEffort != "MEDIUM" {
 		t.Fatalf("unexpected defaults %#v", response.Data)
 	}
 	if len(response.Data.ReasoningEfforts) != 4 ||
@@ -109,16 +109,6 @@ func TestCoderModelOptionsHTTP(t *testing.T) {
 	}
 	if !foundCoderModel {
 		t.Fatalf("expected coder model option, got %#v", response.Data.Models)
-	}
-}
-
-func TestCoderModelOptionsRejectsNonCoderAgent(t *testing.T) {
-	fixture := newTestFixture(t)
-
-	rec := httptest.NewRecorder()
-	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/model-options?agentKey=mock-agent", nil))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -145,10 +135,9 @@ func TestCoderModelOptionsWS(t *testing.T) {
 	readAutomationConnectedPush(t, conn)
 
 	if err := conn.WriteJSON(ws.RequestFrame{
-		Frame:   ws.FrameRequest,
-		Type:    "/api/model-options",
-		ID:      "coder-options",
-		Payload: json.RawMessage(`{"agentKey":"mock-agent"}`),
+		Frame: ws.FrameRequest,
+		Type:  "/api/model-options",
+		ID:    "coder-options",
 	}); err != nil {
 		t.Fatalf("write options request: %v", err)
 	}
@@ -161,7 +150,7 @@ func TestCoderModelOptionsWS(t *testing.T) {
 		t.Fatalf("decode options data: %v", err)
 	}
 	if optionsFrame.Frame != ws.FrameResponse || optionsFrame.ID != "coder-options" ||
-		options.DefaultModelKey != "mock-model" || len(options.ReasoningEfforts) != 4 {
+		options.DefaultModelKey != "mock-model" || options.DefaultReasoningEffort != "MEDIUM" || len(options.ReasoningEfforts) != 4 {
 		t.Fatalf("unexpected options frame %#v data=%#v", optionsFrame, options)
 	}
 }

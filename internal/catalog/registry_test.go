@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"agent-platform/internal/api"
 )
 
 func TestShouldLoadRuntimeNameMatchesJavaSemantics(t *testing.T) {
@@ -716,9 +718,24 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 				KanbanConcurrency: 2,
 			},
 			"worker": {
-				Key:              "worker",
-				Name:             "Worker",
-				Mode:             AgentModeCoder,
+				Key:      "worker",
+				Name:     "Worker",
+				Mode:     AgentModeCoder,
+				ModelKey: "agent-model",
+				StageSettings: map[string]any{
+					"plan": map[string]any{
+						"modelKey":        "plan-model",
+						"reasoningEffort": "LOW",
+					},
+					"execute": map[string]any{
+						"modelKey":        "execute-model",
+						"reasoningEffort": "HIGH",
+					},
+					"summary": map[string]any{
+						"modelKey":        "summary-model",
+						"reasoningEffort": "MEDIUM",
+					},
+				},
 				VisibilityScopes: []string{"internal"},
 			},
 			"invoker": {
@@ -744,6 +761,9 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 	if strings.Contains(string(data), "description") || strings.Contains(string(data), "role") || strings.Contains(string(data), "visibility") || strings.Contains(string(data), "kanban") {
 		t.Fatalf("summary json should omit backend fields, got %s", data)
 	}
+	if strings.Contains(string(data), "defaultModelKey") || strings.Contains(string(data), "defaultReasoningEffort") {
+		t.Fatalf("non-CODER summary should omit CODER defaults, got %s", data)
+	}
 
 	invokeItems := registry.Agents("invoke")
 	if len(invokeItems) != 1 || invokeItems[0].Key != "invoker" {
@@ -752,5 +772,33 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 	allItems := registry.Agents("all")
 	if len(allItems) != 3 {
 		t.Fatalf("all agents = %#v", allItems)
+	}
+	var worker api.AgentSummary
+	for _, item := range allItems {
+		if item.Key == "worker" {
+			worker = item
+		}
+	}
+	if worker.DefaultModelKey != "execute-model" || worker.DefaultReasoningEffort != "HIGH" {
+		t.Fatalf("CODER defaults should prefer execute settings, got %#v", worker)
+	}
+	workerData, err := json.Marshal(worker)
+	if err != nil {
+		t.Fatalf("marshal CODER agent summary: %v", err)
+	}
+	if !strings.Contains(string(workerData), `"defaultModelKey":"execute-model"`) ||
+		!strings.Contains(string(workerData), `"defaultReasoningEffort":"HIGH"`) {
+		t.Fatalf("CODER summary JSON should include root defaults, got %s", workerData)
+	}
+}
+
+func TestAgentSummaryCoderDefaultsFallbackToModelConfigAndMedium(t *testing.T) {
+	modelKey, reasoningEffort := agentSummaryCoderDefaults(AgentDefinition{
+		Key:      "coder",
+		Mode:     AgentModeCoder,
+		ModelKey: "agent-model",
+	})
+	if modelKey != "agent-model" || reasoningEffort != "MEDIUM" {
+		t.Fatalf("unexpected CODER fallback defaults model=%q reasoning=%q", modelKey, reasoningEffort)
 	}
 }

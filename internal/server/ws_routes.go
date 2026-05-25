@@ -187,24 +187,7 @@ func (s *Server) wsAgentEditorOptions(_ context.Context, conn *ws.Conn, req ws.R
 }
 
 func (s *Server) wsModelOptions(_ context.Context, conn *ws.Conn, req ws.RequestFrame) {
-	payload, err := ws.DecodePayload[struct {
-		AgentKey string `json:"agentKey"`
-	}](req)
-	if err != nil {
-		conn.SendError(req.ID, "invalid_request", 400, "invalid payload", nil)
-		conn.CompleteRequest(req.ID)
-		return
-	}
-	response, optionsErr := s.buildModelOptions(payload.AgentKey)
-	if optionsErr != nil {
-		if statusErr, ok := optionsErr.(agentStatusError); ok {
-			conn.SendError(req.ID, statusErr.code, statusErr.status, statusErr.message, nil)
-		} else {
-			conn.SendError(req.ID, "internal_error", 500, optionsErr.Error(), nil)
-		}
-		conn.CompleteRequest(req.ID)
-		return
-	}
+	response := s.buildModelOptions()
 	conn.SendResponse(req.Type, req.ID, 0, "success", response)
 	conn.CompleteRequest(req.ID)
 }

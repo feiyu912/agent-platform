@@ -119,12 +119,12 @@ GET /ws -> request / response / stream / push / error frames
 
 #### CODER model options
 
-`GET /api/model-options?agentKey=<key>` 仅支持 `mode: CODER` 的 agent，返回聊天输入区运行时可选项：
+`GET /api/model-options` 返回聊天输入区运行时可选项。前端按当前 agent `mode` 自行决定是否展示该控件：
 
 - `models`: 当前 model registry 中的模型，字段为 `key/provider/modelId/protocol/isReasoner/isVision/contextWindow`
 - `reasoningEfforts`: 固定为 `NONE`、`LOW`、`MEDIUM`、`HIGH`，其中 `NONE` 表示关闭思考深度
-- `defaultModelKey`: 优先 CODER stageSettings，再回退 agent `modelConfig.modelKey`
-- `defaultReasoningEffort`: 优先 CODER stageSettings，再回退 `MEDIUM`
+- `defaultModelKey`: model registry 默认模型；无默认模型时为空
+- `defaultReasoningEffort`: 固定为 `MEDIUM`
 
 HITL 三态细节见 [HITL协议](HITL协议.md)。真流式、heartbeat、attach backlog 与 H2A 缓冲见 [真流式和H2A](真流式和H2A.md)。
 

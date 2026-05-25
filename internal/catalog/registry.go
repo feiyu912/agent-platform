@@ -311,9 +311,40 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 		if hasRuntimeSandboxDefinition(def.Runtime) {
 			summary.Meta["sandbox"] = runtimeSandboxSummaryMeta(def.Runtime)
 		}
+		if strings.EqualFold(strings.TrimSpace(def.Mode), AgentModeCoder) {
+			summary.DefaultModelKey, summary.DefaultReasoningEffort = agentSummaryCoderDefaults(def)
+		}
 		items = append(items, summary)
 	}
 	return items
+}
+
+func agentSummaryCoderDefaults(def AgentDefinition) (string, string) {
+	settings := contracts.ResolvePlanExecuteSettings(def.StageSettings, 0, 0)
+	modelKey := firstNonBlankString(
+		settings.Execute.ModelKey,
+		settings.Plan.ModelKey,
+		settings.Summary.ModelKey,
+		def.ModelKey,
+	)
+	reasoningEffort := firstNonBlankString(
+		settings.Execute.ReasoningEffort,
+		settings.Plan.ReasoningEffort,
+		settings.Summary.ReasoningEffort,
+	)
+	if strings.TrimSpace(reasoningEffort) == "" {
+		reasoningEffort = "MEDIUM"
+	}
+	return modelKey, reasoningEffort
+}
+
+func firstNonBlankString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func normalizeAgentSummaryScope(scope string) string {
