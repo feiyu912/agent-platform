@@ -310,6 +310,7 @@ func (s *Server) buildAgentEditorOptions() api.AgentEditorOptionsResponse {
 		for _, model := range s.deps.Models.List() {
 			models = append(models, api.AgentEditorModelOption{
 				Key:           model.Key,
+				Name:          model.Name,
 				Provider:      model.Provider,
 				ModelID:       model.ModelID,
 				Protocol:      model.Protocol,

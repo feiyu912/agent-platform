@@ -257,6 +257,8 @@ func eventPayloadKeyOrder(eventType string) []string {
 		return []string{"runId", "chatId", "agentKey"}
 	case "debug.preCall", "debug.postCall":
 		return []string{"runId", "chatId", "data"}
+	case "usage.snapshot":
+		return []string{"runId", "chatId", "taskId", "model", "contextWindow", "usage"}
 	case "memory.write", "memory.read", "memory.search", "memory.update",
 		"memory.forget", "memory.timeline", "memory.promote", "memory.consolidate":
 		return []string{"runId", "chatId", "data"}

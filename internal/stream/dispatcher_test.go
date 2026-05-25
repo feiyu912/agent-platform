@@ -316,6 +316,60 @@ func TestDispatcherTerminalUsageIncludesLLMChatCompletionCountWithoutTokens(t *t
 	}
 }
 
+func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) {
+	dispatcher := NewDispatcher(StreamRequest{
+		RunID:  "run_1",
+		ChatID: "chat_1",
+	})
+
+	events := dispatcher.Dispatch(InputUsageSnapshot{
+		TaskID:                          "task_sub_1",
+		ChatID:                          "chat_1",
+		ModelKey:                        "deepseek-v4-pro",
+		ContextWindow:                   128000,
+		CurrentContextSize:              100,
+		EstimatedNextCallSize:           200,
+		LLMReturnPromptTokens:           100,
+		LLMReturnCompletionTokens:       50,
+		LLMReturnTotalTokens:            150,
+		LLMReturnCachedTokens:           64,
+		LLMReturnReasoningTokens:        12,
+		LLMReturnPromptCacheHitTokens:   64,
+		LLMReturnPromptCacheMissTokens:  36,
+		LLMReturnLLMChatCompletionCount: 1,
+		RunPromptTokens:                 300,
+		RunCompletionTokens:             75,
+		RunTotalTokens:                  375,
+		RunCachedTokens:                 128,
+		RunReasoningTokens:              24,
+		RunPromptCacheHitTokens:         128,
+		RunPromptCacheMissTokens:        172,
+		RunLLMChatCompletionCount:       2,
+	})
+	assertEventTypes(t, events, "usage.snapshot")
+	data := events[0].Data()
+	if got := data.String("taskId"); got != "task_sub_1" {
+		t.Fatalf("expected usage.snapshot taskId, got %#v", data.Map())
+	}
+	usage, _ := data.Value("usage").(map[string]any)
+	current, _ := usage["current"].(map[string]any)
+	run, _ := usage["run"].(map[string]any)
+	currentPromptDetails, _ := current["promptTokensDetails"].(map[string]any)
+	currentCompletionDetails, _ := current["completionTokensDetails"].(map[string]any)
+	if currentPromptDetails["cachedTokens"] != 64 || currentCompletionDetails["reasoningTokens"] != 12 ||
+		current["promptCacheHitTokens"] != 64 || current["promptCacheMissTokens"] != 36 ||
+		current["llmChatCompletionCount"] != 1 {
+		t.Fatalf("expected detailed current usage, got %#v", usage)
+	}
+	if run["promptCacheHitTokens"] != 128 || run["promptCacheMissTokens"] != 172 || run["llmChatCompletionCount"] != 2 {
+		t.Fatalf("expected detailed run usage, got %#v", usage)
+	}
+	cw, _ := data.Value("contextWindow").(map[string]any)
+	if cw["maxSize"] != 128000 || cw["currentSize"] != 100 || cw["estimatedNextCallSize"] != 200 {
+		t.Fatalf("unexpected context window %#v", cw)
+	}
+}
+
 func TestDispatcherEmitsApprovalAlongsideToolResult(t *testing.T) {
 	dispatcher := NewDispatcher(StreamRequest{
 		RunID:  "run_1",

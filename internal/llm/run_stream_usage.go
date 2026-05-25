@@ -127,6 +127,29 @@ func (s *llmRunStream) accumulateUsage(usage *openAIUsage) {
 	s.runPromptCacheHitTokens += usage.PromptCacheHitTokens
 	s.runPromptCacheMissTokens += usage.PromptCacheMissTokens
 	s.pendingUsageEmit = true
+	s.pending = append(s.pending, DeltaUsageSnapshot{
+		ChatID:                          s.session.ChatID,
+		ModelKey:                        s.model.Key,
+		ContextWindow:                   s.effectiveContextWindow(),
+		CurrentContextSize:              s.currentContextSize(),
+		EstimatedNextCallSize:           s.estimatedNextCallSize(),
+		LLMReturnPromptTokens:           s.lastCallPromptTokens,
+		LLMReturnCompletionTokens:       s.lastCallCompletionTokens,
+		LLMReturnTotalTokens:            s.lastCallTotalTokens,
+		LLMReturnCachedTokens:           s.lastCallCachedTokens,
+		LLMReturnReasoningTokens:        s.lastCallReasoningTokens,
+		LLMReturnPromptCacheHitTokens:   s.lastCallPromptCacheHitTokens,
+		LLMReturnPromptCacheMissTokens:  s.lastCallPromptCacheMissTokens,
+		LLMReturnLLMChatCompletionCount: s.lastCallLLMChatCompletionCount,
+		RunPromptTokens:                 s.runPromptTokens,
+		RunCompletionTokens:             s.runCompletionTokens,
+		RunTotalTokens:                  s.runTotalTokens,
+		RunCachedTokens:                 s.runCachedTokens,
+		RunReasoningTokens:              s.runReasoningTokens,
+		RunPromptCacheHitTokens:         s.runPromptCacheHitTokens,
+		RunPromptCacheMissTokens:        s.runPromptCacheMissTokens,
+		RunLLMChatCompletionCount:       s.runLLMChatCompletionCount,
+	})
 	log.Printf("[llm][run:%s][usage] last-call: prompt=%d completion=%d total=%d | run-cumulative: prompt=%d completion=%d total=%d",
 		s.session.RunID, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, s.runPromptTokens, s.runCompletionTokens, s.runTotalTokens)
 }

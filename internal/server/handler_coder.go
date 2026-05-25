@@ -43,6 +43,7 @@ func (s *Server) listModelOptions() []api.CoderModelOption {
 	for _, model := range s.deps.Models.List() {
 		models = append(models, api.CoderModelOption{
 			Key:           model.Key,
+			Name:          model.Name,
 			Provider:      model.Provider,
 			ModelID:       model.ModelID,
 			Protocol:      model.Protocol,

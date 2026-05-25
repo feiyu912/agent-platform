@@ -44,6 +44,23 @@ func synthesizedContextWindow(contextWindow map[string]any) map[string]any {
 	return cw
 }
 
+func synthesizedUsageSnapshotContextWindow(contextWindow map[string]any) map[string]any {
+	cw := map[string]any{}
+	if len(contextWindow) == 0 {
+		return cw
+	}
+	if v := toIntFromKeys(contextWindow, "maxSize", "max_size"); v > 0 {
+		cw["maxSize"] = v
+	}
+	if v := toIntFromKeys(contextWindow, "currentSize", "current_size", "actualSize", "actual_size"); v > 0 {
+		cw["currentSize"] = v
+	}
+	if v := toIntFromKeys(contextWindow, "estimatedNextCallSize", "estimated_next_call_size", "estimatedSize", "estimated_size"); v > 0 {
+		cw["estimatedNextCallSize"] = v
+	}
+	return cw
+}
+
 func cumulativeUsagePayload(cumulative map[string]int) map[string]any {
 	if cumulative == nil {
 		return map[string]any{"promptTokens": 0, "completionTokens": 0, "totalTokens": 0}
@@ -58,6 +75,33 @@ func cumulativeUsagePayload(cumulative map[string]int) map[string]any {
 		out["llmChatCompletionCount"] = count
 	}
 	return out
+}
+
+func synthesizeUsageSnapshotEvent(runID, chatID string, taskID string, usage map[string]any, runCumulative, chatCumulative map[string]int, contextWindow map[string]any, ts int64, nextSeq func() int64) *stream.EventData {
+	if usage == nil {
+		return nil
+	}
+	payload := map[string]any{
+		"runId":  runID,
+		"chatId": chatID,
+		"usage": map[string]any{
+			"current": usagePayloadFromMap(usage),
+			"run":     cumulativeUsagePayload(runCumulative),
+			"chat":    cumulativeUsagePayload(chatCumulative),
+		},
+	}
+	if cw := synthesizedUsageSnapshotContextWindow(contextWindow); len(cw) > 0 {
+		payload["contextWindow"] = cw
+	}
+	if strings.TrimSpace(taskID) != "" {
+		payload["taskId"] = taskID
+	}
+	return &stream.EventData{
+		Seq:       nextSeq(),
+		Type:      "usage.snapshot",
+		Timestamp: ts,
+		Payload:   payload,
+	}
 }
 
 func synthesizePreCallEvent(runID, chatID string, taskID string, runCumulative, chatCumulative map[string]int, contextWindow map[string]any, preCallData map[string]any, ts int64, nextSeq func() int64) *stream.EventData {

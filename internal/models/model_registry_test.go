@@ -90,7 +90,7 @@ func TestLoadModelRegistryParsesProviderMemoryEmbedding(t *testing.T) {
 
 func TestLoadModelRegistryDefaultsModelVisionToFalse(t *testing.T) {
 	root := t.TempDir()
-	writeTestProviderAndModel(t, root, "apiKey: plain-text")
+	writeTestProviderAndModel(t, root, "apiKey: plain-text", "name: Mock Model")
 
 	registry, err := LoadModelRegistry(root)
 	if err != nil {
@@ -103,6 +103,9 @@ func TestLoadModelRegistryDefaultsModelVisionToFalse(t *testing.T) {
 	}
 	if model.IsVision {
 		t.Fatal("expected model IsVision to default to false")
+	}
+	if model.Name != "Mock Model" {
+		t.Fatalf("expected model name to parse, got %q", model.Name)
 	}
 }
 

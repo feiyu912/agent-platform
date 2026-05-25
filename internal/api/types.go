@@ -390,6 +390,7 @@ type AgentEditorOptionsResponse struct {
 
 type AgentEditorModelOption struct {
 	Key           string `json:"key"`
+	Name          string `json:"name,omitempty"`
 	Provider      string `json:"provider,omitempty"`
 	ModelID       string `json:"modelId,omitempty"`
 	Protocol      string `json:"protocol,omitempty"`
@@ -423,6 +424,7 @@ type CoderModelOptionsResponse struct {
 
 type CoderModelOption struct {
 	Key           string `json:"key"`
+	Name          string `json:"name,omitempty"`
 	Provider      string `json:"provider,omitempty"`
 	ModelID       string `json:"modelId,omitempty"`
 	Protocol      string `json:"protocol,omitempty"`

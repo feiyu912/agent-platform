@@ -282,6 +282,31 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.chatTotalPromptCacheMissTokens = chatTotalPromptCacheMissTokens
 				rd.chatTotalLlmChatCompletionCount = chatTotalLlmChatCompletionCount
 			}
+			if stepUsage != nil {
+				runCumulativePost := map[string]int{
+					"promptTokens":           rd.totalPromptTokens,
+					"completionTokens":       rd.totalCompletionTokens,
+					"totalTokens":            rd.totalTotalTokens,
+					"cachedTokens":           rd.totalCachedTokens,
+					"reasoningTokens":        rd.totalReasoningTokens,
+					"promptCacheHitTokens":   rd.totalPromptCacheHitTokens,
+					"promptCacheMissTokens":  rd.totalPromptCacheMissTokens,
+					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
+				}
+				chatCumulativePost := map[string]int{
+					"promptTokens":           chatTotalPromptTokens,
+					"completionTokens":       chatTotalCompletionTokens,
+					"totalTokens":            chatTotalTotalTokens,
+					"cachedTokens":           chatTotalCachedTokens,
+					"reasoningTokens":        chatTotalReasoningTokens,
+					"promptCacheHitTokens":   chatTotalPromptCacheHitTokens,
+					"promptCacheMissTokens":  chatTotalPromptCacheMissTokens,
+					"llmChatCompletionCount": chatTotalLlmChatCompletionCount,
+				}
+				if ev := synthesizeUsageSnapshotEvent(runID, chatID, taskID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
+					rd.events = append(rd.events, *ev)
+				}
+			}
 			if replayDebugEvents && (stepUsage != nil || len(stepContextWindow) > 0) {
 				runCumulativePost := map[string]int{
 					"promptTokens":           rd.totalPromptTokens,

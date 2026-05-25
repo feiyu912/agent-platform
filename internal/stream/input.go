@@ -316,6 +316,33 @@ type InputDebugPostCall struct {
 
 func (InputDebugPostCall) streamInputTag() {}
 
+type InputUsageSnapshot struct {
+	TaskID                          string
+	ChatID                          string
+	ModelKey                        string
+	ContextWindow                   int
+	CurrentContextSize              int
+	EstimatedNextCallSize           int
+	LLMReturnPromptTokens           int
+	LLMReturnCompletionTokens       int
+	LLMReturnTotalTokens            int
+	LLMReturnCachedTokens           int
+	LLMReturnReasoningTokens        int
+	LLMReturnPromptCacheHitTokens   int
+	LLMReturnPromptCacheMissTokens  int
+	LLMReturnLLMChatCompletionCount int
+	RunPromptTokens                 int
+	RunCompletionTokens             int
+	RunTotalTokens                  int
+	RunCachedTokens                 int
+	RunReasoningTokens              int
+	RunPromptCacheHitTokens         int
+	RunPromptCacheMissTokens        int
+	RunLLMChatCompletionCount       int
+}
+
+func (InputUsageSnapshot) streamInputTag() {}
+
 type RunCancel struct {
 	RunID string
 }

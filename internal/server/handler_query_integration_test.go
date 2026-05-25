@@ -361,6 +361,7 @@ func TestChatSnapshotDeduplicatesChatStartAcrossMultipleQueries(t *testing.T) {
 
 	chatStartCount := 0
 	runStartCount := 0
+	usageSnapshotCount := 0
 	prevSeq := int64(0)
 	for _, event := range chatResp.Data.Events {
 		eventType := event.Type
@@ -369,6 +370,8 @@ func TestChatSnapshotDeduplicatesChatStartAcrossMultipleQueries(t *testing.T) {
 			chatStartCount++
 		case "run.start":
 			runStartCount++
+		case "usage.snapshot":
+			usageSnapshotCount++
 		}
 		seq := event.Seq
 		if seq != prevSeq+1 {
@@ -382,8 +385,11 @@ func TestChatSnapshotDeduplicatesChatStartAcrossMultipleQueries(t *testing.T) {
 	if runStartCount != 2 {
 		t.Fatalf("expected two run.start events, got %d events=%#v", runStartCount, chatResp.Data.Events)
 	}
-	if len(chatResp.Data.Events) != 9 {
-		t.Fatalf("expected 9 persisted events for two turns, got %d events=%#v", len(chatResp.Data.Events), chatResp.Data.Events)
+	if usageSnapshotCount != 2 {
+		t.Fatalf("expected two usage.snapshot events, got %d events=%#v", usageSnapshotCount, chatResp.Data.Events)
+	}
+	if len(chatResp.Data.Events) != 11 {
+		t.Fatalf("expected 11 persisted events for two turns, got %d events=%#v", len(chatResp.Data.Events), chatResp.Data.Events)
 	}
 	if len(chatResp.Data.RawMessages) != 4 {
 		t.Fatalf("expected four raw messages for two turns, got %#v", chatResp.Data.RawMessages)
@@ -551,7 +557,9 @@ func TestQueryAndRunDebugEventsDisabledByDefault(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	assertStringSliceExcludes(t, decodeEventTypesFromSSE(t, body), "debug.preCall", "debug.postCall")
+	sseTypes := decodeEventTypesFromSSE(t, body)
+	assertStringSliceExcludes(t, sseTypes, "debug.preCall", "debug.postCall")
+	assertStringSliceContains(t, sseTypes, "usage.snapshot")
 
 	messages := decodeSSEMessages(t, body)
 	if len(messages) == 0 {
@@ -568,7 +576,9 @@ func TestQueryAndRunDebugEventsDisabledByDefault(t *testing.T) {
 	if runRec.Code != http.StatusOK {
 		t.Fatalf("expected run stream 200, got %d: %s", runRec.Code, runRec.Body.String())
 	}
-	assertStringSliceExcludes(t, decodeEventTypesFromSSE(t, runRec.Body.String()), "debug.preCall", "debug.postCall")
+	runTypes := decodeEventTypesFromSSE(t, runRec.Body.String())
+	assertStringSliceExcludes(t, runTypes, "debug.preCall", "debug.postCall")
+	assertStringSliceContains(t, runTypes, "usage.snapshot")
 
 	chatRec := httptest.NewRecorder()
 	fixture.server.ServeHTTP(chatRec, httptest.NewRequest(http.MethodGet, "/api/chat?chatId="+chatID, nil))
@@ -577,6 +587,7 @@ func TestQueryAndRunDebugEventsDisabledByDefault(t *testing.T) {
 		t.Fatalf("decode chat detail: %v", err)
 	}
 	assertEventTypesExclude(t, chatResp.Data.Events, "debug.preCall", "debug.postCall")
+	assertEventTypesInclude(t, chatResp.Data.Events, "usage.snapshot")
 }
 
 func TestQueryAndRunDebugEventsEnabledWhenEnabled(t *testing.T) {

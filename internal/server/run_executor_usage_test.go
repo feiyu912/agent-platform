@@ -142,3 +142,65 @@ func TestRunEventProcessorOmitsTerminalUsageWhenUnknown(t *testing.T) {
 		t.Fatalf("terminal event should not carry top-level chatUsage: %#v", data.Payload)
 	}
 }
+
+func TestRunEventProcessorDecoratesUsageSnapshotWithChatUsage(t *testing.T) {
+	runUsage := chat.UsageData{}
+	processor := &runEventProcessor{
+		chatUsage: chat.UsageData{
+			PromptTokens:           100,
+			CompletionTokens:       50,
+			TotalTokens:            150,
+			CachedTokens:           20,
+			ReasoningTokens:        10,
+			PromptCacheHitTokens:   20,
+			PromptCacheMissTokens:  80,
+			LlmChatCompletionCount: 4,
+		},
+		runUsage: &runUsage,
+	}
+	data := &stream.EventData{
+		Type: "usage.snapshot",
+		Payload: map[string]any{
+			"runId":  "run-usage",
+			"chatId": "chat-usage",
+			"usage": map[string]any{
+				"current": map[string]any{
+					"promptTokens":     7,
+					"completionTokens": 3,
+					"totalTokens":      10,
+				},
+				"run": map[string]any{
+					"promptTokens":     7,
+					"completionTokens": 3,
+					"totalTokens":      10,
+					"promptTokensDetails": map[string]any{
+						"cachedTokens": 5,
+					},
+					"completionTokensDetails": map[string]any{
+						"reasoningTokens": 2,
+					},
+					"promptCacheHitTokens":   5,
+					"promptCacheMissTokens":  2,
+					"llmChatCompletionCount": 1,
+				},
+			},
+		},
+	}
+
+	processor.decorate(data)
+
+	usage, _ := data.Payload["usage"].(map[string]any)
+	chatUsage, _ := usage["chat"].(map[string]any)
+	if AnyIntNode(chatUsage["promptTokens"]) != 107 || AnyIntNode(chatUsage["completionTokens"]) != 53 || AnyIntNode(chatUsage["totalTokens"]) != 160 {
+		t.Fatalf("unexpected chat usage %#v", usage)
+	}
+	chatPromptDetails, _ := chatUsage["promptTokensDetails"].(map[string]any)
+	chatCompletionDetails, _ := chatUsage["completionTokensDetails"].(map[string]any)
+	if AnyIntNode(chatPromptDetails["cachedTokens"]) != 25 || AnyIntNode(chatCompletionDetails["reasoningTokens"]) != 12 ||
+		AnyIntNode(chatUsage["promptCacheHitTokens"]) != 25 || AnyIntNode(chatUsage["promptCacheMissTokens"]) != 82 {
+		t.Fatalf("unexpected detailed chat usage %#v", usage)
+	}
+	if AnyIntNode(chatUsage["llmChatCompletionCount"]) != 5 {
+		t.Fatalf("unexpected chat llm completion count %#v", usage)
+	}
+}

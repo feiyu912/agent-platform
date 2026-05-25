@@ -294,6 +294,15 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 				w.captureRootDebugData(event.Type, inner)
 			}
 		}
+	case "usage.snapshot":
+		if taskID := w.taskIDForEvent(event); taskID != "" {
+			if w.closedTaskIDs[taskID] {
+				break
+			}
+			w.captureTaskUsageSnapshot(w.ensureTaskBuffer(taskID), event)
+		} else {
+			w.captureRootUsageSnapshot(event)
+		}
 
 	case "run.complete", "run.cancel", "run.error":
 		w.flushCurrentStep()
@@ -380,6 +389,33 @@ func (w *StepWriter) appendStoredMessage(event stream.EventData, message StoredM
 		return
 	}
 	w.messages = upsertStoredMessage(w.messages, message)
+}
+
+func (w *StepWriter) captureRootUsageSnapshot(event stream.EventData) {
+	if cw, ok := event.Value("contextWindow").(map[string]any); ok {
+		w.pendingContextWindowMax = toIntFromKeys(cw, "maxSize", "max_size")
+		w.pendingEstimated = toIntFromKeys(cw, "estimatedNextCallSize", "estimated_next_call_size", "estimatedSize", "estimated_size")
+	}
+	if usage, ok := event.Value("usage").(map[string]any); ok {
+		if current, ok := usage["current"].(map[string]any); ok {
+			w.pendingUsage = usagePayloadFromMap(current)
+		}
+	}
+}
+
+func (w *StepWriter) captureTaskUsageSnapshot(buffer *taskStepBuffer, event stream.EventData) {
+	if buffer == nil {
+		return
+	}
+	if cw, ok := event.Value("contextWindow").(map[string]any); ok {
+		buffer.pendingContextWindowMax = toIntFromKeys(cw, "maxSize", "max_size")
+		buffer.pendingEstimated = toIntFromKeys(cw, "estimatedNextCallSize", "estimated_next_call_size", "estimatedSize", "estimated_size")
+	}
+	if usage, ok := event.Value("usage").(map[string]any); ok {
+		if current, ok := usage["current"].(map[string]any); ok {
+			buffer.pendingUsage = usagePayloadFromMap(current)
+		}
+	}
 }
 
 func (w *StepWriter) captureRootDebugData(eventType string, inner map[string]any) {

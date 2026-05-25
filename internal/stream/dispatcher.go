@@ -159,16 +159,7 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 		return []StreamEvent{NewEvent("debug.preCall", payload)}
 	case InputDebugPostCall:
 		if value.RunTotalTokens > 0 || value.RunLLMChatCompletionCount > 0 {
-			d.state.runUsage = &runUsageState{
-				PromptTokens:           value.RunPromptTokens,
-				CompletionTokens:       value.RunCompletionTokens,
-				TotalTokens:            value.RunTotalTokens,
-				CachedTokens:           value.RunCachedTokens,
-				ReasoningTokens:        value.RunReasoningTokens,
-				PromptCacheHitTokens:   value.RunPromptCacheHitTokens,
-				PromptCacheMissTokens:  value.RunPromptCacheMissTokens,
-				LLMChatCompletionCount: value.RunLLMChatCompletionCount,
-			}
+			d.state.runUsage = runUsageStateFromValues(value.RunPromptTokens, value.RunCompletionTokens, value.RunTotalTokens, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens, value.RunLLMChatCompletionCount)
 		}
 		llmReturnUsage := map[string]any{
 			"promptTokens":           value.LLMReturnPromptTokens,
@@ -206,6 +197,11 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 			payload["taskId"] = value.TaskID
 		}
 		return []StreamEvent{NewEvent("debug.postCall", payload)}
+	case InputUsageSnapshot:
+		if value.RunTotalTokens > 0 || value.RunLLMChatCompletionCount > 0 {
+			d.state.runUsage = runUsageStateFromValues(value.RunPromptTokens, value.RunCompletionTokens, value.RunTotalTokens, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens, value.RunLLMChatCompletionCount)
+		}
+		return []StreamEvent{usageSnapshotEvent(d.request.RunID, value.TaskID, value.ChatID, value.ModelKey, value.ContextWindow, value.CurrentContextSize, value.EstimatedNextCallSize, value.LLMReturnPromptTokens, value.LLMReturnCompletionTokens, value.LLMReturnTotalTokens, value.LLMReturnCachedTokens, value.LLMReturnReasoningTokens, value.LLMReturnPromptCacheHitTokens, value.LLMReturnPromptCacheMissTokens, value.LLMReturnLLMChatCompletionCount, value.RunPromptTokens, value.RunCompletionTokens, value.RunTotalTokens, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens, value.RunLLMChatCompletionCount)}
 	case InputRunComplete:
 		d.state.runFinishReason = value.FinishReason
 		return nil
@@ -224,4 +220,55 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 	default:
 		return nil
 	}
+}
+
+func usageSnapshotEvent(runID string, taskID string, chatID string, modelKey string, contextWindow int, currentContextSize int, estimatedNextCallSize int, currentPromptTokens int, currentCompletionTokens int, currentTotalTokens int, currentCachedTokens int, currentReasoningTokens int, currentPromptCacheHitTokens int, currentPromptCacheMissTokens int, currentLLMChatCompletionCount int, runPromptTokens int, runCompletionTokens int, runTotalTokens int, runCachedTokens int, runReasoningTokens int, runPromptCacheHitTokens int, runPromptCacheMissTokens int, runLLMChatCompletionCount int) StreamEvent {
+	currentUsage := usageMapFromValues(currentPromptTokens, currentCompletionTokens, currentTotalTokens, currentCachedTokens, currentReasoningTokens, currentPromptCacheHitTokens, currentPromptCacheMissTokens, currentLLMChatCompletionCount)
+	runUsage := usageMapFromValues(runPromptTokens, runCompletionTokens, runTotalTokens, runCachedTokens, runReasoningTokens, runPromptCacheHitTokens, runPromptCacheMissTokens, runLLMChatCompletionCount)
+	payload := map[string]any{
+		"runId":  runID,
+		"chatId": chatID,
+		"model": map[string]any{
+			"key": modelKey,
+		},
+		"contextWindow": map[string]any{
+			"maxSize":               contextWindow,
+			"currentSize":           currentContextSize,
+			"estimatedNextCallSize": estimatedNextCallSize,
+			"actualSize":            currentContextSize,
+			"estimatedSize":         estimatedNextCallSize,
+		},
+		"usage": map[string]any{
+			"current": currentUsage,
+			"run":     runUsage,
+		},
+	}
+	if taskID != "" {
+		payload["taskId"] = taskID
+	}
+	return NewEvent("usage.snapshot", payload)
+}
+
+func runUsageStateFromValues(promptTokens int, completionTokens int, totalTokens int, cachedTokens int, reasoningTokens int, promptCacheHitTokens int, promptCacheMissTokens int, llmChatCompletionCount int) *runUsageState {
+	return &runUsageState{
+		PromptTokens:           promptTokens,
+		CompletionTokens:       completionTokens,
+		TotalTokens:            totalTokens,
+		CachedTokens:           cachedTokens,
+		ReasoningTokens:        reasoningTokens,
+		PromptCacheHitTokens:   promptCacheHitTokens,
+		PromptCacheMissTokens:  promptCacheMissTokens,
+		LLMChatCompletionCount: llmChatCompletionCount,
+	}
+}
+
+func usageMapFromValues(promptTokens int, completionTokens int, totalTokens int, cachedTokens int, reasoningTokens int, promptCacheHitTokens int, promptCacheMissTokens int, llmChatCompletionCount int) map[string]any {
+	out := map[string]any{
+		"promptTokens":           promptTokens,
+		"completionTokens":       completionTokens,
+		"totalTokens":            totalTokens,
+		"llmChatCompletionCount": llmChatCompletionCount,
+	}
+	addDetailedUsage(out, cachedTokens, reasoningTokens, promptCacheHitTokens, promptCacheMissTokens)
+	return out
 }

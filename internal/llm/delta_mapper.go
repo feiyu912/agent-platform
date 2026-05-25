@@ -352,6 +352,31 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 			RunPromptCacheMissTokens:        value.RunPromptCacheMissTokens,
 			RunLLMChatCompletionCount:       value.RunLLMChatCompletionCount,
 		}}
+	case DeltaUsageSnapshot:
+		m.lastKind = ""
+		return []stream.StreamInput{stream.InputUsageSnapshot{
+			ChatID:                          value.ChatID,
+			ModelKey:                        value.ModelKey,
+			ContextWindow:                   value.ContextWindow,
+			CurrentContextSize:              value.CurrentContextSize,
+			EstimatedNextCallSize:           value.EstimatedNextCallSize,
+			LLMReturnPromptTokens:           value.LLMReturnPromptTokens,
+			LLMReturnCompletionTokens:       value.LLMReturnCompletionTokens,
+			LLMReturnTotalTokens:            value.LLMReturnTotalTokens,
+			LLMReturnCachedTokens:           value.LLMReturnCachedTokens,
+			LLMReturnReasoningTokens:        value.LLMReturnReasoningTokens,
+			LLMReturnPromptCacheHitTokens:   value.LLMReturnPromptCacheHitTokens,
+			LLMReturnPromptCacheMissTokens:  value.LLMReturnPromptCacheMissTokens,
+			LLMReturnLLMChatCompletionCount: value.LLMReturnLLMChatCompletionCount,
+			RunPromptTokens:                 value.RunPromptTokens,
+			RunCompletionTokens:             value.RunCompletionTokens,
+			RunTotalTokens:                  value.RunTotalTokens,
+			RunCachedTokens:                 value.RunCachedTokens,
+			RunReasoningTokens:              value.RunReasoningTokens,
+			RunPromptCacheHitTokens:         value.RunPromptCacheHitTokens,
+			RunPromptCacheMissTokens:        value.RunPromptCacheMissTokens,
+			RunLLMChatCompletionCount:       value.RunLLMChatCompletionCount,
+		}}
 	case DeltaRunCancel:
 		return []stream.StreamInput{stream.RunCancel{RunID: value.RunID}}
 	default:

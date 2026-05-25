@@ -39,6 +39,7 @@ func setupCoderRuntime(t *testing.T, cfg *config.Config) {
 	modelPath := filepath.Join(cfg.Paths.RegistriesDir, "models", "coder-model.yml")
 	if err := os.WriteFile(modelPath, []byte(strings.Join([]string{
 		"key: coder-model",
+		"name: Coder Model",
 		"provider: mock",
 		"protocol: ANTHROPIC",
 		"modelId: coder-model-id",
@@ -103,7 +104,7 @@ func TestCoderModelOptionsHTTP(t *testing.T) {
 	}
 	foundCoderModel := false
 	for _, model := range response.Data.Models {
-		if model.Key == "coder-model" && model.IsReasoner && model.IsVision && model.ContextWindow == 200000 {
+		if model.Key == "coder-model" && model.Name == "Coder Model" && model.IsReasoner && model.IsVision && model.ContextWindow == 200000 {
 			foundCoderModel = true
 		}
 	}

@@ -95,6 +95,19 @@ func (p *runEventProcessor) decorate(data *stream.EventData) {
 			}
 		}
 		usage["chatUsage"] = usageDataMap(addUsageData(p.chatUsage, *p.runUsage))
+	case "usage.snapshot":
+		usage, ok := data.Payload["usage"].(map[string]any)
+		if !ok {
+			return
+		}
+		if p.runUsage != nil {
+			if run, ok := usage["run"].(map[string]any); ok {
+				applyUsageMapToData(p.runUsage, run)
+			}
+		}
+		if p.runUsage != nil {
+			usage["chat"] = usageDataMap(addUsageData(p.chatUsage, *p.runUsage))
+		}
 	case "run.complete", "run.error", "run.cancel":
 		if p.runUsage != nil {
 			if usage, ok := data.Payload["usage"].(map[string]any); ok {
@@ -201,6 +214,9 @@ func isClientVisibleEvent(eventType string, streamCfg config.StreamConfig) bool 
 	}
 	if (eventType == "tool.args" || eventType == "tool.result") && !streamCfg.IncludeToolPayloadEvents {
 		return false
+	}
+	if eventType == "usage.snapshot" {
+		return true
 	}
 	return !strings.HasSuffix(eventType, ".snapshot")
 }
