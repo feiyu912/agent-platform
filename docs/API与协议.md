@@ -93,9 +93,31 @@ GET /ws -> request / response / stream / push / error frames
 
 | Method | Path | 参数 | 响应 |
 |---|---|---|---|
-| POST | `/api/query` | body: `message`、`agentKey`、`teamId`、`chatId`、`runId`、`requestId`、`references`、`params`、`scene`、`stream`、`hidden`、`planningMode`、`coderConfig` | SSE stream；结束帧为 `data: [DONE]` |
+| POST | `/api/query` | body: `message`、`agentKey`、`teamId`、`chatId`、`runId`、`requestId`、`references`、`params`、`scene`、`stream`、`hidden`、`planningMode`、`accessLevel`、`model` | SSE stream；结束帧为 `data: [DONE]` |
+| GET | `/api/attach` | query: `runId`、`agentKey`、`lastSeq` | 续接 run 的 SSE stream |
+| POST | `/api/submit` | body: `agentKey`、`runId`、`awaitingId`、`params` | HITL submit ack |
+| POST | `/api/steer` | body: `agentKey`、`runId`、`message`、`requestId`、`chatId`、`teamId`、`steerId` | steer ack |
+| POST | `/api/interrupt` | body: `agentKey`、`runId`、`message`、`requestId`、`chatId`、`teamId` | interrupt ack |
 
-#### CODER model selection
+`params` 是业务透传对象，平台不读取、不写入、不约定内部 key。
+
+`model` 可做本次 run 的模型覆盖：
+
+```json
+{
+  "agentKey": "coder",
+  "message": "实现这个改动",
+  "accessLevel": "auto_approve",
+  "model": {
+    "key": "qwen3-coder",
+    "reasoningEffort": "HIGH"
+  }
+}
+```
+
+`model.key` 必须存在于 model registry；`model.reasoningEffort` 可取 `LOW`、`MEDIUM`、`HIGH`，非空时开启本次 run 的 reasoning。该配置只影响当前 run，不写回 agent 配置。
+
+#### CODER model options
 
 `GET /api/model-options?agentKey=<key>` 仅支持 `mode: CODER` 的 agent，返回聊天输入区运行时可选项：
 
@@ -103,25 +125,6 @@ GET /ws -> request / response / stream / push / error frames
 - `reasoningEfforts`: 固定为 `NONE`、`LOW`、`MEDIUM`、`HIGH`，其中 `NONE` 表示关闭思考深度
 - `defaultModelKey`: 优先 CODER stageSettings，再回退 agent `modelConfig.modelKey`
 - `defaultReasoningEffort`: 优先 CODER stageSettings，再回退 `MEDIUM`
-
-`POST /api/query` 可携带 `coderConfig` 做本次 run 覆盖：
-
-```json
-{
-  "agentKey": "coder",
-  "message": "实现这个改动",
-  "coderConfig": {
-    "modelKey": "qwen3-coder",
-    "reasoningEffort": "HIGH"
-  }
-}
-```
-
-`coderConfig` 只对 `mode: CODER` 生效，不写回 agent 配置。`modelKey` 必须存在于 model registry；`reasoningEffort` 只能是 `NONE`、`LOW`、`MEDIUM`、`HIGH`。该协议不提供速度选项。
-| GET | `/api/attach` | query: `runId`、`agentKey`、`lastSeq` | 续接 run 的 SSE stream |
-| POST | `/api/submit` | body: `agentKey`、`runId`、`awaitingId`、`params` | HITL submit ack |
-| POST | `/api/steer` | body: `agentKey`、`runId`、`message`、`requestId`、`chatId`、`teamId`、`steerId` | steer ack |
-| POST | `/api/interrupt` | body: `agentKey`、`runId`、`message`、`requestId`、`chatId`、`teamId` | interrupt ack |
 
 HITL 三态细节见 [HITL协议](HITL协议.md)。真流式、heartbeat、attach backlog 与 H2A 缓冲见 [真流式和H2A](真流式和H2A.md)。
 

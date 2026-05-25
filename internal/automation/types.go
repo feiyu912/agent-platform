@@ -60,16 +60,6 @@ type Query struct {
 
 func (d Definition) ToQueryRequest() api.QueryRequest {
 	params := contracts.CloneMap(d.Query.Params)
-	if params == nil {
-		params = map[string]any{}
-	}
-	params["__automation"] = map[string]any{
-		"automationId":          d.ID,
-		"automationName":        d.Name,
-		"automationDescription": d.Description,
-		"sourceFile":            d.SourceFile,
-		"triggeredAt":           time.Now().UnixMilli(),
-	}
 
 	role := d.Query.Role
 	if role == "" {

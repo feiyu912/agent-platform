@@ -15,6 +15,7 @@ type StreamRequest struct {
 	Role               string
 	References         any
 	Params             map[string]any
+	Model              any
 	PlanningMode       bool
 	Created            bool
 	MemoryUsageSummary map[string]any
@@ -55,6 +56,9 @@ func (a *StreamEventAssembler) Bootstrap() []StreamEvent {
 	}
 	if len(a.request.Params) > 0 {
 		queryPayload["params"] = a.request.Params
+	}
+	if !isEmptyValue(a.request.Model) {
+		queryPayload["model"] = a.request.Model
 	}
 	if a.request.PlanningMode {
 		queryPayload["planningMode"] = true

@@ -62,12 +62,8 @@ func TestDispatcherBuildsStructuredQueryRequest(t *testing.T) {
 	if got.Params["existing"] != "value" {
 		t.Fatalf("expected existing params, got %#v", got.Params)
 	}
-	meta, ok := got.Params["__automation"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected __automation metadata, got %#v", got.Params)
-	}
-	if meta["automationId"] != "daily" || meta["automationName"] != "Daily Summary" || meta["sourceFile"] != "/tmp/daily.yml" {
-		t.Fatalf("unexpected __automation metadata %#v", meta)
+	if _, ok := got.Params["__automation"]; ok {
+		t.Fatalf("expected automation dispatch not to inject __automation metadata, got %#v", got.Params)
 	}
 }
 

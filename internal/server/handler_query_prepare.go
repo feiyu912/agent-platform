@@ -98,6 +98,9 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	if !ok {
 		return preparedQuery{}, &statusError{status: http.StatusBadRequest, message: "agent not found"}
 	}
+	if err := s.validateQueryModelOptions(req.Model); err != nil {
+		return preparedQuery{}, err
+	}
 	if err := s.validateCoderConfig(req.CoderConfig, agentDef); err != nil {
 		return preparedQuery{}, err
 	}
@@ -133,12 +136,6 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 			"timestamp": summary.CreatedAt,
 		})
 	}
-	if sourceChannel := sourceChannelFromParams(req.Params); sourceChannel != "" {
-		if err := s.deps.Chats.SetSourceChannel(chatID, sourceChannel); err != nil {
-			return preparedQuery{}, err
-		}
-		summary.SourceChannel = sourceChannel
-	}
 	session, err := s.BuildQuerySession(r.Context(), req, summary, agentDef, querySessionBuildOptions{
 		Created:           created,
 		IncludeHistory:    !created,
@@ -149,6 +146,7 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 		return preparedQuery{}, err
 	}
 	applyCoderConfigToSession(req.CoderConfig, &session)
+	applyQueryModelOptionsToSession(req.Model, &session)
 	systemInitLines, err := s.prepareSystemInitCache(req, &session, created)
 	if err != nil {
 		return preparedQuery{}, err
@@ -192,6 +190,29 @@ func buildMemoryUsageSummary(staticMemoryPrompt string, bundle memory.ContextBun
 	return summary
 }
 
+func (s *Server) validateQueryModelOptions(options *api.QueryModelOptions) error {
+	if options == nil {
+		return nil
+	}
+	modelKey := strings.TrimSpace(options.Key)
+	reasoningEffort := strings.TrimSpace(options.ReasoningEffort)
+	if modelKey == "" && reasoningEffort == "" {
+		return nil
+	}
+	if modelKey != "" {
+		if s.deps.Models == nil {
+			return &statusError{status: http.StatusServiceUnavailable, message: "model registry is not configured"}
+		}
+		if _, _, err := s.deps.Models.Get(modelKey); err != nil {
+			return &statusError{status: http.StatusBadRequest, message: err.Error()}
+		}
+	}
+	if _, ok := normalizeQueryModelReasoningEffort(reasoningEffort); !ok {
+		return &statusError{status: http.StatusBadRequest, message: "model.reasoningEffort must be LOW, MEDIUM, or HIGH"}
+	}
+	return nil
+}
+
 func (s *Server) validateCoderConfig(config *api.CoderConfig, agentDef catalog.AgentDefinition) error {
 	if config == nil {
 		return nil
@@ -232,6 +253,82 @@ func applyCoderConfigToSession(config *api.CoderConfig, session *contracts.Query
 	}
 	session.StageSettings = applyCoderConfigToRawStageSettings(session.StageSettings, modelKey, reasoningEffort)
 	session.ResolvedStageSettings = applyCoderConfigToResolvedStageSettings(session.ResolvedStageSettings, modelKey, reasoningEffort)
+}
+
+func applyQueryModelOptionsToSession(options *api.QueryModelOptions, session *contracts.QuerySession) {
+	if options == nil || session == nil {
+		return
+	}
+	modelKey := strings.TrimSpace(options.Key)
+	reasoningEffort, ok := normalizeQueryModelReasoningEffort(options.ReasoningEffort)
+	if modelKey == "" && (reasoningEffort == "" || !ok) {
+		return
+	}
+	if modelKey != "" {
+		session.ModelKey = modelKey
+	}
+	session.StageSettings = applyQueryModelOptionsToRawStageSettings(session.StageSettings, modelKey, reasoningEffort)
+	session.ResolvedStageSettings = applyQueryModelOptionsToResolvedStageSettings(session.ResolvedStageSettings, modelKey, reasoningEffort)
+}
+
+func normalizeQueryModelReasoningEffort(value string) (string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "":
+		return "", true
+	case "LOW":
+		return "LOW", true
+	case "MEDIUM":
+		return "MEDIUM", true
+	case "HIGH":
+		return "HIGH", true
+	default:
+		return "", false
+	}
+}
+
+func applyQueryModelOptionsToRawStageSettings(raw map[string]any, modelKey string, reasoningEffort string) map[string]any {
+	out := contracts.CloneMap(raw)
+	if out == nil {
+		out = map[string]any{}
+	}
+	if modelKey != "" {
+		out["modelKey"] = modelKey
+	}
+	if reasoningEffort != "" {
+		out["reasoningEnabled"] = true
+		out["reasoningEffort"] = reasoningEffort
+	}
+	for _, stage := range []string{"plan", "execute", "summary"} {
+		nested := contracts.CloneMap(contracts.AnyMapNode(out[stage]))
+		if nested == nil {
+			nested = map[string]any{}
+		}
+		if modelKey != "" {
+			nested["modelKey"] = modelKey
+		}
+		if reasoningEffort != "" {
+			nested["reasoningEnabled"] = true
+			nested["reasoningEffort"] = reasoningEffort
+		}
+		out[stage] = nested
+	}
+	return out
+}
+
+func applyQueryModelOptionsToResolvedStageSettings(settings contracts.PlanExecuteSettings, modelKey string, reasoningEffort string) contracts.PlanExecuteSettings {
+	apply := func(stage *contracts.StageSettings) {
+		if modelKey != "" {
+			stage.ModelKey = modelKey
+		}
+		if reasoningEffort != "" {
+			stage.ReasoningEnabled = true
+			stage.ReasoningEffort = reasoningEffort
+		}
+	}
+	apply(&settings.Plan)
+	apply(&settings.Execute)
+	apply(&settings.Summary)
+	return settings
 }
 
 func applyCoderConfigToRawStageSettings(raw map[string]any, modelKey string, reasoningEffort string) map[string]any {
@@ -425,16 +522,6 @@ func runtimeAgentEnv(value any) map[string]string {
 	}
 }
 
-func sourceChannelFromParams(params map[string]any) string {
-	if len(params) == 0 {
-		return ""
-	}
-	if value, ok := params["channel"].(string); ok {
-		return strings.TrimSpace(value)
-	}
-	return ""
-}
-
 func resolveSkillRuntimeSettings(agentEnv map[string]string, agentDir string, marketDir string, skillKeys []string) ([]string, map[string]string) {
 	runtimeEnv := contracts.CloneStringMap(agentEnv)
 	if len(skillKeys) == 0 {
@@ -496,6 +583,7 @@ func (s *Server) newAssemblerAndMapper(prepared preparedQuery) (*stream.StreamEv
 		Role:               defaultRole(prepared.req.Role),
 		References:         prepared.req.References,
 		Params:             prepared.req.Params,
+		Model:              prepared.req.Model,
 		PlanningMode:       prepared.session.PlanningMode,
 		Created:            prepared.created,
 		MemoryUsageSummary: memoryUsageEventPayload(prepared.memoryUsageSummary, prepared.req.ChatID, prepared.req.RunID, prepared.req.AgentKey),

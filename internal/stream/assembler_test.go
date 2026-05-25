@@ -77,6 +77,10 @@ func TestAssemblerBootstrapIncludesOptionalQueryContext(t *testing.T) {
 			"channel": "desktop",
 			"nested":  map[string]any{"enabled": true},
 		},
+		Model: map[string]any{
+			"key":             "qwen3-max",
+			"reasoningEffort": "HIGH",
+		},
 	})
 
 	bootstrap := assembler.Bootstrap()
@@ -88,6 +92,10 @@ func TestAssemblerBootstrapIncludesOptionalQueryContext(t *testing.T) {
 	params, _ := requestQuery["params"].(map[string]any)
 	if params["channel"] != "desktop" {
 		t.Fatalf("expected request.query params, got %#v", requestQuery)
+	}
+	model, _ := requestQuery["model"].(map[string]any)
+	if model["key"] != "qwen3-max" || model["reasoningEffort"] != "HIGH" {
+		t.Fatalf("expected request.query model, got %#v", requestQuery)
 	}
 }
 

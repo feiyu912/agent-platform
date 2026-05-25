@@ -213,6 +213,80 @@ func TestCoderConfigQueryValidation(t *testing.T) {
 	})
 }
 
+func TestQueryModelOptionsValidation(t *testing.T) {
+	t.Run("unknown model rejects request model", func(t *testing.T) {
+		fixture := newTestFixture(t)
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","model":{"key":"missing-model"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		fixture.server.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("invalid reasoning effort rejects request model", func(t *testing.T) {
+		fixture := newTestFixture(t)
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","model":{"reasoningEffort":"FAST"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		fixture.server.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestQueryModelOptionsOverrideModelAndReasoningForRun(t *testing.T) {
+	var requestBody atomic.Value
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode provider request: %v", err)
+		}
+		requestBody.Store(payload)
+		writeAnthropicProviderSSE(t, w,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`,
+			`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+		)
+	}, testFixtureOptions{
+		setupRuntime: func(_ string, cfg *config.Config) {
+			setupCoderRuntime(t, cfg)
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","model":{"key":"coder-model","reasoningEffort":"HIGH"},"params":{"channel":"business","hitlLevel":9,"memoryContext":"business-memory"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	fixture.server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	payload, _ := requestBody.Load().(map[string]any)
+	if payload["model"] != "coder-model-id" {
+		t.Fatalf("expected provider model override, got %#v", payload)
+	}
+	thinking, _ := payload["thinking"].(map[string]any)
+	if thinking["type"] != "enabled" || int(thinking["budget_tokens"].(float64)) != 4096 {
+		t.Fatalf("expected high reasoning thinking config, got %#v", payload)
+	}
+
+	messages := decodeSSEMessages(t, rec.Body.String())
+	if len(messages) == 0 || messages[0]["type"] != "request.query" {
+		t.Fatalf("expected first message request.query, got %#v", messages)
+	}
+	model, _ := messages[0]["model"].(map[string]any)
+	if model["key"] != "coder-model" || model["reasoningEffort"] != "HIGH" {
+		t.Fatalf("expected request.query model options, got %#v", messages[0])
+	}
+	params, _ := messages[0]["params"].(map[string]any)
+	if params["channel"] != "business" || params["hitlLevel"].(float64) != 9 || params["memoryContext"] != "business-memory" {
+		t.Fatalf("expected params to remain business payload, got %#v", messages[0])
+	}
+}
+
 func TestCoderConfigOverridesModelAndReasoningForRun(t *testing.T) {
 	var requestBody atomic.Value
 	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {

@@ -107,7 +107,6 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	execCtx.Request = req
 	execCtx.Session = session
 	execCtx.AccessLevel = session.AccessLevel
-	execCtx.HITLLevel = AnyIntNode(req.Params["hitlLevel"])
 	if len(execCtx.RuntimeEnvOverrides) == 0 {
 		execCtx.RuntimeEnvOverrides = CloneStringMap(session.RuntimeEnvOverrides)
 	}

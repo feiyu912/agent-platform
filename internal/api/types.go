@@ -31,21 +31,27 @@ func Failure(code int, msg string) ApiResponse[map[string]any] {
 }
 
 type QueryRequest struct {
-	RequestID    string         `json:"requestId,omitempty"`
-	RunID        string         `json:"runId,omitempty"`
-	ChatID       string         `json:"chatId,omitempty"`
-	AgentKey     string         `json:"agentKey,omitempty"`
-	TeamID       string         `json:"teamId,omitempty"`
-	Role         string         `json:"role,omitempty"`
-	Message      string         `json:"message"`
-	References   []Reference    `json:"references,omitempty"`
-	Params       map[string]any `json:"params,omitempty"`
-	Scene        *Scene         `json:"scene,omitempty"`
-	Stream       *bool          `json:"stream,omitempty"`
-	Hidden       *bool          `json:"hidden,omitempty"`
-	PlanningMode *bool          `json:"planningMode,omitempty"`
-	AccessLevel  string         `json:"accessLevel,omitempty"`
-	CoderConfig  *CoderConfig   `json:"coderConfig,omitempty"`
+	RequestID    string             `json:"requestId,omitempty"`
+	RunID        string             `json:"runId,omitempty"`
+	ChatID       string             `json:"chatId,omitempty"`
+	AgentKey     string             `json:"agentKey,omitempty"`
+	TeamID       string             `json:"teamId,omitempty"`
+	Role         string             `json:"role,omitempty"`
+	Message      string             `json:"message"`
+	References   []Reference        `json:"references,omitempty"`
+	Params       map[string]any     `json:"params,omitempty"`
+	Scene        *Scene             `json:"scene,omitempty"`
+	Stream       *bool              `json:"stream,omitempty"`
+	Hidden       *bool              `json:"hidden,omitempty"`
+	PlanningMode *bool              `json:"planningMode,omitempty"`
+	AccessLevel  string             `json:"accessLevel,omitempty"`
+	Model        *QueryModelOptions `json:"model,omitempty"`
+	CoderConfig  *CoderConfig       `json:"coderConfig,omitempty"`
+}
+
+type QueryModelOptions struct {
+	Key             string `json:"key,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
 type CoderConfig struct {

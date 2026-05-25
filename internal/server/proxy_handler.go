@@ -59,6 +59,7 @@ func (s *Server) handleProxyQuery(w http.ResponseWriter, r *http.Request, prepar
 		"message":    req.Message,
 		"references": proxyReferences,
 		"params":     req.Params,
+		"model":      req.Model,
 		"scene":      req.Scene,
 	})
 	if err != nil {

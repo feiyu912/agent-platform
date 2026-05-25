@@ -271,6 +271,7 @@ func (s *Server) runProxySSE(
 		"message":    prepared.req.Message,
 		"references": proxyReferences,
 		"params":     prepared.req.Params,
+		"model":      prepared.req.Model,
 		"scene":      prepared.req.Scene,
 		"stream":     true,
 	})
@@ -401,6 +402,7 @@ func proxyQueryPayload(req api.QueryRequest, proxy *catalog.ProxyConfig, referen
 		"message":    req.Message,
 		"references": references,
 		"params":     req.Params,
+		"model":      req.Model,
 		"scene":      req.Scene,
 		"stream":     true,
 	}

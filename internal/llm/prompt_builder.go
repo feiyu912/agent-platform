@@ -397,9 +397,6 @@ func buildMemorySection(session QuerySession, req api.QueryRequest) string {
 	if strings.TrimSpace(session.MemoryContext) != "" {
 		return "Runtime Context: Agent Memory\n" + strings.TrimSpace(session.MemoryContext)
 	}
-	if memoryText, _ := req.Params["memoryContext"].(string); strings.TrimSpace(memoryText) != "" {
-		return "Runtime Context: Agent Memory\n" + strings.TrimSpace(memoryText)
-	}
 	return ""
 }
 
