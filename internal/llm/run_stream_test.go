@@ -258,6 +258,12 @@ func backendToolDefinition(name string) api.ToolDetailResponse {
 	}
 }
 
+func backendToolDefinitionWithLabel(name string, label string) api.ToolDetailResponse {
+	tool := backendToolDefinition(name)
+	tool.Label = label
+	return tool
+}
+
 func writeToolDefinition() api.ToolDetailResponse {
 	return backendToolDefinition("file_write")
 }
@@ -1876,12 +1882,68 @@ func TestFileReadAccessApprovalEmitsAwaitingAsk(t *testing.T) {
 		t.Fatalf("expected builtin approval viewport, got %#v", ask)
 	}
 	item, _ := ask.Approvals[0].(map[string]any)
-	if item["description"] != "read超出允许目录" || !strings.Contains(fmt.Sprint(item["command"]), "file_read ") {
+	expectedOutside, err := filepath.EvalSymlinks(outside)
+	if err != nil {
+		t.Fatalf("eval outside path: %v", err)
+	}
+	expectedCommand := "file_read " + filepath.Join(expectedOutside, "secret.txt")
+	if item["description"] != "read超出允许目录" || item["command"] != expectedCommand {
 		t.Fatalf("unexpected read approval item: %#v", item)
 	}
 	options, _ := item["options"].([]any)
 	if !approvalOptionsContainDecision(options, "approve_rule_run") {
 		t.Fatalf("expected approve_rule_run option, got %#v", options)
+	}
+}
+
+func TestFileGrepAccessApprovalUsesToolLabelInCommand(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinitionWithLabel("file_grep", "搜索文件")}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:       root,
+					AllowedReadPaths:       []string{"."},
+					AllowedWritePaths:      []string{"."},
+					MaxReadBytes:           1024,
+					MaxWriteBytes:          1024,
+					RequireReadBeforeWrite: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_grep",
+			args: map[string]any{
+				"pattern": ".",
+				"path":    outside,
+			},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active grep: %v", err)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected grep not to execute before path approval, got %#v", executor.invocations)
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
+		t.Fatalf("expected approval ask, got %#v", stream.pending)
+	}
+	item, _ := ask.Approvals[0].(map[string]any)
+	expectedOutside, err := filepath.EvalSymlinks(outside)
+	if err != nil {
+		t.Fatalf("eval outside path: %v", err)
+	}
+	if item["description"] != "read超出允许目录" || item["command"] != "搜索文件 "+expectedOutside {
+		t.Fatalf("unexpected grep approval item: %#v", item)
 	}
 }
 
@@ -2128,6 +2190,54 @@ func TestFileReadAccessApprovalNoticeUsesPlanCommand(t *testing.T) {
 		!strings.Contains(noticeText, `passwd" decision=approve`) ||
 		strings.Contains(noticeText, `[HITL]  → approve`) {
 		t.Fatalf("expected file read HITL audit notice to use plan command, got %#v", stream.messages[1])
+	}
+}
+
+func TestFileGrepAccessApprovalNoticeUsesToolLabel(t *testing.T) {
+	root := t.TempDir()
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:  root,
+					AllowedReadPaths:  []string{"."},
+					AllowedWritePaths: []string{"."},
+					MaxReadBytes:      1024,
+					MaxWriteBytes:     1024,
+				},
+			},
+			tools: stubToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinitionWithLabel("file_grep", "搜索文件")}},
+		},
+		execCtx: &contracts.ExecutionContext{},
+	}
+	invocation := &preparedToolInvocation{
+		toolID:   "tool_1",
+		toolName: "file_grep",
+		args: map[string]any{
+			"pattern": ".",
+			"path":    "/etc",
+		},
+		hitlDecision: &hitlDecisionState{
+			Decision: "approve",
+			Mode:     "approval",
+		},
+	}
+
+	stream.appendOriginalToolResult(invocation, contracts.ToolExecutionResult{Output: "passwd"})
+
+	if len(stream.messages) != 2 {
+		t.Fatalf("expected tool result and audit notice, got %#v", stream.messages)
+	}
+	expectedPath, err := filepath.EvalSymlinks("/etc")
+	if err != nil {
+		t.Fatalf("eval /etc: %v", err)
+	}
+	noticeText, _ := stream.messages[1].Content.(string)
+	if !strings.Contains(noticeText, `[System audit — HITL approval batch]`) ||
+		!strings.Contains(noticeText, `tool=file_grep command="搜索文件 `+expectedPath+`" decision=approve`) ||
+		strings.Contains(noticeText, `command="file_read `) {
+		t.Fatalf("expected file grep HITL audit notice to use tool label, got %#v", stream.messages[1])
 	}
 }
 

@@ -254,7 +254,7 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 	if combinedWriteApproval {
 		command = combinedWritePlan.CommandText
 	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
-		command = plan.CommandText
+		command = s.fileAccessApprovalDisplayCommand(invocation, plan)
 	} else if plan := s.lookupFileWritePlan(invocation); plan != nil {
 		command = plan.CommandText
 	} else if result := s.lookupWorkspaceHITL(invocation); result.Intercepted && strings.TrimSpace(result.MatchedCommand) != "" {
@@ -308,6 +308,29 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 		}
 	}
 	return item
+}
+
+func (s *llmRunStream) fileAccessApprovalDisplayCommand(invocation *preparedToolInvocation, plan *filetools.AccessPlan) string {
+	if plan == nil {
+		return ""
+	}
+	toolLabel := ""
+	if invocation != nil {
+		if tool, ok := s.lookupToolDefinition(invocation.toolName); ok {
+			toolLabel = strings.TrimSpace(tool.Label)
+		}
+	}
+	if toolLabel == "" {
+		return plan.CommandText
+	}
+	path := strings.TrimSpace(plan.Path)
+	if path == "" {
+		path = strings.TrimSpace(plan.RawPath)
+	}
+	if path == "" {
+		return toolLabel
+	}
+	return toolLabel + " " + path
 }
 
 func fileMutationApprovalFallback(plan *filetools.WritePlan) string {

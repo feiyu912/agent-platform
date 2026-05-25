@@ -336,7 +336,7 @@ func (s *llmRunStream) buildHITLNoticeEntry(invocation *preparedToolInvocation) 
 	if writePlan != nil && (decisionRuleKey == "" || decisionRuleKey == writePlan.RuleKey) {
 		command = writePlan.CommandText
 	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil {
-		command = plan.CommandText
+		command = s.fileAccessApprovalDisplayCommand(invocation, plan)
 	} else if writePlan != nil {
 		command = writePlan.CommandText
 	}
