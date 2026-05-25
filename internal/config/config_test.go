@@ -252,6 +252,9 @@ func TestLoadCoderSettingsMissingFileLeavesEmpty(t *testing.T) {
 			if cfg.CoderSettings.WorkspaceAgents.Enabled || cfg.CoderSettings.WorkspaceAgents.File != "" {
 				t.Fatalf("expected empty coder workspace agents config, got %#v", cfg.CoderSettings.WorkspaceAgents)
 			}
+			if cfg.CoderSettings.DefaultAgent.ModelKey != "" || cfg.CoderSettings.DefaultAgent.ReasoningEffort != "" {
+				t.Fatalf("expected empty coder default agent config, got %#v", cfg.CoderSettings.DefaultAgent)
+			}
 		})
 	})
 }
@@ -259,6 +262,9 @@ func TestLoadCoderSettingsMissingFileLeavesEmpty(t *testing.T) {
 func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
+			"default-agent:\n" +
+			"  modelKey: deepseek-v4-pro\n" +
+			"  reasoningEffort: MEDIUM\n" +
 			"workspace-agents:\n" +
 			"  enabled: true\n" +
 			"  file: RULES.md\n"
@@ -269,6 +275,9 @@ func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
 			}
 			if !cfg.CoderSettings.WorkspaceAgents.Enabled || cfg.CoderSettings.WorkspaceAgents.File != "RULES.md" {
 				t.Fatalf("unexpected coder workspace agents override: %#v", cfg.CoderSettings.WorkspaceAgents)
+			}
+			if cfg.CoderSettings.DefaultAgent.ModelKey != "deepseek-v4-pro" || cfg.CoderSettings.DefaultAgent.ReasoningEffort != "MEDIUM" {
+				t.Fatalf("unexpected coder default agent override: %#v", cfg.CoderSettings.DefaultAgent)
 			}
 		})
 	})

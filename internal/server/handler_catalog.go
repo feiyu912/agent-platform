@@ -13,6 +13,7 @@ import (
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/catalog"
+	"agent-platform/internal/contracts"
 	"agent-platform/internal/ws"
 )
 
@@ -186,10 +187,52 @@ func (s *Server) createAgent(ctx context.Context, req api.CreateAgentRequest) (a
 		return api.AgentDetailResponse{}, err
 	}
 	key := strings.TrimSpace(req.Key)
-	if _, err := editor.CreateEditableAgent(key, req.Definition, req.SoulPrompt, req.AgentsPrompt); err != nil {
+	definition := s.applyCoderDefaultAgentConfig(req.Definition)
+	if _, err := editor.CreateEditableAgent(key, definition, req.SoulPrompt, req.AgentsPrompt); err != nil {
 		return api.AgentDetailResponse{}, mapAgentEditError(err)
 	}
 	return s.reloadAndLoadAgent(ctx, key)
+}
+
+func (s *Server) applyCoderDefaultAgentConfig(definition map[string]any) map[string]any {
+	if definition == nil {
+		return nil
+	}
+	mode := catalog.NormalizeAgentModeForRuntime(stringValue(definition["mode"]))
+	if mode != catalog.AgentModeCoder {
+		return definition
+	}
+	defaults := s.deps.Config.CoderSettings.DefaultAgent
+	modelKey := strings.TrimSpace(defaults.ModelKey)
+	reasoningEffort := strings.TrimSpace(defaults.ReasoningEffort)
+	if modelKey == "" && reasoningEffort == "" {
+		return definition
+	}
+
+	out := contracts.CloneMap(definition)
+	modelConfig := contracts.CloneMap(contracts.AnyMapNode(out["modelConfig"]))
+	if modelConfig == nil {
+		modelConfig = map[string]any{}
+	}
+	if modelKey != "" && strings.TrimSpace(stringValue(modelConfig["modelKey"])) == "" {
+		modelConfig["modelKey"] = modelKey
+	}
+	if reasoningEffort != "" {
+		reasoning := contracts.CloneMap(contracts.AnyMapNode(modelConfig["reasoning"]))
+		if reasoning == nil {
+			reasoning = map[string]any{}
+		}
+		if strings.TrimSpace(stringValue(reasoning["effort"])) == "" {
+			reasoning["effort"] = reasoningEffort
+		}
+		if len(reasoning) > 0 {
+			modelConfig["reasoning"] = reasoning
+		}
+	}
+	if len(modelConfig) > 0 {
+		out["modelConfig"] = modelConfig
+	}
+	return out
 }
 
 func (s *Server) updateAgent(ctx context.Context, req api.UpdateAgentRequest) (api.AgentDetailResponse, error) {

@@ -361,6 +361,11 @@ func (c *Config) applyCoderSettingsFile(path string) {
 	if len(values) == 0 {
 		return
 	}
+	defaultAgent, _ := values["default-agent"].(map[string]any)
+	if len(defaultAgent) > 0 {
+		c.CoderSettings.DefaultAgent.ModelKey = stringValue(anyValue(defaultAgent["modelKey"], c.CoderSettings.DefaultAgent.ModelKey), c.CoderSettings.DefaultAgent.ModelKey)
+		c.CoderSettings.DefaultAgent.ReasoningEffort = stringValue(anyValue(defaultAgent["reasoningEffort"], c.CoderSettings.DefaultAgent.ReasoningEffort), c.CoderSettings.DefaultAgent.ReasoningEffort)
+	}
 	workspaceAgents, _ := values["workspace-agents"].(map[string]any)
 	if len(workspaceAgents) == 0 {
 		return

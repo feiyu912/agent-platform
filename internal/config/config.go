@@ -108,11 +108,17 @@ type MemoryPromptsConfig struct {
 
 type CoderSettingsConfig struct {
 	WorkspaceAgents CoderWorkspaceAgentsConfig
+	DefaultAgent    CoderDefaultAgentConfig
 }
 
 type CoderWorkspaceAgentsConfig struct {
 	Enabled bool
 	File    string
+}
+
+type CoderDefaultAgentConfig struct {
+	ModelKey        string
+	ReasoningEffort string
 }
 
 type AutomationConfig struct {

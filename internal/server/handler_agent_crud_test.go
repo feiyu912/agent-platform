@@ -207,6 +207,83 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	}
 }
 
+func TestAgentCreateCoderAppliesDefaultModelConfig(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w,
+			`{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`,
+			`[DONE]`,
+		)
+	}, testFixtureOptions{
+		configure: func(cfg *config.Config) {
+			cfg.CoderSettings.DefaultAgent = config.CoderDefaultAgentConfig{
+				ModelKey:        "mock-model",
+				ReasoningEffort: "MEDIUM",
+			}
+		},
+	})
+	workspaceDir := t.TempDir()
+
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "coder-defaults",
+		"definition": map[string]any{
+			"key":  "coder-defaults",
+			"name": "coder-defaults",
+			"mode": "CODER",
+			"runtimeConfig": map[string]any{
+				"workspaceRoot": workspaceDir,
+			},
+		},
+	})
+	modelConfig, _ := created.Definition["modelConfig"].(map[string]any)
+	reasoning, _ := modelConfig["reasoning"].(map[string]any)
+	if modelConfig["modelKey"] != "mock-model" || reasoning["effort"] != "MEDIUM" {
+		t.Fatalf("expected coder default model config, got %#v", modelConfig)
+	}
+	if created.Meta["modelKey"] != "mock-model" {
+		t.Fatalf("expected created coder model key mock-model, got %#v", created.Meta)
+	}
+}
+
+func TestAgentCreateCoderPreservesExplicitModelConfig(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w,
+			`{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`,
+			`[DONE]`,
+		)
+	}, testFixtureOptions{
+		configure: func(cfg *config.Config) {
+			cfg.CoderSettings.DefaultAgent = config.CoderDefaultAgentConfig{
+				ModelKey:        "default-model",
+				ReasoningEffort: "HIGH",
+			}
+		},
+	})
+	workspaceDir := t.TempDir()
+
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "coder-explicit",
+		"definition": map[string]any{
+			"key":  "coder-explicit",
+			"name": "coder-explicit",
+			"mode": "CODER",
+			"modelConfig": map[string]any{
+				"modelKey": "mock-model",
+				"reasoning": map[string]any{
+					"effort": "LOW",
+				},
+			},
+			"runtimeConfig": map[string]any{
+				"workspaceRoot": workspaceDir,
+			},
+		},
+	})
+	modelConfig, _ := created.Definition["modelConfig"].(map[string]any)
+	reasoning, _ := modelConfig["reasoning"].(map[string]any)
+	if modelConfig["modelKey"] != "mock-model" || reasoning["effort"] != "LOW" {
+		t.Fatalf("expected explicit coder model config to win, got %#v", modelConfig)
+	}
+}
+
 func TestAgentOpenWorkspaceRejectsUnknownWorkspace(t *testing.T) {
 	fixture := newTestFixture(t)
 	rec := httptest.NewRecorder()

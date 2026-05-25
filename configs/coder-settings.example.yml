@@ -1,7 +1,11 @@
 # CODER-specific runtime settings.
 
 default-agent:
+  # Default modelKey written when creating a new CODER agent without an
+  # explicit modelConfig.modelKey.
   modelKey: deepseek-v4-pro
+  # Default reasoning effort written when creating a new CODER agent without
+  # an explicit modelConfig.reasoning.effort.
   reasoningEffort: MEDIUM
 
 workspace-agents:
