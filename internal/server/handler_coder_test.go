@@ -1,0 +1,306 @@
+package server
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"agent-platform/internal/api"
+	"agent-platform/internal/config"
+	"agent-platform/internal/ws"
+
+	gws "github.com/gorilla/websocket"
+)
+
+func writeAnthropicProviderSSE(t *testing.T, w http.ResponseWriter, frames ...string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "text/event-stream")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		t.Fatalf("expected flusher")
+	}
+	for _, frame := range frames {
+		if _, err := io.WriteString(w, frame+"\n\n"); err != nil {
+			t.Fatalf("write anthropic sse frame: %v", err)
+		}
+		flusher.Flush()
+	}
+}
+
+func setupCoderRuntime(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	modelPath := filepath.Join(cfg.Paths.RegistriesDir, "models", "coder-model.yml")
+	if err := os.WriteFile(modelPath, []byte(strings.Join([]string{
+		"key: coder-model",
+		"provider: mock",
+		"protocol: ANTHROPIC",
+		"modelId: coder-model-id",
+		"isFunction: true",
+		"isReasoner: true",
+		"isVision: true",
+		"contextWindow: 200000",
+	}, "\n")), 0o644); err != nil {
+		t.Fatalf("write coder model config: %v", err)
+	}
+	agentPath := filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml")
+	if err := os.WriteFile(agentPath, []byte(strings.Join([]string{
+		"key: mock-agent",
+		"name: Mock Coder",
+		"role: 测试代理",
+		"description: coder test agent",
+		"modelConfig:",
+		"  modelKey: mock-model",
+		"toolConfig:",
+		"  tools:",
+		"    - datetime",
+		"runtimeConfig:",
+		"  environmentId: shell",
+		"  level: RUN",
+		"mode: CODER",
+		"stageSettings:",
+		"  execute:",
+		"    modelKey: mock-model",
+		"    reasoningEffort: LOW",
+	}, "\n")), 0o644); err != nil {
+		t.Fatalf("write coder agent config: %v", err)
+	}
+}
+
+func TestCoderModelOptionsHTTP(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+	}, testFixtureOptions{
+		setupRuntime: func(_ string, cfg *config.Config) {
+			setupCoderRuntime(t, cfg)
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/model-options?agentKey=mock-agent", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("options returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var response api.ApiResponse[api.CoderModelOptionsResponse]
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode options response: %v", err)
+	}
+	if response.Data.DefaultModelKey != "mock-model" || response.Data.DefaultReasoningEffort != "LOW" {
+		t.Fatalf("unexpected defaults %#v", response.Data)
+	}
+	if len(response.Data.ReasoningEfforts) != 4 ||
+		response.Data.ReasoningEfforts[0].Key != "NONE" ||
+		response.Data.ReasoningEfforts[1].Key != "LOW" ||
+		response.Data.ReasoningEfforts[2].Key != "MEDIUM" ||
+		response.Data.ReasoningEfforts[3].Key != "HIGH" {
+		t.Fatalf("unexpected reasoning efforts %#v", response.Data.ReasoningEfforts)
+	}
+	foundCoderModel := false
+	for _, model := range response.Data.Models {
+		if model.Key == "coder-model" && model.IsReasoner && model.IsVision && model.ContextWindow == 200000 {
+			foundCoderModel = true
+		}
+	}
+	if !foundCoderModel {
+		t.Fatalf("expected coder model option, got %#v", response.Data.Models)
+	}
+}
+
+func TestCoderModelOptionsRejectsNonCoderAgent(t *testing.T) {
+	fixture := newTestFixture(t)
+
+	rec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/model-options?agentKey=mock-agent", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCoderModelOptionsWS(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+	}, testFixtureOptions{
+		notifications: ws.NewHub(),
+		configure: func(cfg *config.Config) {
+			cfg.WebSocket.PingIntervalMs = 30000
+		},
+		setupRuntime: func(_ string, cfg *config.Config) {
+			setupCoderRuntime(t, cfg)
+		},
+	})
+	server := httptest.NewServer(fixture.server)
+	defer server.Close()
+
+	conn, _, err := gws.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+	readAutomationConnectedPush(t, conn)
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame:   ws.FrameRequest,
+		Type:    "/api/model-options",
+		ID:      "coder-options",
+		Payload: json.RawMessage(`{"agentKey":"mock-agent"}`),
+	}); err != nil {
+		t.Fatalf("write options request: %v", err)
+	}
+	var optionsFrame ws.ResponseFrame
+	if err := conn.ReadJSON(&optionsFrame); err != nil {
+		t.Fatalf("read options response: %v", err)
+	}
+	options, err := marshalAgentResponseData[api.CoderModelOptionsResponse](optionsFrame.Data)
+	if err != nil {
+		t.Fatalf("decode options data: %v", err)
+	}
+	if optionsFrame.Frame != ws.FrameResponse || optionsFrame.ID != "coder-options" ||
+		options.DefaultModelKey != "mock-model" || len(options.ReasoningEfforts) != 4 {
+		t.Fatalf("unexpected options frame %#v data=%#v", optionsFrame, options)
+	}
+}
+
+func TestCoderConfigQueryValidation(t *testing.T) {
+	t.Run("non coder rejects coderConfig", func(t *testing.T) {
+		fixture := newTestFixture(t)
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","coderConfig":{"modelKey":"mock-model"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		fixture.server.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("unknown model rejects coderConfig", func(t *testing.T) {
+		fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+			writeProviderSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+		}, testFixtureOptions{
+			setupRuntime: func(_ string, cfg *config.Config) {
+				setupCoderRuntime(t, cfg)
+			},
+		})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","coderConfig":{"modelKey":"missing-model"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		fixture.server.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("invalid reasoning effort rejects coderConfig", func(t *testing.T) {
+		fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+			writeProviderSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+		}, testFixtureOptions{
+			setupRuntime: func(_ string, cfg *config.Config) {
+				setupCoderRuntime(t, cfg)
+			},
+		})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","coderConfig":{"reasoningEffort":"FAST"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		fixture.server.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestCoderConfigOverridesModelAndReasoningForRun(t *testing.T) {
+	var requestBody atomic.Value
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode provider request: %v", err)
+		}
+		requestBody.Store(payload)
+		writeAnthropicProviderSSE(t, w,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`,
+			`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+		)
+	}, testFixtureOptions{
+		configure: func(cfg *config.Config) {
+			cfg.Stream.DebugEventsEnabled = true
+		},
+		setupRuntime: func(_ string, cfg *config.Config) {
+			setupCoderRuntime(t, cfg)
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","coderConfig":{"modelKey":"coder-model","reasoningEffort":"HIGH"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	fixture.server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	payload, _ := requestBody.Load().(map[string]any)
+	if payload["model"] != "coder-model-id" {
+		t.Fatalf("expected provider model override, got %#v", payload)
+	}
+	thinking, _ := payload["thinking"].(map[string]any)
+	if thinking["type"] != "enabled" || int(thinking["budget_tokens"].(float64)) != 4096 {
+		t.Fatalf("expected high reasoning thinking config, got %#v", payload)
+	}
+
+	messages := decodeSSEMessages(t, rec.Body.String())
+	foundPreCall := false
+	for _, message := range messages {
+		if stringValue(message["type"]) != "debug.preCall" {
+			continue
+		}
+		data, _ := message["data"].(map[string]any)
+		model, _ := data["model"].(map[string]any)
+		if model["key"] == "coder-model" {
+			foundPreCall = true
+		}
+	}
+	if !foundPreCall {
+		t.Fatalf("expected debug.preCall modelKey override in messages %#v", messages)
+	}
+}
+
+func TestCoderConfigNoneDisablesReasoningForRun(t *testing.T) {
+	var requestBody atomic.Value
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode provider request: %v", err)
+		}
+		requestBody.Store(payload)
+		writeAnthropicProviderSSE(t, w,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`,
+			`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+		)
+	}, testFixtureOptions{
+		setupRuntime: func(_ string, cfg *config.Config) {
+			setupCoderRuntime(t, cfg)
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"message":"hi","agentKey":"mock-agent","coderConfig":{"modelKey":"coder-model","reasoningEffort":"NONE"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	fixture.server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	payload, _ := requestBody.Load().(map[string]any)
+	if payload["model"] != "coder-model-id" {
+		t.Fatalf("expected provider model override, got %#v", payload)
+	}
+	if _, ok := payload["thinking"]; ok {
+		t.Fatalf("expected NONE reasoning to omit thinking config, got %#v", payload)
+	}
+}

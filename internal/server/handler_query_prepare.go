@@ -98,6 +98,9 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	if !ok {
 		return preparedQuery{}, &statusError{status: http.StatusBadRequest, message: "agent not found"}
 	}
+	if err := s.validateCoderConfig(req.CoderConfig, agentDef); err != nil {
+		return preparedQuery{}, err
+	}
 	if channelID != "" && s.deps.Channels != nil && !s.deps.Channels.IsAgentAllowed(channelID, agentKey) {
 		return preparedQuery{}, &statusError{
 			status:  http.StatusForbidden,
@@ -145,6 +148,7 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	if err != nil {
 		return preparedQuery{}, err
 	}
+	applyCoderConfigToSession(req.CoderConfig, &session)
 	systemInitLines, err := s.prepareSystemInitCache(req, &session, created)
 	if err != nil {
 		return preparedQuery{}, err
@@ -186,6 +190,92 @@ func buildMemoryUsageSummary(staticMemoryPrompt string, bundle memory.ContextBun
 		return nil
 	}
 	return summary
+}
+
+func (s *Server) validateCoderConfig(config *api.CoderConfig, agentDef catalog.AgentDefinition) error {
+	if config == nil {
+		return nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(agentDef.Mode), catalog.AgentModeCoder) {
+		return &statusError{status: http.StatusBadRequest, message: "coderConfig is only supported for CODER agents"}
+	}
+	modelKey := strings.TrimSpace(config.ModelKey)
+	reasoningEffort := strings.TrimSpace(config.ReasoningEffort)
+	if modelKey == "" && reasoningEffort == "" {
+		return nil
+	}
+	if modelKey != "" {
+		if s.deps.Models == nil {
+			return &statusError{status: http.StatusServiceUnavailable, message: "model registry is not configured"}
+		}
+		if _, _, err := s.deps.Models.Get(modelKey); err != nil {
+			return &statusError{status: http.StatusBadRequest, message: err.Error()}
+		}
+	}
+	if _, ok := normalizeCoderReasoningEffort(reasoningEffort); !ok {
+		return &statusError{status: http.StatusBadRequest, message: "coderConfig.reasoningEffort must be NONE, LOW, MEDIUM, or HIGH"}
+	}
+	return nil
+}
+
+func applyCoderConfigToSession(config *api.CoderConfig, session *contracts.QuerySession) {
+	if config == nil || session == nil {
+		return
+	}
+	modelKey := strings.TrimSpace(config.ModelKey)
+	reasoningEffort, ok := normalizeCoderReasoningEffort(config.ReasoningEffort)
+	if modelKey == "" && (reasoningEffort == "" || !ok) {
+		return
+	}
+	if modelKey != "" {
+		session.ModelKey = modelKey
+	}
+	session.StageSettings = applyCoderConfigToRawStageSettings(session.StageSettings, modelKey, reasoningEffort)
+	session.ResolvedStageSettings = applyCoderConfigToResolvedStageSettings(session.ResolvedStageSettings, modelKey, reasoningEffort)
+}
+
+func applyCoderConfigToRawStageSettings(raw map[string]any, modelKey string, reasoningEffort string) map[string]any {
+	out := contracts.CloneMap(raw)
+	if out == nil {
+		out = map[string]any{}
+	}
+	for _, stage := range []string{"plan", "execute", "summary"} {
+		nested := contracts.CloneMap(contracts.AnyMapNode(out[stage]))
+		if nested == nil {
+			nested = map[string]any{}
+		}
+		if modelKey != "" {
+			nested["modelKey"] = modelKey
+		}
+		if reasoningEffort == "NONE" {
+			nested["reasoningEnabled"] = false
+			delete(nested, "reasoningEffort")
+		} else if reasoningEffort != "" {
+			nested["reasoningEnabled"] = true
+			nested["reasoningEffort"] = reasoningEffort
+		}
+		out[stage] = nested
+	}
+	return out
+}
+
+func applyCoderConfigToResolvedStageSettings(settings contracts.PlanExecuteSettings, modelKey string, reasoningEffort string) contracts.PlanExecuteSettings {
+	apply := func(stage *contracts.StageSettings) {
+		if modelKey != "" {
+			stage.ModelKey = modelKey
+		}
+		if reasoningEffort == "NONE" {
+			stage.ReasoningEnabled = false
+			stage.ReasoningEffort = ""
+		} else if reasoningEffort != "" {
+			stage.ReasoningEnabled = true
+			stage.ReasoningEffort = reasoningEffort
+		}
+	}
+	apply(&settings.Plan)
+	apply(&settings.Execute)
+	apply(&settings.Summary)
+	return settings
 }
 
 func buildMemoryUsageItems(items []api.StoredMemoryResponse) []api.MemoryUsageItem {

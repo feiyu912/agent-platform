@@ -41,6 +41,7 @@ GET /ws -> request / response / stream / push / error frames
 | GET | `/api/skill-candidates` | query: `agentKey` | skill candidate 列表 |
 | GET | `/api/tools` | query: `kind` | tool 列表 |
 | GET | `/api/tool` | query: `toolName` | 单个 tool 详情 |
+| GET | `/api/model-options` | query: `agentKey` | CODER 聊天运行时可选模型与思考深度 |
 
 ### Agent 编辑
 
@@ -92,7 +93,31 @@ GET /ws -> request / response / stream / push / error frames
 
 | Method | Path | 参数 | 响应 |
 |---|---|---|---|
-| POST | `/api/query` | body: `message`、`agentKey`、`teamId`、`chatId`、`runId`、`requestId`、`references`、`params`、`scene`、`stream`、`hidden`、`planningMode` | SSE stream；结束帧为 `data: [DONE]` |
+| POST | `/api/query` | body: `message`、`agentKey`、`teamId`、`chatId`、`runId`、`requestId`、`references`、`params`、`scene`、`stream`、`hidden`、`planningMode`、`coderConfig` | SSE stream；结束帧为 `data: [DONE]` |
+
+#### CODER model selection
+
+`GET /api/model-options?agentKey=<key>` 仅支持 `mode: CODER` 的 agent，返回聊天输入区运行时可选项：
+
+- `models`: 当前 model registry 中的模型，字段为 `key/provider/modelId/protocol/isReasoner/isVision/contextWindow`
+- `reasoningEfforts`: 固定为 `NONE`、`LOW`、`MEDIUM`、`HIGH`，其中 `NONE` 表示关闭思考深度
+- `defaultModelKey`: 优先 CODER stageSettings，再回退 agent `modelConfig.modelKey`
+- `defaultReasoningEffort`: 优先 CODER stageSettings，再回退 `MEDIUM`
+
+`POST /api/query` 可携带 `coderConfig` 做本次 run 覆盖：
+
+```json
+{
+  "agentKey": "coder",
+  "message": "实现这个改动",
+  "coderConfig": {
+    "modelKey": "qwen3-coder",
+    "reasoningEffort": "HIGH"
+  }
+}
+```
+
+`coderConfig` 只对 `mode: CODER` 生效，不写回 agent 配置。`modelKey` 必须存在于 model registry；`reasoningEffort` 只能是 `NONE`、`LOW`、`MEDIUM`、`HIGH`。该协议不提供速度选项。
 | GET | `/api/attach` | query: `runId`、`agentKey`、`lastSeq` | 续接 run 的 SSE stream |
 | POST | `/api/submit` | body: `agentKey`、`runId`、`awaitingId`、`params` | HITL submit ack |
 | POST | `/api/steer` | body: `agentKey`、`runId`、`message`、`requestId`、`chatId`、`teamId`、`steerId` | steer ack |
@@ -208,6 +233,7 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 | `/api/agent/update` | agent 更新字段 | `response` |
 | `/api/agent/delete` | `agentKey` | `response` |
 | `/api/agent/editor-options` | 无 | `response` |
+| `/api/model-options` | `agentKey` | `response` |
 | `/api/teams` | 无 | `response` |
 | `/api/skills` | 无 | `response` |
 | `/api/tools` | `kind` | `response` |

@@ -45,6 +45,12 @@ type QueryRequest struct {
 	Hidden       *bool          `json:"hidden,omitempty"`
 	PlanningMode *bool          `json:"planningMode,omitempty"`
 	AccessLevel  string         `json:"accessLevel,omitempty"`
+	CoderConfig  *CoderConfig   `json:"coderConfig,omitempty"`
+}
+
+type CoderConfig struct {
+	ModelKey        string `json:"modelKey,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
 type Scene struct {
@@ -398,6 +404,28 @@ type AgentEditorProxyConfigField struct {
 	Label    string `json:"label"`
 	Type     string `json:"type"`
 	Required bool   `json:"required,omitempty"`
+}
+
+type CoderModelOptionsResponse struct {
+	Models                 []CoderModelOption      `json:"models"`
+	ReasoningEfforts       []ReasoningEffortOption `json:"reasoningEfforts"`
+	DefaultModelKey        string                  `json:"defaultModelKey,omitempty"`
+	DefaultReasoningEffort string                  `json:"defaultReasoningEffort"`
+}
+
+type CoderModelOption struct {
+	Key           string `json:"key"`
+	Provider      string `json:"provider,omitempty"`
+	ModelID       string `json:"modelId,omitempty"`
+	Protocol      string `json:"protocol,omitempty"`
+	IsReasoner    bool   `json:"isReasoner"`
+	IsVision      bool   `json:"isVision"`
+	ContextWindow int    `json:"contextWindow,omitempty"`
+}
+
+type ReasoningEffortOption struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
 }
 
 type ChannelSummary struct {
