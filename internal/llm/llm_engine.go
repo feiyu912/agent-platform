@@ -245,7 +245,14 @@ func stageSettingsForName(settings PlanExecuteSettings, stage string) StageSetti
 
 func filterToolDefinitions(defs []api.ToolDetailResponse, allowed []string) []api.ToolDetailResponse {
 	if len(allowed) == 0 {
-		return defs
+		filtered := make([]api.ToolDetailResponse, 0, len(defs))
+		for _, def := range defs {
+			if explicitOnly, _ := def.Meta["explicitOnly"].(bool); explicitOnly {
+				continue
+			}
+			filtered = append(filtered, def)
+		}
+		return filtered
 	}
 	allowedSet := map[string]struct{}{}
 	for _, name := range allowed {

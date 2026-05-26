@@ -289,6 +289,60 @@ func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
 	})
 }
 
+func TestLoadVisionRecognizeMissingFileDefaultsDisabled(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		withProjectFileContents(t, filepath.Join("configs", "vision-recognize.yml"), nil, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.VisionRecognize.Enabled {
+				t.Fatal("expected vision_recognize disabled by default")
+			}
+			if cfg.VisionRecognize.DefaultProfile != "general" {
+				t.Fatalf("unexpected default profile: %q", cfg.VisionRecognize.DefaultProfile)
+			}
+		})
+	})
+}
+
+func TestLoadVisionRecognizeConfigFromFile(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"enabled: true\n" +
+			"default-profile: ocr\n" +
+			"profiles:\n" +
+			"  ocr:\n" +
+			"    model-key: qwen2.5-vl\n" +
+			"    timeout-ms: 12345\n" +
+			"    max-images: 3\n" +
+			"    max-image-bytes: 456789\n" +
+			"    output-format: json\n" +
+			"    system-prompt: |\n" +
+			"      extract text\n" +
+			"      return json\n"
+		withProjectFileContents(t, filepath.Join("configs", "vision-recognize.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if !cfg.VisionRecognize.Enabled {
+				t.Fatal("expected vision_recognize enabled")
+			}
+			if cfg.VisionRecognize.DefaultProfile != "ocr" {
+				t.Fatalf("unexpected default profile: %q", cfg.VisionRecognize.DefaultProfile)
+			}
+			profile := cfg.VisionRecognize.Profiles["ocr"]
+			if profile.ModelKey != "qwen2.5-vl" || profile.TimeoutMs != 12345 || profile.MaxImages != 3 || profile.MaxImageBytes != 456789 || profile.OutputFormat != "json" {
+				t.Fatalf("unexpected profile: %#v", profile)
+			}
+			if profile.SystemPrompt != "extract text\nreturn json" {
+				t.Fatalf("unexpected system prompt: %q", profile.SystemPrompt)
+			}
+		})
+	})
+}
+
 func TestLoadAuthLocalPublicKeyPathUnderConfigs(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"AUTH_LOCAL_PUBLIC_KEY_FILE": "local-public-key.pem",

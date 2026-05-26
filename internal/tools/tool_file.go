@@ -6,9 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +18,7 @@ import (
 	"agent-platform/internal/config"
 	. "agent-platform/internal/contracts"
 	"agent-platform/internal/filetools"
+	"agent-platform/internal/multimodal"
 )
 
 func (t *RuntimeToolExecutor) invokeRead(args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
@@ -457,40 +458,27 @@ func readImageFile(path string, info os.FileInfo) (map[string]any, bool, ToolExe
 	if !filetools.IsSupportedImageExtension(path) {
 		return nil, false, ToolExecutionResult{}
 	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, true, fileToolError("file_read_failed", err.Error())
-	}
-	defer file.Close()
-
-	header := make([]byte, 512)
-	n, err := io.ReadFull(file, header)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
-		return nil, true, fileToolError("file_read_failed", err.Error())
-	}
-	mime := http.DetectContentType(header[:n])
-	if !filetools.IsSupportedImageMime(mime) {
+	image, err := multimodal.LoadImageFile(path, "", multimodal.ImageLoadOptions{
+		MaxBytes:               filetools.MaxInlineImageBytes,
+		ReencodeThresholdBytes: 0,
+	})
+	if errors.Is(err, multimodal.ErrUnsupportedImageMime) {
 		return nil, false, ToolExecutionResult{}
 	}
-	if info.Size() > filetools.MaxInlineImageBytes {
+	if errors.Is(err, multimodal.ErrImageTooLarge) {
 		return nil, true, fileToolError("file_read_image_too_large", fmt.Sprintf("image exceeds max inline bytes: %d", filetools.MaxInlineImageBytes))
 	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return nil, true, fileToolError("file_read_failed", err.Error())
-	}
-	data, err := io.ReadAll(file)
 	if err != nil {
 		return nil, true, fileToolError("file_read_failed", err.Error())
 	}
-	sha := sha256BytesHex(data)
 	return map[string]any{
 		"filePath":       path,
 		"kind":           "image",
-		"mimeType":       mime,
+		"mimeType":       image.MimeType,
 		"sizeBytes":      info.Size(),
 		"modifiedUnixMs": info.ModTime().UnixMilli(),
-		"sha256":         sha,
-		"contentBase64":  base64.StdEncoding.EncodeToString(data),
+		"sha256":         image.SHA256,
+		"contentBase64":  image.DataBase64,
 	}, true, ToolExecutionResult{}
 }
 

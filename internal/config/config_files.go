@@ -22,6 +22,9 @@ func (c *Config) applyStructuredConfig() error {
 	c.applyCoderPromptsFile(ConfigFile("configs/coder-prompts.yml"))
 	c.applyMemoryPromptsFile(ConfigFile("configs/memory-prompts.yml"))
 	c.applyCoderSettingsFile(ConfigFile("configs/coder-settings.yml"))
+	if err := c.applyVisionRecognizeFile(ConfigFile("configs/vision-recognize.yml")); err != nil {
+		return err
+	}
 	if err := c.applyChannelsFile(ConfigFile("configs/channels.yml")); err != nil {
 		return err
 	}
@@ -372,6 +375,51 @@ func (c *Config) applyCoderSettingsFile(path string) {
 	}
 	c.CoderSettings.WorkspaceAgents.Enabled = boolValue(anyValue(workspaceAgents["enabled"], c.CoderSettings.WorkspaceAgents.Enabled), c.CoderSettings.WorkspaceAgents.Enabled)
 	c.CoderSettings.WorkspaceAgents.File = stringValue(anyValue(workspaceAgents["file"], c.CoderSettings.WorkspaceAgents.File), c.CoderSettings.WorkspaceAgents.File)
+}
+
+func (c *Config) applyVisionRecognizeFile(path string) error {
+	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return err
+	}
+	values, _ := tree.(map[string]any)
+	if len(values) == 0 {
+		return nil
+	}
+	c.VisionRecognize.Enabled = boolValue(anyValue(values["enabled"], c.VisionRecognize.Enabled), c.VisionRecognize.Enabled)
+	c.VisionRecognize.DefaultProfile = stringValue(anyValue(values["default-profile"], c.VisionRecognize.DefaultProfile), c.VisionRecognize.DefaultProfile)
+	profiles, _ := values["profiles"].(map[string]any)
+	if len(profiles) == 0 {
+		return nil
+	}
+	parsed := make(map[string]VisionRecognizeProfileConfig, len(profiles))
+	for key, raw := range profiles {
+		profileKey := strings.TrimSpace(key)
+		if profileKey == "" {
+			continue
+		}
+		base := VisionRecognizeProfileConfig{}
+		if existing, ok := c.VisionRecognize.Profiles[profileKey]; ok {
+			base = existing
+		}
+		parsed[profileKey] = parseVisionRecognizeProfileConfig(raw, base)
+	}
+	c.VisionRecognize.Profiles = parsed
+	return nil
+}
+
+func parseVisionRecognizeProfileConfig(raw any, fallback VisionRecognizeProfileConfig) VisionRecognizeProfileConfig {
+	values, _ := raw.(map[string]any)
+	if len(values) == 0 {
+		return fallback
+	}
+	fallback.ModelKey = stringValue(anyValue(values["model-key"], fallback.ModelKey), fallback.ModelKey)
+	fallback.TimeoutMs = intValue(anyValue(values["timeout-ms"], fallback.TimeoutMs), fallback.TimeoutMs)
+	fallback.MaxImages = intValue(anyValue(values["max-images"], fallback.MaxImages), fallback.MaxImages)
+	fallback.MaxImageBytes = intValue(anyValue(values["max-image-bytes"], fallback.MaxImageBytes), fallback.MaxImageBytes)
+	fallback.OutputFormat = stringValue(anyValue(values["output-format"], fallback.OutputFormat), fallback.OutputFormat)
+	fallback.SystemPrompt = stringValue(anyValue(values["system-prompt"], fallback.SystemPrompt), fallback.SystemPrompt)
+	return fallback
 }
 
 func (c *Config) applyChannelsFile(path string) error {
