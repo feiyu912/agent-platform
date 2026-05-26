@@ -107,6 +107,13 @@ func TestAutoApproveAndFullAccessLevels(t *testing.T) {
 	if !autoPlan.AutoApproved() {
 		t.Fatalf("expected auto-approved outside read, got %#v", autoPlan)
 	}
+	autoWritePlan, err := BuildPathPlan(cfg, autoSession, WriteAccess, outside)
+	if err != nil {
+		t.Fatalf("build auto write plan: %v", err)
+	}
+	if !autoWritePlan.RequiresApproval() {
+		t.Fatalf("expected auto-approve outside write to require approval, got %#v", autoWritePlan)
+	}
 
 	fullSession := contracts.QuerySession{AccessLevel: contracts.AccessLevelFullAccess, WorkspaceRoot: workspace}
 	fullPlan, err := BuildPathPlan(cfg, fullSession, WriteAccess, outside)

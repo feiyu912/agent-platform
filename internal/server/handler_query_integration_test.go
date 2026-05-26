@@ -1194,7 +1194,7 @@ Plan should be canceled before execution.
 	if got := providerCallCount.Load(); got != 1 {
 		t.Fatalf("provider calls = %d, want 1", got)
 	}
-	assertPersistedPlanningDebugEvents(t, fixture.server)
+	assertPersistedPlanningSnapshotOnly(t, fixture.server)
 }
 
 func readAwaitingQuestion(t *testing.T, reader *bufio.Reader, streamBody *strings.Builder, expectedQuestion string) (string, string) {
@@ -1345,17 +1345,17 @@ func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) 
 			if !strings.Contains(stringValue(planning["markdown"]), "## Summary") {
 				t.Fatalf("expected persisted planning markdown, got %#v", planning)
 			}
-			hasPlanningSnapshot := false
+			planningSnapshotCount := 0
 			for _, ev := range chatResp.Data.Events {
 				switch ev.Type {
 				case "planning.snapshot":
-					hasPlanningSnapshot = true
+					planningSnapshotCount++
 				case "planning.start", "planning.delta", "planning.end":
 					t.Fatalf("did not expect default replay planning debug event %s in %#v", ev.Type, chatResp.Data.Events)
 				}
 			}
-			if !hasPlanningSnapshot {
-				t.Fatalf("expected replayed planning.snapshot event, got %#v", chatResp.Data.Events)
+			if planningSnapshotCount != 1 {
+				t.Fatalf("expected one replayed planning.snapshot event, got %d in %#v", planningSnapshotCount, chatResp.Data.Events)
 			}
 			return
 		}
@@ -1363,7 +1363,7 @@ func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) 
 	t.Fatalf("expected persisted request.query planningMode=true, got %#v", chatResp.Data.Events)
 }
 
-func assertPersistedPlanningDebugEvents(t *testing.T, server http.Handler) {
+func assertPersistedPlanningSnapshotOnly(t *testing.T, server http.Handler) {
 	t.Helper()
 	chatsRec := httptest.NewRecorder()
 	server.ServeHTTP(chatsRec, httptest.NewRequest(http.MethodGet, "/api/chats", nil))
@@ -1381,17 +1381,17 @@ func assertPersistedPlanningDebugEvents(t *testing.T, server http.Handler) {
 	if err := json.Unmarshal(chatRec.Body.Bytes(), &chatResp); err != nil {
 		t.Fatalf("decode chat response: %v", err)
 	}
-	for _, eventType := range []string{"planning.start", "planning.delta", "planning.end", "planning.snapshot"} {
-		found := false
-		for _, ev := range chatResp.Data.Events {
-			if ev.Type == eventType {
-				found = true
-				break
-			}
+	planningSnapshotCount := 0
+	for _, ev := range chatResp.Data.Events {
+		switch ev.Type {
+		case "planning.snapshot":
+			planningSnapshotCount++
+		case "planning.start", "planning.delta", "planning.end":
+			t.Fatalf("did not expect persisted planning lifecycle event %s with debug enabled, got %#v", ev.Type, chatResp.Data.Events)
 		}
-		if !found {
-			t.Fatalf("expected replayed %s with debug enabled, got %#v", eventType, chatResp.Data.Events)
-		}
+	}
+	if planningSnapshotCount != 1 {
+		t.Fatalf("expected one persisted planning.snapshot with debug enabled, got %d in %#v", planningSnapshotCount, chatResp.Data.Events)
 	}
 }
 

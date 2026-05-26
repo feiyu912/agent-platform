@@ -111,6 +111,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 	var chatTotalCachedTokens, chatTotalReasoningTokens, chatTotalPromptCacheHitTokens, chatTotalPromptCacheMissTokens int
 	var chatTotalLlmChatCompletionCount int
 	taskQueries := map[string]replayedSubTaskQuery{}
+	planningReplayEvents := collectPlanningReplayEvents(lines)
 	for _, line := range lines {
 		if lineType, _ := line["_type"].(string); lineType != "query" {
 			continue
@@ -130,7 +131,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		}
 	}
 
-	for _, line := range lines {
+	for lineIndex, line := range lines {
 		lineType, _ := line["_type"].(string)
 		chatID, _ := line["chatId"].(string)
 		runID, _ := line["runId"].(string)
@@ -355,21 +356,21 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.events = append(rd.events, stream.EventDataFromMap(answer))
 			}
 		case "planning":
-			event, _ := line["event"].(map[string]any)
-			if len(event) == 0 {
+			events := planningReplayEvents[lineIndex]
+			if len(events) == 0 {
 				continue
 			}
-			if _, ok := event["runId"]; !ok && runID != "" {
-				event["runId"] = runID
+			planningRunID := runID
+			if value := strings.TrimSpace(stringFromAny(events[0]["runId"])); value != "" {
+				planningRunID = value
 			}
-			if _, ok := event["chatId"]; !ok && chatID != "" {
-				event["chatId"] = chatID
+			rd := ensureRun(runs, &runOrder, planningRunID)
+			for _, event := range events {
+				if nextPlanning := parsePlanningFromEvent(event); nextPlanning != nil {
+					planning = nextPlanning
+				}
+				rd.events = append(rd.events, stream.EventDataFromMap(event))
 			}
-			if nextPlanning := parsePlanningFromEvent(event); nextPlanning != nil {
-				planning = nextPlanning
-			}
-			rd := ensureRun(runs, &runOrder, runID)
-			rd.events = append(rd.events, stream.EventDataFromMap(event))
 		case "event", "steer":
 			event, _ := line["event"].(map[string]any)
 			if len(event) == 0 {
@@ -450,6 +451,167 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 
 func taskToolIDFromLine(line map[string]any) string {
 	return stringFromAny(line["taskToolId"])
+}
+
+type replayPlanningAggregate struct {
+	chatID           string
+	runID            string
+	planningID       string
+	planningFile     string
+	title            string
+	deltaMarkdown    string
+	snapshotMarkdown string
+	updatedAt        int64
+	timestamp        int64
+	fallbackIndex    int
+	snapshotIndex    int
+	hasSnapshot      bool
+}
+
+func collectPlanningReplayEvents(lines []map[string]any) map[int][]map[string]any {
+	aggregates := map[string]*replayPlanningAggregate{}
+	order := []string{}
+	for lineIndex, line := range lines {
+		if lineType, _ := line["_type"].(string); lineType != "planning" {
+			continue
+		}
+		event, _ := line["event"].(map[string]any)
+		if len(event) == 0 {
+			continue
+		}
+		normalized := cloneEventMap(event)
+		chatID := strings.TrimSpace(stringFromAny(line["chatId"]))
+		runID := strings.TrimSpace(stringFromAny(line["runId"]))
+		if _, ok := normalized["chatId"]; !ok && chatID != "" {
+			normalized["chatId"] = chatID
+		}
+		if _, ok := normalized["runId"]; !ok && runID != "" {
+			normalized["runId"] = runID
+		}
+		key := replayPlanningKey(normalized)
+		if key == "" {
+			continue
+		}
+		aggregate := aggregates[key]
+		if aggregate == nil {
+			aggregate = &replayPlanningAggregate{
+				chatID:        chatID,
+				runID:         runID,
+				fallbackIndex: -1,
+				snapshotIndex: -1,
+			}
+			aggregates[key] = aggregate
+			order = append(order, key)
+		}
+		aggregate.apply(lineIndex, normalized, line)
+	}
+
+	out := map[int][]map[string]any{}
+	for _, key := range order {
+		event := aggregates[key].snapshotEvent()
+		if event == nil {
+			continue
+		}
+		lineIndex := aggregates[key].emitIndex()
+		if lineIndex < 0 {
+			continue
+		}
+		out[lineIndex] = append(out[lineIndex], event)
+	}
+	return out
+}
+
+func replayPlanningKey(event map[string]any) string {
+	planningID := strings.TrimSpace(stringFromAny(event["planningId"]))
+	planningFile := strings.TrimSpace(stringFromAny(event["planningFile"]))
+	if planningID == "" && planningFile == "" {
+		return ""
+	}
+	runID := strings.TrimSpace(stringFromAny(event["runId"]))
+	if planningID != "" {
+		return runID + "\x00id\x00" + planningID
+	}
+	return runID + "\x00file\x00" + planningFile
+}
+
+func (a *replayPlanningAggregate) apply(lineIndex int, event map[string]any, line map[string]any) {
+	if value := strings.TrimSpace(stringFromAny(event["chatId"])); value != "" {
+		a.chatID = value
+	}
+	if value := strings.TrimSpace(stringFromAny(event["runId"])); value != "" {
+		a.runID = value
+	}
+	if value := strings.TrimSpace(stringFromAny(event["planningId"])); value != "" {
+		a.planningID = value
+	}
+	if value := strings.TrimSpace(stringFromAny(event["planningFile"])); value != "" {
+		a.planningFile = value
+	}
+	if value := strings.TrimSpace(stringFromAny(event["title"])); value != "" {
+		a.title = value
+	}
+	if updatedAt := int64FromAny(event["updatedAt"]); updatedAt != 0 {
+		a.updatedAt = updatedAt
+	} else if a.updatedAt == 0 {
+		a.updatedAt = int64FromAny(line["updatedAt"])
+	}
+	if timestamp := int64FromAny(event["timestamp"]); timestamp != 0 {
+		a.timestamp = timestamp
+	} else if timestamp := int64FromAny(line["updatedAt"]); timestamp != 0 {
+		a.timestamp = timestamp
+	}
+
+	eventType := strings.TrimSpace(stringFromAny(event["type"]))
+	a.fallbackIndex = lineIndex
+	switch eventType {
+	case "planning.delta":
+		a.deltaMarkdown += stringFromAny(event["delta"])
+	case "planning.snapshot":
+		a.hasSnapshot = true
+		a.snapshotIndex = lineIndex
+		markdown := stringFromAny(event["markdown"])
+		if markdown == "" {
+			markdown = stringFromAny(event["text"])
+		}
+		if markdown != "" {
+			a.snapshotMarkdown = markdown
+		}
+	}
+}
+
+func (a *replayPlanningAggregate) emitIndex() int {
+	if a == nil {
+		return -1
+	}
+	if a.hasSnapshot && a.snapshotIndex >= 0 {
+		return a.snapshotIndex
+	}
+	return a.fallbackIndex
+}
+
+func (a *replayPlanningAggregate) snapshotEvent() map[string]any {
+	if a == nil || (strings.TrimSpace(a.planningID) == "" && strings.TrimSpace(a.planningFile) == "") {
+		return nil
+	}
+	markdown := a.snapshotMarkdown
+	if markdown == "" {
+		markdown = a.deltaMarkdown
+	}
+	updatedAt := a.updatedAt
+	if updatedAt == 0 {
+		updatedAt = a.timestamp
+	}
+	return map[string]any{
+		"type":         "planning.snapshot",
+		"timestamp":    a.timestamp,
+		"planningId":   a.planningID,
+		"planningFile": planningFileDisplayName(a.planningFile),
+		"chatId":       a.chatID,
+		"runId":        a.runID,
+		"title":        a.title,
+		"markdown":     markdown,
+		"updatedAt":    updatedAt,
+	}
 }
 
 func parsePlanningFromEvent(event map[string]any) *PlanningState {

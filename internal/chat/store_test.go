@@ -1978,7 +1978,7 @@ func TestStepWriterPlanningLifecyclePersistsSnapshotByDefault(t *testing.T) {
 	}
 }
 
-func TestStepWriterPlanningLifecyclePersistsDebugEventsWhenEnabled(t *testing.T) {
+func TestStepWriterPlanningLifecyclePersistsOnlySnapshotWhenDebugEventsEnabled(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -1995,9 +1995,127 @@ func TestStepWriterPlanningLifecyclePersistsDebugEventsWhenEnabled(t *testing.T)
 		event, _ := line["event"].(map[string]any)
 		got = append(got, stringVal(event["type"]))
 	}
-	want := []string{"planning.start", "planning.delta", "planning.end", "planning.snapshot"}
+	want := []string{"planning.snapshot"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("planning event lines = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoadChatReplaysSinglePlanningSnapshotFromLegacyLifecycleEvents(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	chatID := "chat-legacy-planning"
+	runID := "run-planning"
+	if _, _, err := store.EnsureChat(chatID, "coder", "", "plan it"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1001, map[string]any{
+		"type":         "planning.start",
+		"timestamp":    int64(1001),
+		"planningId":   "plan-run-planning",
+		"planningFile": "plan-run-planning.md",
+		"chatId":       chatID,
+		"runId":        runID,
+		"title":        "Plan",
+		"updatedAt":    int64(1001),
+	})
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1002, map[string]any{
+		"type":       "planning.delta",
+		"timestamp":  int64(1002),
+		"planningId": "plan-run-planning",
+		"delta":      "# Draft",
+	})
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1003, map[string]any{
+		"type":       "planning.end",
+		"timestamp":  int64(1003),
+		"planningId": "plan-run-planning",
+	})
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1004, map[string]any{
+		"type":         "planning.snapshot",
+		"timestamp":    int64(1004),
+		"planningId":   "plan-run-planning",
+		"planningFile": "plan-run-planning.md",
+		"chatId":       chatID,
+		"runId":        runID,
+		"title":        "Plan",
+		"markdown":     "# Final\n\nBody",
+		"updatedAt":    int64(1004),
+	})
+
+	detail, err := store.LoadChat(chatID)
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	if got := detailEventTypeCount(detail.Events, "planning.snapshot"); got != 1 {
+		t.Fatalf("planning.snapshot count = %d, events %#v", got, detail.Events)
+	}
+	if detailHasEventType(detail.Events, "planning.start") ||
+		detailHasEventType(detail.Events, "planning.delta") ||
+		detailHasEventType(detail.Events, "planning.end") {
+		t.Fatalf("unexpected replayed planning lifecycle events %#v", detail.Events)
+	}
+	snapshot := detailEventByType(detail.Events, "planning.snapshot")
+	if snapshot.String("markdown") != "# Final\n\nBody" {
+		t.Fatalf("expected snapshot markdown to prefer canonical snapshot, got %#v", snapshot.Map())
+	}
+	if detail.Planning == nil || detail.Planning.Markdown != "# Final\n\nBody" {
+		t.Fatalf("expected planning state from canonical snapshot, got %#v", detail.Planning)
+	}
+}
+
+func TestLoadChatSynthesizesPlanningSnapshotFromLegacyDeltas(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	chatID := "chat-legacy-planning-deltas"
+	runID := "run-planning"
+	if _, _, err := store.EnsureChat(chatID, "coder", "", "plan it"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1001, map[string]any{
+		"type":         "planning.start",
+		"timestamp":    int64(1001),
+		"planningId":   "plan-run-planning",
+		"planningFile": "plan-run-planning.md",
+		"chatId":       chatID,
+		"runId":        runID,
+		"title":        "Plan",
+		"updatedAt":    int64(1001),
+	})
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1002, map[string]any{
+		"type":       "planning.delta",
+		"timestamp":  int64(1002),
+		"planningId": "plan-run-planning",
+		"delta":      "# Draft",
+	})
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1003, map[string]any{
+		"type":       "planning.delta",
+		"timestamp":  int64(1003),
+		"planningId": "plan-run-planning",
+		"delta":      "\n\nBody",
+	})
+	appendPlanningEventLineForTest(t, store, chatID, runID, 1004, map[string]any{
+		"type":       "planning.end",
+		"timestamp":  int64(1004),
+		"planningId": "plan-run-planning",
+	})
+
+	detail, err := store.LoadChat(chatID)
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	if got := detailEventTypeCount(detail.Events, "planning.snapshot"); got != 1 {
+		t.Fatalf("planning.snapshot count = %d, events %#v", got, detail.Events)
+	}
+	snapshot := detailEventByType(detail.Events, "planning.snapshot")
+	if snapshot.String("markdown") != "# Draft\n\nBody" {
+		t.Fatalf("expected synthesized snapshot markdown from deltas, got %#v", snapshot.Map())
+	}
+	if detail.Planning == nil || detail.Planning.Markdown != "# Draft\n\nBody" {
+		t.Fatalf("expected planning state from synthesized snapshot, got %#v", detail.Planning)
 	}
 }
 
@@ -2031,6 +2149,19 @@ func emitPlanningLifecycleForTest(writer *StepWriter, chatID string) {
 	})
 }
 
+func appendPlanningEventLineForTest(t *testing.T, store *FileStore, chatID string, runID string, updatedAt int64, event map[string]any) {
+	t.Helper()
+	if err := store.AppendEventLine(chatID, EventLine{
+		ChatID:    chatID,
+		RunID:     runID,
+		UpdatedAt: updatedAt,
+		Event:     event,
+		Type:      "planning",
+	}); err != nil {
+		t.Fatalf("append planning event: %v", err)
+	}
+}
+
 func detailHasEventType(events []stream.EventData, eventType string) bool {
 	for _, event := range events {
 		if event.Type == eventType {
@@ -2038,6 +2169,25 @@ func detailHasEventType(events []stream.EventData, eventType string) bool {
 		}
 	}
 	return false
+}
+
+func detailEventTypeCount(events []stream.EventData, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
+}
+
+func detailEventByType(events []stream.EventData, eventType string) stream.EventData {
+	for _, event := range events {
+		if event.Type == eventType {
+			return event
+		}
+	}
+	return stream.EventData{}
 }
 
 func TestStepWriterPersistsTaskScopedUsageAndSlimMetadataWithoutDebugPayload(t *testing.T) {

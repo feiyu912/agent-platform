@@ -250,7 +250,7 @@ func defaultAccessPolicyConfig() AccessPolicyConfig {
 				Inherit: "default",
 				Approvals: AccessPolicyApprovalConfig{
 					ReadOutsideRoots:      "auto",
-					WriteOutsideRoots:     "auto",
+					WriteOutsideRoots:     "hitl",
 					BashComplexFilesystem: "auto",
 					BashOpaqueCommand:     "auto",
 				},
