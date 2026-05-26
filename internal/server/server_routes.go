@@ -221,6 +221,7 @@ func isSyncQueryContext(ctx context.Context) bool {
 
 func (s *Server) routes() {
 	s.router.HandleFunc("/api/agents", s.method(http.MethodGet, s.handleAgents))
+	s.router.HandleFunc("/api/agents/order", s.handleAgentOrder)
 	s.router.HandleFunc("/api/channels", s.method(http.MethodGet, s.handleChannels))
 	s.router.HandleFunc("/api/agent", s.method(http.MethodGet, s.handleAgent))
 	s.router.HandleFunc("/api/agent/create", s.method(http.MethodPost, s.handleAgentCreate))

@@ -75,6 +75,7 @@ func (s *Server) logWSDispatch(next ws.RouteHandler) ws.RouteHandler {
 
 func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/agents", s.wsAgents)
+	handler.RegisterRoute("/api/agents/order", s.wsAgentOrder)
 	handler.RegisterRoute("/api/channels", s.wsChannels)
 	handler.RegisterRoute("/api/agent", s.wsAgent)
 	handler.RegisterRoute("/api/agent/create", s.wsAgentCreate)

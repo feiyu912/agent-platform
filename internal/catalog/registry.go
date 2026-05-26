@@ -248,7 +248,7 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	keys := sortedKeys(r.agents)
+	keys := r.orderedAgentKeysLocked()
 	items := make([]api.AgentSummary, 0, len(keys))
 	scope = normalizeAgentSummaryScope(scope)
 	for _, key := range keys {
