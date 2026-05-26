@@ -518,6 +518,11 @@ type ChatUsageData struct {
 	LlmChatCompletionCount  int                     `json:"llmChatCompletionCount,omitempty"`
 }
 
+type ChatUsageBreakdown struct {
+	LastRun *ChatUsageData `json:"lastRun,omitempty"`
+	Chat    *ChatUsageData `json:"chat,omitempty"`
+}
+
 type PromptTokenDetails struct {
 	CachedTokens int `json:"cachedTokens,omitempty"`
 }
@@ -542,6 +547,21 @@ type MarkChatReadResponse struct {
 }
 
 type ChatDetailResponse struct {
+	ChatID         string              `json:"chatId"`
+	ChatName       string              `json:"chatName"`
+	ResourceTicket string              `json:"resourceTicket,omitempty"`
+	RawMessages    []map[string]any    `json:"rawMessages,omitempty"`
+	Events         []stream.EventData  `json:"events"`
+	Runs           []RunSummary        `json:"runs,omitempty"`
+	ActiveRun      *ActiveRunInfo      `json:"activeRun,omitempty"`
+	Plan           any                 `json:"plan,omitempty"`
+	Planning       any                 `json:"planning,omitempty"`
+	Artifact       any                 `json:"artifact,omitempty"`
+	References     []Reference         `json:"references,omitempty"`
+	Usage          *ChatUsageBreakdown `json:"usage,omitempty"`
+}
+
+type ArchivedChatDetailResponse struct {
 	ChatID         string             `json:"chatId"`
 	ChatName       string             `json:"chatName"`
 	ResourceTicket string             `json:"resourceTicket,omitempty"`

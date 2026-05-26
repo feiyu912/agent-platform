@@ -97,11 +97,20 @@ func TestServerSharedHelpersUseCommonChatAndMemoryStores(t *testing.T) {
 	if detail.ChatID != "chat-1" || len(detail.Events) == 0 || len(detail.RawMessages) < 2 {
 		t.Fatalf("unexpected chat detail %#v", detail)
 	}
-	if detail.Usage == nil || detail.Usage.PromptTokensDetails == nil || detail.Usage.PromptTokensDetails.CachedTokens != 2 ||
-		detail.Usage.CompletionTokensDetails == nil || detail.Usage.CompletionTokensDetails.ReasoningTokens != 4 ||
-		detail.Usage.PromptCacheHitTokens != 2 || detail.Usage.PromptCacheMissTokens != 1 ||
-		detail.Usage.LlmChatCompletionCount != 1 {
+	if detail.Usage == nil || detail.Usage.LastRun == nil || detail.Usage.Chat == nil {
+		t.Fatalf("expected detailed chat detail usage breakdown, got %#v", detail.Usage)
+	}
+	if detail.Usage.LastRun.PromptTokensDetails == nil || detail.Usage.LastRun.PromptTokensDetails.CachedTokens != 2 ||
+		detail.Usage.LastRun.CompletionTokensDetails == nil || detail.Usage.LastRun.CompletionTokensDetails.ReasoningTokens != 4 ||
+		detail.Usage.LastRun.PromptCacheHitTokens != 2 || detail.Usage.LastRun.PromptCacheMissTokens != 1 ||
+		detail.Usage.LastRun.LlmChatCompletionCount != 1 {
 		t.Fatalf("expected detailed chat detail usage, got %#v", detail.Usage)
+	}
+	if detail.Usage.Chat.PromptTokensDetails == nil || detail.Usage.Chat.PromptTokensDetails.CachedTokens != 2 ||
+		detail.Usage.Chat.CompletionTokensDetails == nil || detail.Usage.Chat.CompletionTokensDetails.ReasoningTokens != 4 ||
+		detail.Usage.Chat.PromptCacheHitTokens != 2 || detail.Usage.Chat.PromptCacheMissTokens != 1 ||
+		detail.Usage.Chat.LlmChatCompletionCount != 1 {
+		t.Fatalf("expected detailed chat cumulative usage, got %#v", detail.Usage)
 	}
 	if len(detail.Runs) != 1 || detail.Runs[0].Usage.PromptTokensDetails == nil || detail.Runs[0].Usage.PromptTokensDetails.CachedTokens != 2 ||
 		detail.Runs[0].Usage.CompletionTokensDetails == nil || detail.Runs[0].Usage.CompletionTokensDetails.ReasoningTokens != 4 ||
@@ -126,6 +135,67 @@ func TestServerSharedHelpersUseCommonChatAndMemoryStores(t *testing.T) {
 	}
 	if len(matches) == 0 {
 		t.Fatalf("expected stored memory, got %#v", matches)
+	}
+}
+
+func TestLoadChatDetailUsageBreakdownSeparatesLastRunFromChatTotal(t *testing.T) {
+	server, chats, _ := newServerForHelperTests(t)
+
+	if _, _, err := chats.EnsureChat("chat-usage-breakdown", "agent-1", "", "first"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := chats.OnRunCompleted(chat.RunCompletion{
+		ChatID:          "chat-usage-breakdown",
+		RunID:           "run-usage-1",
+		InitialMessage:  "first",
+		AssistantText:   "first answer",
+		UpdatedAtMillis: 1000,
+		Usage: chat.UsageData{
+			PromptTokens:           10,
+			CompletionTokens:       5,
+			TotalTokens:            15,
+			LlmChatCompletionCount: 1,
+		},
+	}); err != nil {
+		t.Fatalf("complete first run: %v", err)
+	}
+	if err := chats.OnRunCompleted(chat.RunCompletion{
+		ChatID:          "chat-usage-breakdown",
+		RunID:           "run-usage-2",
+		InitialMessage:  "second",
+		AssistantText:   "second answer",
+		UpdatedAtMillis: 2000,
+		Usage: chat.UsageData{
+			PromptTokens:           7,
+			CompletionTokens:       3,
+			TotalTokens:            10,
+			ReasoningTokens:        2,
+			LlmChatCompletionCount: 1,
+		},
+	}); err != nil {
+		t.Fatalf("complete second run: %v", err)
+	}
+
+	detail, err := server.loadChatDetail(context.Background(), "chat-usage-breakdown", false)
+	if err != nil {
+		t.Fatalf("load chat detail: %v", err)
+	}
+	if detail.Usage == nil || detail.Usage.LastRun == nil || detail.Usage.Chat == nil {
+		t.Fatalf("expected usage breakdown, got %#v", detail.Usage)
+	}
+	if detail.Usage.LastRun.PromptTokens != 7 || detail.Usage.LastRun.CompletionTokens != 3 ||
+		detail.Usage.LastRun.TotalTokens != 10 || detail.Usage.LastRun.LlmChatCompletionCount != 1 {
+		t.Fatalf("expected last run usage, got %#v", detail.Usage.LastRun)
+	}
+	if detail.Usage.LastRun.CompletionTokensDetails == nil || detail.Usage.LastRun.CompletionTokensDetails.ReasoningTokens != 2 {
+		t.Fatalf("expected last run detail usage, got %#v", detail.Usage.LastRun)
+	}
+	if detail.Usage.Chat.PromptTokens != 17 || detail.Usage.Chat.CompletionTokens != 8 ||
+		detail.Usage.Chat.TotalTokens != 25 || detail.Usage.Chat.LlmChatCompletionCount != 2 {
+		t.Fatalf("expected chat cumulative usage, got %#v", detail.Usage.Chat)
+	}
+	if len(detail.Runs) != 2 || detail.Runs[0].RunID != "run-usage-2" || detail.Runs[0].Usage.TotalTokens != 10 {
+		t.Fatalf("expected latest run first, got %#v", detail.Runs)
 	}
 }
 

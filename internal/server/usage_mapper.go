@@ -34,21 +34,55 @@ func mapUsageData(usage chat.UsageData) api.ChatUsageData {
 }
 
 func latestChatUsageFromEvents(events []stream.EventData) *api.ChatUsageData {
+	return latestUsageFromEvents(events, "chat")
+}
+
+func latestRunUsageFromEvents(events []stream.EventData) *api.ChatUsageData {
+	return latestUsageFromEvents(events, "run")
+}
+
+func latestUsageFromEvents(events []stream.EventData, key string) *api.ChatUsageData {
 	var latest *api.ChatUsageData
 	for _, event := range events {
 		if event.Type != "usage.snapshot" && event.Type != "run.complete" && event.Type != "run.error" {
 			continue
 		}
 		usage, _ := event.Value("usage").(map[string]any)
-		chatUsage, _ := usage["chat"].(map[string]any)
-		if chatUsage == nil {
+		selected, _ := usage[key].(map[string]any)
+		if selected == nil {
 			continue
 		}
-		if mapped := mapUsageDataFromPayload(chatUsage); mapped != nil {
+		if mapped := mapUsageDataFromPayload(selected); mapped != nil {
 			latest = mapped
 		}
 	}
 	return latest
+}
+
+func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, events []stream.EventData) *api.ChatUsageBreakdown {
+	var lastRun *api.ChatUsageData
+	for _, run := range runs {
+		if mapped := mapUsageDataPtr(&run.Usage); mapped != nil {
+			lastRun = mapped
+			break
+		}
+	}
+	if lastRun == nil {
+		lastRun = latestRunUsageFromEvents(events)
+	}
+
+	chatUsage := latestChatUsageFromEvents(events)
+	if chatUsage == nil {
+		chatUsage = mapUsageDataPtr(summaryUsage)
+	}
+
+	if lastRun == nil && chatUsage == nil {
+		return nil
+	}
+	return &api.ChatUsageBreakdown{
+		LastRun: lastRun,
+		Chat:    chatUsage,
+	}
 }
 
 func mapUsageDataFromPayload(usage map[string]any) *api.ChatUsageData {

@@ -198,16 +198,16 @@ func (s *Server) listArchives(req api.ArchivesRequest) (api.ArchivesResponse, er
 	return response, nil
 }
 
-func (s *Server) loadArchiveDetail(ctx context.Context, chatID string, includeRawMessages bool) (api.ChatDetailResponse, error) {
+func (s *Server) loadArchiveDetail(ctx context.Context, chatID string, includeRawMessages bool) (api.ArchivedChatDetailResponse, error) {
 	if s.deps.Archives == nil {
-		return api.ChatDetailResponse{}, errors.New("archive store is not configured")
+		return api.ArchivedChatDetailResponse{}, errors.New("archive store is not configured")
 	}
 	archived, err := s.deps.Archives.LoadArchived(chatID)
 	if err != nil {
-		return api.ChatDetailResponse{}, err
+		return api.ArchivedChatDetailResponse{}, err
 	}
 	s.enrichToolMetadata(archived.Detail.Events, archived.Summary.AgentKey)
-	response := api.ChatDetailResponse{
+	response := api.ArchivedChatDetailResponse{
 		ChatID:     archived.Detail.ChatID,
 		ChatName:   archived.Detail.ChatName,
 		Events:     archived.Detail.Events,

@@ -305,7 +305,7 @@ func TestBuildSessionSectionMergesContextAndAuth(t *testing.T) {
 	if !strings.Contains(section, "references:") || !strings.Contains(section, "id: ref-1") {
 		t.Fatalf("expected references in session section, got %q", section)
 	}
-	if strings.Contains(section, "workspace_dir:") || strings.Contains(section, "agent_dir:") {
+	if strings.Contains(section, "workspace_dir:") || strings.Contains(section, "chat_dir:") || strings.Contains(section, "agent_dir:") {
 		t.Fatalf("expected session section to exclude path fields, got %q", section)
 	}
 	assertOrderedSubstrings(t, section, []string{
@@ -331,6 +331,7 @@ func TestBuildSystemEnvironmentSectionUsesLocalPathsWithoutSandbox(t *testing.T)
 		RuntimeContext: RuntimeRequestContext{
 			LocalMode: false,
 			LocalPaths: LocalPaths{
+				WorkspaceDir:       "/Users/linlay/Project/zenmind/zenmind-env/chats/chat-1",
 				WorkingDirectory:   "/Users/linlay/Project/zenmind/agent-platform",
 				ChatAttachmentsDir: "/Users/linlay/Project/zenmind/zenmind-env/chats/chat-1",
 				RootDir:            "/Users/linlay/Project/zenmind/zenmind-env/root",
@@ -365,6 +366,9 @@ func TestBuildSystemEnvironmentSectionUsesLocalPathsWithoutSandbox(t *testing.T)
 	if !strings.Contains(section, "workspace_dir: /Users/linlay/Project/zenmind/zenmind-env/chats/chat-1") {
 		t.Fatalf("expected chat workspace path in system environment, got %q", section)
 	}
+	if !strings.Contains(section, "chat_dir: /Users/linlay/Project/zenmind/zenmind-env/chats/chat-1") {
+		t.Fatalf("expected chat dir in system environment, got %q", section)
+	}
 	if strings.Contains(section, "workspace_dir: /workspace") {
 		t.Fatalf("expected local paths instead of sandbox paths, got %q", section)
 	}
@@ -376,12 +380,35 @@ func TestBuildSystemEnvironmentSectionUsesLocalPathsWithoutSandbox(t *testing.T)
 	}
 	assertOrderedSubstrings(t, section, []string{
 		"workspace_dir:",
+		"chat_dir:",
 		"root_dir:",
 		"skills_dir:",
 		"agent_dir:",
 		"owner_dir:",
 	})
 	assertLastField(t, section, "pan_dir:")
+}
+
+func TestBuildSystemEnvironmentSectionSeparatesExplicitWorkspaceAndChatDir(t *testing.T) {
+	section := buildSystemEnvironmentSection(QuerySession{
+		RuntimeContext: RuntimeRequestContext{
+			LocalPaths: LocalPaths{
+				WorkspaceDir:       "/",
+				WorkingDirectory:   "/",
+				ChatAttachmentsDir: "/Users/linlay/Project/zenmind/zenmind-env/chats/chat-1",
+			},
+		},
+	})
+
+	if !strings.Contains(section, "workspace_dir: / # 工具默认工作目录 / 权限工作根") {
+		t.Fatalf("expected explicit workspace root in system environment, got %q", section)
+	}
+	if !strings.Contains(section, "chat_dir: /Users/linlay/Project/zenmind/zenmind-env/chats/chat-1") {
+		t.Fatalf("expected separate chat dir in system environment, got %q", section)
+	}
+	if strings.Contains(section, "workspace_dir: /Users/linlay/Project/zenmind/agent-platform") {
+		t.Fatalf("expected process cwd not to be used as workspace_dir, got %q", section)
+	}
 }
 
 func TestBuildSystemEnvironmentSectionUsesSandboxPathsWhenSandboxEnabled(t *testing.T) {
@@ -419,6 +446,9 @@ func TestBuildSystemEnvironmentSectionUsesSandboxPathsWhenSandboxEnabled(t *test
 	if !strings.Contains(section, "workspace_dir: /workspace") {
 		t.Fatalf("expected sandbox workspace dir in system environment, got %q", section)
 	}
+	if !strings.Contains(section, "chat_dir: /workspace") {
+		t.Fatalf("expected sandbox chat dir in system environment, got %q", section)
+	}
 	if strings.Contains(section, "/Users/linlay/Project/zenmind/agent-platform") {
 		t.Fatalf("expected sandbox paths to win when sandbox is enabled, got %q", section)
 	}
@@ -430,6 +460,7 @@ func TestBuildSystemEnvironmentSectionUsesSandboxPathsWhenSandboxEnabled(t *test
 	}
 	assertOrderedSubstrings(t, section, []string{
 		"workspace_dir:",
+		"chat_dir:",
 		"root_dir:",
 		"skills_dir:",
 		"agent_dir:",
@@ -504,6 +535,7 @@ func TestBuildSystemPromptSeparatesSystemEnvironmentAndSessionContext(t *testing
 			LocalMode: false,
 			TeamID:    "team-1",
 			LocalPaths: LocalPaths{
+				WorkspaceDir:       "/Users/linlay/Project/zenmind/zenmind-env/chats/chat-1",
 				WorkingDirectory:   "/Users/linlay/Project/zenmind/agent-platform",
 				ChatAttachmentsDir: "/Users/linlay/Project/zenmind/zenmind-env/chats/chat-1",
 				AgentDir:           "/Users/linlay/Project/zenmind/zenmind-env/agents/zenmi",
@@ -526,11 +558,14 @@ func TestBuildSystemPromptSeparatesSystemEnvironmentAndSessionContext(t *testing
 	if !strings.Contains(prompt, "workspace_dir: /Users/linlay/Project/zenmind/zenmind-env/chats/chat-1") {
 		t.Fatalf("expected final prompt to include chat workspace dir, got %q", prompt)
 	}
+	if !strings.Contains(prompt, "chat_dir: /Users/linlay/Project/zenmind/zenmind-env/chats/chat-1") {
+		t.Fatalf("expected final prompt to include chat dir, got %q", prompt)
+	}
 	if !strings.Contains(prompt, "chatId: chat-1") || !strings.Contains(prompt, "runId: run-1") || !strings.Contains(prompt, "requestId: req-1") {
 		t.Fatalf("expected final prompt to include session identifiers, got %q", prompt)
 	}
 	sessionSection := prompt[sessionIndex:]
-	if strings.Contains(sessionSection, "workspace_dir:") {
+	if strings.Contains(sessionSection, "workspace_dir:") || strings.Contains(sessionSection, "chat_dir:") {
 		t.Fatalf("expected session section to exclude workspace paths, got %q", sessionSection)
 	}
 	systemSection := prompt[systemIndex:sessionIndex]

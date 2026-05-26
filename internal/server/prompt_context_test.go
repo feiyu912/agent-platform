@@ -105,7 +105,10 @@ func TestResolveLocalPathsIncludesAgentAndRegistryPaths(t *testing.T) {
 		t.Fatalf("create chat attachments dir: %v", err)
 	}
 
-	paths := resolveLocalPaths(cfg.Paths, "chat-1", agentDir, "")
+	paths, err := resolveLocalPaths(cfg.Paths, "chat-1", agentDir, "")
+	if err != nil {
+		t.Fatalf("resolveLocalPaths() error = %v", err)
+	}
 	if paths.AgentDir != agentDir {
 		t.Fatalf("agent dir = %q", paths.AgentDir)
 	}
@@ -148,7 +151,10 @@ func TestResolveLocalPathsResolvesChatWorkspaceRoot(t *testing.T) {
 	t.Parallel()
 
 	cfg := testPromptContextConfig(t)
-	paths := resolveLocalPaths(cfg.Paths, "chat-1", "", catalog.AgentWorkspaceRootChat)
+	paths, err := resolveLocalPaths(cfg.Paths, "chat-1", "", catalog.AgentWorkspaceRootChat)
+	if err != nil {
+		t.Fatalf("resolveLocalPaths() error = %v", err)
+	}
 	want := absTestPath(t, filepath.Join(cfg.Paths.ChatsDir, "chat-1"))
 	if paths.WorkspaceDir != want {
 		t.Fatalf("workspace dir = %q, want %q", paths.WorkspaceDir, want)
@@ -158,13 +164,20 @@ func TestResolveLocalPathsResolvesChatWorkspaceRoot(t *testing.T) {
 	}
 }
 
-func TestResolveLocalPathsOmitsMissingChatAttachmentsDir(t *testing.T) {
+func TestResolveLocalPathsCreatesChatAttachmentsDir(t *testing.T) {
 	t.Parallel()
 
 	cfg := testPromptContextConfig(t)
-	paths := resolveLocalPaths(cfg.Paths, "chat-missing", "", "")
-	if paths.ChatAttachmentsDir != "" {
-		t.Fatalf("chat attachments dir = %q, want empty", paths.ChatAttachmentsDir)
+	paths, err := resolveLocalPaths(cfg.Paths, "chat-missing", "", "")
+	if err != nil {
+		t.Fatalf("resolveLocalPaths() error = %v", err)
+	}
+	want := absTestPath(t, filepath.Join(cfg.Paths.ChatsDir, "chat-missing"))
+	if paths.ChatAttachmentsDir != want {
+		t.Fatalf("chat attachments dir = %q, want %q", paths.ChatAttachmentsDir, want)
+	}
+	if stat, err := os.Stat(want); err != nil || !stat.IsDir() {
+		t.Fatalf("expected chat attachments dir to be created, stat=%#v err=%v", stat, err)
 	}
 	if paths.WorkingDirectory == "" {
 		t.Fatal("expected working directory to be populated")
@@ -179,6 +192,79 @@ func TestResolveLocalWorkspaceDirUsesChatDirWhenChatIDProvided(t *testing.T) {
 	workspaceDir := resolveLocalWorkspaceDir(cfg.Paths, "chat-1")
 	if workspaceDir != absTestPath(t, filepath.Join(cfg.Paths.ChatsDir, "chat-1")) {
 		t.Fatalf("workspace dir = %q", workspaceDir)
+	}
+}
+
+func TestBuildRuntimeContextDefaultsHostWorkspaceToChatDir(t *testing.T) {
+	t.Parallel()
+
+	cfg := testPromptContextConfig(t)
+	s := &Server{
+		deps: Dependencies{
+			Config:   cfg,
+			Registry: testCatalogRegistry{},
+		},
+	}
+
+	context, err := s.buildRuntimeRequestContext(runtimeRequestContextInput{
+		agentKey: "demo-agent",
+		chatID:   "chat-default",
+		definition: catalog.AgentDefinition{
+			Key:      "demo-agent",
+			Mode:     "REACT",
+			AgentDir: filepath.Join(cfg.Paths.AgentsDir, "demo-agent"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildRuntimeRequestContext() error = %v", err)
+	}
+	want := absTestPath(t, filepath.Join(cfg.Paths.ChatsDir, "chat-default"))
+	if context.LocalPaths.WorkspaceDir != want {
+		t.Fatalf("workspace dir = %q, want %q", context.LocalPaths.WorkspaceDir, want)
+	}
+	if context.LocalPaths.ChatAttachmentsDir != want {
+		t.Fatalf("chat attachments dir = %q, want %q", context.LocalPaths.ChatAttachmentsDir, want)
+	}
+	if context.LocalPaths.WorkingDirectory != want {
+		t.Fatalf("working dir = %q, want %q", context.LocalPaths.WorkingDirectory, want)
+	}
+}
+
+func TestBuildRuntimeContextKeepsExplicitWorkspaceAndChatDir(t *testing.T) {
+	t.Parallel()
+
+	cfg := testPromptContextConfig(t)
+	s := &Server{
+		deps: Dependencies{
+			Config:   cfg,
+			Registry: testCatalogRegistry{},
+		},
+	}
+
+	context, err := s.buildRuntimeRequestContext(runtimeRequestContextInput{
+		agentKey: "admin-agent",
+		chatID:   "chat-admin",
+		definition: catalog.AgentDefinition{
+			Key:      "admin-agent",
+			Mode:     "REACT",
+			AgentDir: filepath.Join(cfg.Paths.AgentsDir, "admin-agent"),
+			Workspace: catalog.AgentWorkspaceConfig{
+				Root: "/",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildRuntimeRequestContext() error = %v", err)
+	}
+	wantChatDir := absTestPath(t, filepath.Join(cfg.Paths.ChatsDir, "chat-admin"))
+	if context.LocalPaths.WorkspaceDir != "/" {
+		t.Fatalf("workspace dir = %q, want /", context.LocalPaths.WorkspaceDir)
+	}
+	if context.LocalPaths.ChatAttachmentsDir != wantChatDir {
+		t.Fatalf("chat attachments dir = %q, want %q", context.LocalPaths.ChatAttachmentsDir, wantChatDir)
+	}
+	if context.LocalPaths.WorkingDirectory != "/" {
+		t.Fatalf("working dir = %q, want /", context.LocalPaths.WorkingDirectory)
 	}
 }
 

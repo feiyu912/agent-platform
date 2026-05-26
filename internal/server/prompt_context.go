@@ -67,7 +67,11 @@ type runtimeRequestContextInput struct {
 }
 
 func (s *Server) buildRuntimeRequestContext(input runtimeRequestContextInput) (contracts.RuntimeRequestContext, error) {
-	localPaths := resolveLocalPaths(s.deps.Config.Paths, input.chatID, input.definition.AgentDir, input.definition.Workspace.Root)
+	workspaceRoot := effectiveLocalWorkspaceRoot(input.definition)
+	localPaths, err := resolveLocalPaths(s.deps.Config.Paths, input.chatID, input.definition.AgentDir, workspaceRoot)
+	if err != nil {
+		return contracts.RuntimeRequestContext{}, err
+	}
 	if promptContextHasPlatformMount(input.definition.Runtime["extraMounts"], "skills-market") {
 		localPaths.SkillsMarketDir = cleanOrEmpty(s.deps.Config.Paths.SkillsMarketDir)
 	}
@@ -199,14 +203,25 @@ func buildSkillCatalogPrompt(def catalog.AgentDefinition, marketDir string, appe
 	return strings.Join(sections, "\n\n")
 }
 
-func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string, workspaceRoot string) contracts.LocalPaths {
+func effectiveLocalWorkspaceRoot(def catalog.AgentDefinition) string {
+	workspaceRoot := strings.TrimSpace(def.Workspace.Root)
+	if workspaceRoot == "" && !hasRuntimeSandbox(def.Runtime) && !isProxyAgentMode(def.Mode) {
+		return catalog.AgentWorkspaceRootChat
+	}
+	return workspaceRoot
+}
+
+func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string, workspaceRoot string) (contracts.LocalPaths, error) {
 	runtimeHome := filepath.Dir(filepath.Clean(paths.AgentsDir))
 	workingDirectory, _ := os.Getwd()
 	workspaceRoot = resolveHostWorkspaceRoot(paths, chatID, workspaceRoot)
 	if workspaceRoot != "" {
 		workingDirectory = workspaceRoot
 	}
-	attachmentsDir := existingChatAttachmentsDir(paths, chatID)
+	attachmentsDir, err := ensureChatAttachmentsDir(paths, chatID)
+	if err != nil {
+		return contracts.LocalPaths{}, err
+	}
 	agentDir = cleanOrEmpty(agentDir)
 	agentSkillsDir := ""
 	if agentDir != "" {
@@ -234,7 +249,7 @@ func resolveLocalPaths(paths config.PathsConfig, chatID string, agentDir string,
 		ToolsDir:           cleanOrEmpty(paths.ToolsDir),
 		ViewportsDir:       cleanOrEmpty(filepath.Join(filepath.Dir(filepath.Clean(paths.RegistriesDir)), "viewports")),
 		ChatAttachmentsDir: attachmentsDir,
-	}
+	}, nil
 }
 
 func resolveHostWorkspaceRoot(paths config.PathsConfig, chatID string, workspaceRoot string) string {
@@ -243,26 +258,29 @@ func resolveHostWorkspaceRoot(paths config.PathsConfig, chatID string, workspace
 		return ""
 	}
 	if strings.EqualFold(workspaceRoot, catalog.AgentWorkspaceRootChat) {
-		chatID = strings.TrimSpace(chatID)
-		if chatID == "" {
-			return ""
-		}
-		return absOrEmpty(filepath.Join(paths.ChatsDir, chatID))
+		return chatAttachmentsDirPath(paths, chatID)
 	}
 	return cleanOrEmpty(workspaceRoot)
 }
 
-func existingChatAttachmentsDir(paths config.PathsConfig, chatID string) string {
+func ensureChatAttachmentsDir(paths config.PathsConfig, chatID string) (string, error) {
+	dir := chatAttachmentsDirPath(paths, chatID)
+	if dir == "" {
+		return "", nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create chat directory %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+func chatAttachmentsDirPath(paths config.PathsConfig, chatID string) string {
 	chatID = strings.TrimSpace(chatID)
-	if chatID == "" {
+	chatsDir := strings.TrimSpace(paths.ChatsDir)
+	if chatID == "" || chatsDir == "" {
 		return ""
 	}
-	dir := filepath.Join(paths.ChatsDir, chatID)
-	stat, err := os.Stat(dir)
-	if err != nil || !stat.IsDir() {
-		return ""
-	}
-	return cleanOrEmpty(dir)
+	return absOrEmpty(filepath.Join(chatsDir, chatID))
 }
 
 func resolveSandboxPaths(cfg config.Config, def catalog.AgentDefinition, chatID string) contracts.SandboxPaths {

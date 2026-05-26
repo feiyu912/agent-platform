@@ -490,16 +490,19 @@ func TestParseAgentFileAllowsCoderProfileOverrides(t *testing.T) {
 	}
 }
 
-func TestParseAgentFileRejectsCoderWithoutWorkspace(t *testing.T) {
+func TestParseAgentFileAllowsCoderWithoutWorkspace(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")
 	if err := os.WriteFile(path, []byte("key: coder\nmode: CODER\n"), 0o644); err != nil {
 		t.Fatalf("write agent file: %v", err)
 	}
 
-	_, err := parseAgentFile(path)
-	if err == nil || !strings.Contains(err.Error(), "runtimeConfig.workspaceRoot is required") {
-		t.Fatalf("expected workspace requirement error, got %v", err)
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	if def.Workspace.Root != "" {
+		t.Fatalf("workspace root = %q, want empty runtime default", def.Workspace.Root)
 	}
 }
 

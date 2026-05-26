@@ -91,10 +91,9 @@ func (s *Server) loadChatDetail(ctx context.Context, chatID string, includeRawMe
 		response.Artifact = detail.Artifact
 	}
 	if summary != nil {
-		response.Usage = mapUsageDataPtr(summary.Usage)
-	}
-	if usage := latestChatUsageFromEvents(detail.Events); usage != nil {
-		response.Usage = usage
+		response.Usage = chatUsageBreakdown(summary.Usage, runs, detail.Events)
+	} else {
+		response.Usage = chatUsageBreakdown(nil, runs, detail.Events)
 	}
 	if s.deps.Runs != nil {
 		activeRun, ok, activeErr := s.deps.Runs.ActiveRunForChat(chatID)

@@ -210,7 +210,8 @@ func appendSandboxContextPaths(lines *[]string, paths SandboxPaths, localMode bo
 		rootDirDesc = "root 目录"
 		panDirDesc = "用户网盘目录"
 	}
-	appendContextDir(lines, "workspace_dir", paths.WorkspaceDir, "当前工作目录")
+	appendContextDir(lines, "workspace_dir", paths.WorkspaceDir, "工具默认工作目录 / 权限工作根")
+	appendContextDir(lines, "chat_dir", paths.WorkspaceDir, "当前会话文件目录，可存放产物、临时代码和临时文件")
 	appendContextDir(lines, "root_dir", paths.RootDir, rootDirDesc)
 	appendContextDir(lines, "skills_dir", paths.SkillsDir, "当前 agent 私有技能目录")
 	appendContextDir(lines, "agent_dir", paths.AgentDir, "当前 agent 定义目录")
@@ -229,8 +230,8 @@ func appendSandboxContextPaths(lines *[]string, paths SandboxPaths, localMode bo
 }
 
 func appendLocalContextPaths(lines *[]string, paths LocalPaths) {
-	workspaceDir := firstNonBlank(paths.WorkspaceDir, paths.ChatAttachmentsDir, paths.WorkingDirectory)
-	appendContextDir(lines, "workspace_dir", workspaceDir, "当前工作目录")
+	appendContextDir(lines, "workspace_dir", paths.WorkspaceDir, "工具默认工作目录 / 权限工作根")
+	appendContextDir(lines, "chat_dir", paths.ChatAttachmentsDir, "当前会话文件目录，可存放产物、临时代码和临时文件")
 	appendContextDir(lines, "root_dir", paths.RootDir, "root 目录")
 	appendContextDir(lines, "skills_dir", paths.SkillsDir, "当前 agent 私有技能目录")
 	appendContextDir(lines, "agent_dir", paths.AgentDir, "当前 agent 定义目录")

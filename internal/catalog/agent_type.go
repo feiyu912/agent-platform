@@ -242,12 +242,6 @@ func validateAgentWorkspace(workspace AgentWorkspaceConfig) error {
 }
 
 func validateAgentModeWorkspace(mode string, workspace AgentWorkspaceConfig, hasRuntimeSandbox bool) error {
-	if strings.ToUpper(strings.TrimSpace(mode)) != AgentModeCoder {
-		return nil
-	}
-	if strings.TrimSpace(workspace.Root) == "" && !hasRuntimeSandbox {
-		return fmt.Errorf("runtimeConfig.workspaceRoot is required for non-sandbox CODER agents")
-	}
 	return nil
 }
 

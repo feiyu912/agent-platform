@@ -133,6 +133,69 @@ func TestBuildQuerySessionUsesCoderProfileDefaults(t *testing.T) {
 	}
 }
 
+func TestBuildQuerySessionDefaultsHostWorkspaceToChatDir(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Paths: config.PathsConfig{
+			ChatsDir: filepath.Join(root, "chats"),
+		},
+	}
+	def := catalog.AgentDefinition{
+		Key:      "host-agent",
+		Mode:     "REACT",
+		ModelKey: "mock-model",
+	}
+	server := &Server{deps: Dependencies{Config: cfg}}
+	session, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey: "host-agent",
+		ChatID:   "chat-1",
+		RunID:    "run-1",
+	}, chat.Summary{ChatID: "chat-1"}, def, querySessionBuildOptions{})
+	if err != nil {
+		t.Fatalf("build query session: %v", err)
+	}
+	want := filepath.Join(cfg.Paths.ChatsDir, "chat-1")
+	if session.WorkspaceRoot != want {
+		t.Fatalf("workspace root = %q, want %q", session.WorkspaceRoot, want)
+	}
+	if session.RuntimeContext.LocalPaths.ChatAttachmentsDir != want {
+		t.Fatalf("chat attachments dir = %q, want %q", session.RuntimeContext.LocalPaths.ChatAttachmentsDir, want)
+	}
+	if stat, err := os.Stat(want); err != nil || !stat.IsDir() {
+		t.Fatalf("expected chat dir to be created, stat=%#v err=%v", stat, err)
+	}
+}
+
+func TestBuildQuerySessionDoesNotDefaultProxyWorkspaceToChatDir(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Paths: config.PathsConfig{
+			ChatsDir: filepath.Join(root, "chats"),
+		},
+	}
+	def := catalog.AgentDefinition{
+		Key:      "proxy-agent",
+		Mode:     "PROXY",
+		ModelKey: "mock-model",
+	}
+	server := &Server{deps: Dependencies{Config: cfg}}
+	session, err := server.BuildQuerySession(context.Background(), api.QueryRequest{
+		AgentKey: "proxy-agent",
+		ChatID:   "chat-1",
+		RunID:    "run-1",
+	}, chat.Summary{ChatID: "chat-1"}, def, querySessionBuildOptions{})
+	if err != nil {
+		t.Fatalf("build query session: %v", err)
+	}
+	wantChatDir := filepath.Join(cfg.Paths.ChatsDir, "chat-1")
+	if session.WorkspaceRoot != "" {
+		t.Fatalf("workspace root = %q, want empty for proxy without workspaceRoot", session.WorkspaceRoot)
+	}
+	if session.RuntimeContext.LocalPaths.ChatAttachmentsDir != wantChatDir {
+		t.Fatalf("chat attachments dir = %q, want %q", session.RuntimeContext.LocalPaths.ChatAttachmentsDir, wantChatDir)
+	}
+}
+
 func TestBuildQuerySessionLoadsWorkspaceAgentsForCoder(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
