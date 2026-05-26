@@ -2563,6 +2563,70 @@ func TestStepWriterWritesSystemInitAfterQuery(t *testing.T) {
 	}
 }
 
+func TestStepWriterPersistsHiddenQueryWithSystemInits(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-hidden-query-system-init", "agent", "", "hidden hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	writer := NewStepWriter(store, "chat-hidden-query-system-init", "run-hidden", "react", true)
+	writer.SetPendingSystemInits([]QueryLineSystemInit{{
+		Fingerprint:   "sha256:hidden",
+		CacheKey:      "react:main",
+		SystemMessage: map[string]any{"role": "system", "content": "hidden system"},
+		Tools:         []any{map[string]any{"type": "function"}},
+	}})
+	writer.OnEvent(stream.EventData{
+		Type:      "request.query",
+		Timestamp: 1001,
+		Payload: map[string]any{
+			"chatId":  "chat-hidden-query-system-init",
+			"runId":   "run-hidden",
+			"message": "hidden hello",
+		},
+	})
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-hidden-query-system-init"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	if len(lines) != 1 || lines[0]["_type"] != "query" {
+		t.Fatalf("expected one hidden query line, got %#v", lines)
+	}
+	if hidden, _ := lines[0]["hidden"].(bool); !hidden {
+		t.Fatalf("expected hidden=true on query line, got %#v", lines[0])
+	}
+	systems, _ := lines[0]["systems"].([]any)
+	if len(systems) != 1 {
+		t.Fatalf("expected hidden query to keep inline systems, got %#v", lines[0])
+	}
+	system, _ := systems[0].(map[string]any)
+	if system["cacheKey"] != "react:main" || system["fingerprint"] != "sha256:hidden" {
+		t.Fatalf("unexpected inline system cache %#v", system)
+	}
+
+	detail, err := store.LoadChat("chat-hidden-query-system-init")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	var queryEvent *stream.EventData
+	for i := range detail.Events {
+		if detail.Events[i].Type == "request.query" {
+			queryEvent = &detail.Events[i]
+			break
+		}
+	}
+	if queryEvent == nil {
+		t.Fatalf("expected replayed request.query, got %#v", detail.Events)
+	}
+	if hidden, _ := queryEvent.Value("hidden").(bool); !hidden {
+		t.Fatalf("expected replayed request.query hidden=true, got %#v", queryEvent)
+	}
+}
+
 func TestStepWriterOmitsSystemsWhenNoPendingSystemInits(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

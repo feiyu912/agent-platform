@@ -146,6 +146,9 @@ func (s *FileStore) SearchSession(chatID string, query string, limit int) ([]Sea
 		}
 		switch lineType {
 		case "query":
+			if hidden, _ := line["hidden"].(bool); hidden {
+				continue
+			}
 			payload, _ := line["query"].(map[string]any)
 			message := stringValue(payload["message"])
 			if score := sessionSearchScore(message, needle); score > 0 {

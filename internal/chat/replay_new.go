@@ -152,6 +152,9 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			if _, ok := payload["chatId"]; !ok {
 				payload["chatId"] = chatID
 			}
+			if hidden, _ := line["hidden"].(bool); hidden {
+				payload["hidden"] = true
+			}
 
 			rd := ensureRun(runs, &runOrder, runID)
 			if strings.TrimSpace(taskID) != "" {
