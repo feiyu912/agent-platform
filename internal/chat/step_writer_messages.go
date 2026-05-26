@@ -242,30 +242,6 @@ func buildContextWindow(usage map[string]any, maxSize int, estimatedSize int) ma
 	return cw
 }
 
-func sanitizePreCallData(value map[string]any) map[string]any {
-	if len(value) == 0 {
-		return nil
-	}
-	out := cloneStepSystemPayload(value)
-	delete(out, "usage")
-	delete(out, "contextWindow")
-	if requestBody, ok := out["requestBody"].(map[string]any); ok {
-		out["requestBody"] = sanitizeRequestBodyForStep(requestBody)
-	}
-	return out
-}
-
-func sanitizeRequestBodyForStep(requestBody map[string]any) map[string]any {
-	if len(requestBody) == 0 {
-		return nil
-	}
-	out := cloneStepSystemPayload(requestBody)
-	delete(out, "messages")
-	delete(out, "system")
-	delete(out, "tools")
-	return out
-}
-
 func systemRefFromPreCall(value map[string]any) map[string]any {
 	if len(value) == 0 {
 		return nil

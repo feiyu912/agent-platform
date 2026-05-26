@@ -15,7 +15,6 @@ type taskStepBuffer struct {
 	taskStatus              string
 	taskSubAgentKey         string
 	messages                []StoredMessage
-	pendingPreCallData      map[string]any
 	pendingSystemRef        map[string]any
 	pendingUsage            map[string]any
 	pendingContextWindowMax int
@@ -67,11 +66,6 @@ func (w *StepWriter) flushTaskStep(taskID string) {
 	if buffer.pendingUsage != nil {
 		line.Usage = buffer.pendingUsage
 	}
-	if buffer.pendingPreCallData != nil {
-		line.Debug = map[string]any{
-			"preCall": cloneStepSystemPayload(buffer.pendingPreCallData),
-		}
-	}
 	if len(buffer.pendingSystemRef) > 0 {
 		line.SystemRef = cloneStepSystemPayload(buffer.pendingSystemRef)
 	}
@@ -106,7 +100,6 @@ func (w *StepWriter) flushTaskStep(taskID string) {
 	buffer.pendingUsage = nil
 	buffer.pendingContextWindowMax = 0
 	buffer.pendingEstimated = 0
-	buffer.pendingPreCallData = nil
 	buffer.pendingSystemRef = nil
 }
 

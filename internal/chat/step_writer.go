@@ -55,7 +55,6 @@ type StepWriter struct {
 	pendingUsage            map[string]any
 	pendingContextWindowMax int
 	pendingEstimated        int
-	pendingPreCallData      map[string]any
 	pendingSystemRef        map[string]any
 	pendingSystemInits      []QueryLineSystemInit
 }
@@ -426,9 +425,6 @@ func (w *StepWriter) captureTaskUsageSnapshot(buffer *taskStepBuffer, event stre
 
 func (w *StepWriter) captureRootDebugData(eventType string, inner map[string]any) {
 	if eventType == "debug.preCall" {
-		if w.debugEventsEnabled {
-			w.pendingPreCallData = sanitizePreCallData(inner)
-		}
 		w.pendingSystemRef = systemRefFromPreCall(inner)
 	}
 	if cw, ok := inner["contextWindow"].(map[string]any); ok {
@@ -450,9 +446,6 @@ func (w *StepWriter) captureTaskDebugData(buffer *taskStepBuffer, eventType stri
 		return
 	}
 	if eventType == "debug.preCall" {
-		if w.debugEventsEnabled {
-			buffer.pendingPreCallData = sanitizePreCallData(inner)
-		}
 		buffer.pendingSystemRef = systemRefFromPreCall(inner)
 	}
 	if cw, ok := inner["contextWindow"].(map[string]any); ok {
@@ -474,7 +467,6 @@ func (w *StepWriter) flushCurrentStep() {
 		w.pendingUsage = nil
 		w.pendingContextWindowMax = 0
 		w.pendingEstimated = 0
-		w.pendingPreCallData = nil
 		w.pendingSystemRef = nil
 		return
 	}
@@ -496,11 +488,6 @@ func (w *StepWriter) flushCurrentStep() {
 	if w.pendingUsage != nil {
 		line.Usage = w.pendingUsage
 	}
-	if w.pendingPreCallData != nil {
-		line.Debug = map[string]any{
-			"preCall": cloneStepSystemPayload(w.pendingPreCallData),
-		}
-	}
 	if len(w.pendingSystemRef) > 0 {
 		line.SystemRef = cloneStepSystemPayload(w.pendingSystemRef)
 	}
@@ -511,7 +498,6 @@ func (w *StepWriter) flushCurrentStep() {
 		w.pendingUsage = nil
 		w.pendingContextWindowMax = 0
 		w.pendingEstimated = 0
-		w.pendingPreCallData = nil
 		w.pendingSystemRef = nil
 	}
 	if w.latestPlan != nil {
@@ -539,7 +525,6 @@ func (w *StepWriter) flushCurrentStep() {
 	w.pendingUsage = nil
 	w.pendingContextWindowMax = 0
 	w.pendingEstimated = 0
-	w.pendingPreCallData = nil
 	w.pendingSystemRef = nil
 }
 

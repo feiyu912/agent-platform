@@ -19,7 +19,6 @@ func TestEnsureChatDoesNotCreateChatDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
 	}
-
 	summary, created, err := store.EnsureChat("chat-no-dir", "agent", "", "hello")
 	if err != nil {
 		t.Fatalf("ensure chat: %v", err)
@@ -1649,10 +1648,13 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 	}
 }
 
-func TestStepWriterPersistsSystemRefAndSanitizedPreCall(t *testing.T) {
+func TestStepWriterPersistsSystemRefWithoutDebugPayload(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-system-snapshot", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
 	}
 
 	writer := NewStepWriter(store, "chat-system-snapshot", "run-system-snapshot", "react", false, WithDebugEventsEnabled(true))
@@ -1719,23 +1721,8 @@ func TestStepWriterPersistsSystemRefAndSanitizedPreCall(t *testing.T) {
 		t.Fatalf("expected one step line, got %#v", lines)
 	}
 
-	debug, _ := lines[0]["debug"].(map[string]any)
-	preCall, _ := debug["preCall"].(map[string]any)
-	if _, ok := preCall["usage"]; ok {
-		t.Fatalf("did not expect duplicate usage in debug.preCall, got %#v", preCall)
-	}
-	if _, ok := preCall["contextWindow"]; ok {
-		t.Fatalf("did not expect duplicate contextWindow in debug.preCall, got %#v", preCall)
-	}
-	preCallRequestBody, _ := preCall["requestBody"].(map[string]any)
-	if preCallRequestBody["model"] != "gpt-5.2" {
-		t.Fatalf("expected debug.preCall request body, got %#v", lines[0])
-	}
-	if _, ok := preCallRequestBody["messages"]; ok {
-		t.Fatalf("did not expect full messages in debug.preCall requestBody, got %#v", preCallRequestBody)
-	}
-	if _, ok := preCallRequestBody["tools"]; ok {
-		t.Fatalf("did not expect full tools in debug.preCall requestBody, got %#v", preCallRequestBody)
+	if _, ok := lines[0]["debug"]; ok {
+		t.Fatalf("did not expect debug payload in chat jsonl, got %#v", lines[0])
 	}
 	if _, ok := lines[0]["system"]; ok {
 		t.Fatalf("did not expect full system snapshot on step, got %#v", lines[0])
@@ -1743,6 +1730,20 @@ func TestStepWriterPersistsSystemRefAndSanitizedPreCall(t *testing.T) {
 	gotSystemRef, _ := lines[0]["systemRef"].(map[string]any)
 	if gotSystemRef["cacheKey"] != "react:main" || gotSystemRef["fingerprint"] != "sha256:first" {
 		t.Fatalf("expected systemRef on step, got %#v", lines[0])
+	}
+	contextWindow, _ := lines[0]["contextWindow"].(map[string]any)
+	if toIntValue(contextWindow["maxSize"]) != 128000 || toIntValue(contextWindow["estimatedSize"]) != 200 {
+		t.Fatalf("expected contextWindow on step, got %#v", lines[0])
+	}
+
+	detail, err := store.LoadChat("chat-system-snapshot")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	for _, event := range detail.Events {
+		if event.Type == "debug.preCall" || event.Type == "debug.postCall" {
+			t.Fatalf("did not expect debug events in chat history, got %#v", detail.Events)
+		}
 	}
 }
 
@@ -2039,7 +2040,7 @@ func detailHasEventType(events []stream.EventData, eventType string) bool {
 	return false
 }
 
-func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
+func TestStepWriterPersistsTaskScopedUsageAndSlimMetadataWithoutDebugPayload(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -2134,17 +2135,8 @@ func TestStepWriterPersistsTaskScopedDebugUsageAndSlimMetadata(t *testing.T) {
 			t.Fatalf("did not expect %s on task react line: %#v", field, taskLine)
 		}
 	}
-	debug, _ := taskLine["debug"].(map[string]any)
-	preCall, _ := debug["preCall"].(map[string]any)
-	requestBody, _ := preCall["requestBody"].(map[string]any)
-	if requestBody["model"] != "gpt-5.2" {
-		t.Fatalf("expected sanitized requestBody model, got %#v", taskLine)
-	}
-	if _, ok := requestBody["messages"]; ok {
-		t.Fatalf("did not expect full messages in task debug requestBody, got %#v", requestBody)
-	}
-	if _, ok := requestBody["tools"]; ok {
-		t.Fatalf("did not expect full tools in task debug requestBody, got %#v", requestBody)
+	if _, ok := taskLine["debug"]; ok {
+		t.Fatalf("did not expect task debug payload in chat jsonl, got %#v", taskLine)
 	}
 	systemRef, _ := taskLine["systemRef"].(map[string]any)
 	if systemRef["cacheKey"] != "react:analyzer" || systemRef["fingerprint"] != "sha256:child" {

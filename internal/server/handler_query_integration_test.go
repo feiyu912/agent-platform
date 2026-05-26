@@ -686,7 +686,8 @@ func TestQueryAndRunDebugEventsEnabledWhenEnabled(t *testing.T) {
 	if err := json.Unmarshal(chatRec.Body.Bytes(), &chatResp); err != nil {
 		t.Fatalf("decode chat detail: %v", err)
 	}
-	assertEventTypesInclude(t, chatResp.Data.Events, "debug.preCall", "debug.postCall")
+	assertEventTypesExclude(t, chatResp.Data.Events, "debug.preCall", "debug.postCall")
+	assertEventTypesInclude(t, chatResp.Data.Events, "usage.snapshot")
 }
 
 func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t *testing.T) {
