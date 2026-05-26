@@ -61,6 +61,7 @@ func TestFrontendSubmitAndSteerAreConsumedBeforeNextTurn(t *testing.T) {
 	var streamBody strings.Builder
 	runID := ""
 	awaitingID := ""
+	agentKey := ""
 	var awaitQuestionPayload map[string]any
 	for {
 		line, readErr := reader.ReadString('\n')
@@ -71,6 +72,7 @@ func TestFrontendSubmitAndSteerAreConsumedBeforeNextTurn(t *testing.T) {
 				awaitQuestionPayload = payload
 				runID, _ = payload["runId"].(string)
 				awaitingID, _ = payload["awaitingId"].(string)
+				agentKey, _ = payload["agentKey"].(string)
 				break
 			}
 		}
@@ -84,6 +86,9 @@ func TestFrontendSubmitAndSteerAreConsumedBeforeNextTurn(t *testing.T) {
 	assertEventOrder(t, streamBody.String(), "tool.start", "tool.args", "tool.end", "awaiting.ask")
 	if awaitingID == "" {
 		t.Fatalf("expected awaitingId on awaiting.ask, got %#v", awaitQuestionPayload)
+	}
+	if agentKey != "mock-agent" {
+		t.Fatalf("expected agentKey on awaiting.ask, got %#v", awaitQuestionPayload)
 	}
 	if awaitQuestionPayload["viewportType"] != "builtin" || awaitQuestionPayload["viewportKey"] != "question" {
 		t.Fatalf("expected builtin question viewport on awaiting.ask, got %#v", awaitQuestionPayload)
@@ -135,7 +140,7 @@ func TestFrontendSubmitAndSteerAreConsumedBeforeNextTurn(t *testing.T) {
 		t.Fatalf("expected accepted steer, got %#v", steerResp.Data)
 	}
 
-	submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"mock-agent","runId":"`+runID+`","awaitingId":"`+awaitingID+`","params":[{"id":"q1","answer":"Approve"}]}`))
+	submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"`+agentKey+`","runId":"`+runID+`","awaitingId":"`+awaitingID+`","params":[{"id":"q1","answer":"Approve"}]}`))
 	submitReq.Header.Set("Content-Type", "application/json")
 	submitRec := httptest.NewRecorder()
 	fixture.server.ServeHTTP(submitRec, submitReq)

@@ -401,8 +401,9 @@ func TestDispatcherEmitsApprovalAlongsideToolResult(t *testing.T) {
 
 func TestDispatcherEmitsQuestionModeAwaitAskAfterToolEnd(t *testing.T) {
 	dispatcher := NewDispatcher(StreamRequest{
-		RunID:  "run_1",
-		ChatID: "chat_1",
+		RunID:    "run_1",
+		ChatID:   "chat_1",
+		AgentKey: "agent_1",
 	})
 
 	events := dispatcher.Dispatch(ToolArgs{
@@ -425,12 +426,17 @@ func TestDispatcherEmitsQuestionModeAwaitAskAfterToolEnd(t *testing.T) {
 		RunID:        "run_1",
 	})
 	assertEventTypes(t, awaitEvents, "awaiting.ask")
+	payload := awaitEvents[0].ToData()
+	if payload["agentKey"] != "agent_1" {
+		t.Fatalf("expected agentKey on question awaiting.ask, got %#v", payload)
+	}
 }
 
 func TestDispatcherEmitsApprovalModeAwaitAskWithQuestions(t *testing.T) {
 	dispatcher := NewDispatcher(StreamRequest{
-		RunID:  "run_1",
-		ChatID: "chat_1",
+		RunID:    "run_1",
+		ChatID:   "chat_1",
+		AgentKey: "agent_1",
 	})
 
 	viewportEvents := dispatcher.Dispatch(AwaitAsk{
@@ -453,6 +459,9 @@ func TestDispatcherEmitsApprovalModeAwaitAskWithQuestions(t *testing.T) {
 	payload := viewportEvents[0].ToData()
 	if payload["viewportType"] != "builtin" || payload["viewportKey"] != "approval" {
 		t.Fatalf("expected builtin approval viewport metadata, got %#v", payload)
+	}
+	if payload["agentKey"] != "agent_1" {
+		t.Fatalf("expected agentKey on approval awaiting.ask, got %#v", payload)
 	}
 	approvals, _ := payload["approvals"].([]any)
 	if len(approvals) != 1 {
@@ -772,6 +781,7 @@ func TestEventDataMarshalsAwaitAskWithContractKeyOrder(t *testing.T) {
 	event := NewEvent("awaiting.ask", map[string]any{
 		"timeout":    120000,
 		"runId":      "run_1",
+		"agentKey":   "agent_1",
 		"mode":       "approval",
 		"awaitingId": "tool_1",
 	})
@@ -788,6 +798,7 @@ func TestEventDataMarshalsAwaitAskWithContractKeyOrder(t *testing.T) {
 		`"mode":"approval"`,
 		`"timeout":120000`,
 		`"runId":"run_1"`,
+		`"agentKey":"agent_1"`,
 		`"timestamp":`,
 	}
 	prev := -1

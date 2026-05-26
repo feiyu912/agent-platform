@@ -244,7 +244,7 @@ func eventPayloadKeyOrder(eventType string) []string {
 	case "request.query":
 		return []string{"requestId", "chatId", "role", "message", "agentKey", "teamId", "references", "params", "scene", "stream", "hidden"}
 	case "awaiting.ask":
-		return []string{"awaitingId", "mode", "viewportType", "viewportKey", "timeout", "runId", "questions", "approvals", "forms"}
+		return []string{"awaitingId", "mode", "viewportType", "viewportKey", "timeout", "runId", "agentKey", "questions", "approvals", "forms"}
 	case "awaiting.answer":
 		return []string{"awaitingId", "mode", "status", "answers", "approvals", "forms", "error"}
 	case "request.submit":

@@ -213,6 +213,9 @@ func (d *StreamEventDispatcher) newAwaitAskEvent(input AwaitAsk) StreamEvent {
 		"timeout":    input.Timeout,
 		"runId":      input.RunID,
 	}
+	if agentKey := strings.TrimSpace(d.request.AgentKey); agentKey != "" {
+		payload["agentKey"] = agentKey
+	}
 	viewportType, viewportKey := awaitAskViewport(input)
 	if viewportType != "" {
 		payload["viewportType"] = viewportType
