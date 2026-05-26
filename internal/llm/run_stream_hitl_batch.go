@@ -359,6 +359,25 @@ func formatHITLFrontendSummary(entries []hitlNoticeEntry) string {
 	if len(entries) == 0 {
 		return ""
 	}
+	if allHITLNoticeEntriesAutoApproved(entries) {
+		if len(entries) == 1 {
+			return "[AUTO] " + formatHITLSummaryLine(entries[0])
+		}
+		lines := make([]string, 0, len(entries)+1)
+		lines = append(lines, "[AUTO] 自动审批结果：")
+		for index, entry := range entries {
+			lines = append(lines, fmt.Sprintf("%d. %s", index+1, formatHITLSummaryLine(entry)))
+		}
+		return strings.Join(lines, "\n")
+	}
+	if anyHITLNoticeEntryAutoApproved(entries) {
+		lines := make([]string, 0, len(entries)+1)
+		lines = append(lines, "[Approval] 审批结果：")
+		for index, entry := range entries {
+			lines = append(lines, fmt.Sprintf("%d. %s", index+1, formatHITLSummaryLine(entry)))
+		}
+		return strings.Join(lines, "\n")
+	}
 	if len(entries) == 1 {
 		return "[HITL] " + formatHITLSummaryLine(entries[0])
 	}
@@ -376,8 +395,19 @@ func formatHITLLLMNotice(entries []hitlNoticeEntry) string {
 		return ""
 	}
 	lines := make([]string, 0, len(entries)*2+3)
-	lines = append(lines, "[System audit — HITL approval batch]")
-	lines = append(lines, "The user reviewed the following tool call(s) and submitted decisions:")
+	allAutoApproved := allHITLNoticeEntriesAutoApproved(entries)
+	anyAutoApproved := anyHITLNoticeEntryAutoApproved(entries)
+	switch {
+	case allAutoApproved:
+		lines = append(lines, "[System audit — auto approval]")
+		lines = append(lines, "The system auto-approved the following tool call(s) because accessLevel=auto_approve applies automatic approval to reviewable access-policy checks:")
+	case anyAutoApproved:
+		lines = append(lines, "[System audit — approval batch]")
+		lines = append(lines, "The following tool call approval decisions were applied:")
+	default:
+		lines = append(lines, "[System audit — HITL approval batch]")
+		lines = append(lines, "The user reviewed the following tool call(s) and submitted decisions:")
+	}
 	for index, entry := range entries {
 		lines = append(lines, fmt.Sprintf(
 			"%d. tool=%s command=\"%s\" decision=%s reason=\"%s\"",
@@ -397,8 +427,37 @@ func formatHITLLLMNotice(entries []hitlNoticeEntry) string {
 			}
 		}
 	}
-	lines = append(lines, "The tool results above already reflect these decisions; do not re-prompt for approval and do not retry rejected calls.")
+	if allAutoApproved {
+		lines = append(lines, "The tool results above already reflect these automatic approvals; do not re-prompt for approval.")
+	} else {
+		lines = append(lines, "The tool results above already reflect these decisions; do not re-prompt for approval and do not retry rejected calls.")
+	}
 	return strings.Join(lines, "\n")
+}
+
+func allHITLNoticeEntriesAutoApproved(entries []hitlNoticeEntry) bool {
+	if len(entries) == 0 {
+		return false
+	}
+	for _, entry := range entries {
+		if !isAutoApprovedHITLNoticeEntry(entry) {
+			return false
+		}
+	}
+	return true
+}
+
+func anyHITLNoticeEntryAutoApproved(entries []hitlNoticeEntry) bool {
+	for _, entry := range entries {
+		if isAutoApprovedHITLNoticeEntry(entry) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAutoApprovedHITLNoticeEntry(entry hitlNoticeEntry) bool {
+	return strings.EqualFold(strings.TrimSpace(entry.decision), "auto_approved")
 }
 
 func formatHITLLLMNoticeValue(value string, fallback string) string {

@@ -176,6 +176,7 @@ func (s *llmRunStream) executeOriginalBash(invocation *preparedToolInvocation) e
 		s.runControl.TransitionState(RunLoopStateToolExecuting)
 	}
 
+	s.recordAccessPolicyAutoApproval(invocation)
 	result, invokeErr := s.engine.tools.Invoke(s.ctx, invocation.toolName, invocation.args, s.execCtx)
 	if invokeErr != nil {
 		if errors.Is(invokeErr, ErrRunInterrupted) {

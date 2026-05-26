@@ -2316,6 +2316,145 @@ func TestFileReadAccessApprovalDecisions(t *testing.T) {
 	}
 }
 
+func TestFileReadAccessAutoApproveRecordsApprovalSummary(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("file_read")}}
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		session: contracts.QuerySession{
+			RequestID: "req_1",
+			ChatID:    "chat_1",
+			RunID:     "run_1",
+		},
+		engine: &LLMAgentEngine{tools: executor},
+		execCtx: &contracts.ExecutionContext{Session: contracts.QuerySession{
+			AccessLevel:   contracts.AccessLevelAutoApprove,
+			WorkspaceRoot: root,
+		}},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_read",
+			args: map[string]any{
+				"file_path": filepath.Join(outside, "secret.txt"),
+			},
+		},
+	}
+	var recordedApproval *chat.StepApproval
+	stream.onApprovalSummary = func(approval chat.StepApproval) {
+		copied := approval
+		copied.Decisions = append([]chat.StepApprovalDecision(nil), approval.Decisions...)
+		recordedApproval = &copied
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active read: %v", err)
+	}
+	if len(executor.invocations) != 1 {
+		t.Fatalf("expected auto-approved read to execute, got %#v", executor.invocations)
+	}
+	if recordedApproval == nil {
+		t.Fatal("expected auto-approved read to record approval summary")
+	}
+	if len(recordedApproval.Decisions) != 1 || recordedApproval.Decisions[0].Decision != "auto_approved" {
+		t.Fatalf("expected auto-approved decision, got %#v", recordedApproval)
+	}
+	if !strings.Contains(recordedApproval.LLMNotice, "[System audit — auto approval]") ||
+		!strings.Contains(recordedApproval.LLMNotice, "accessLevel=auto_approve") ||
+		strings.Contains(recordedApproval.LLMNotice, "The user reviewed") {
+		t.Fatalf("unexpected auto approval notice %q", recordedApproval.LLMNotice)
+	}
+	if !strings.Contains(recordedApproval.Summary, "[AUTO]") {
+		t.Fatalf("expected auto approval frontend summary, got %#v", recordedApproval)
+	}
+}
+
+func TestBashAccessAutoApproveRecordsApprovalSummary(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	command := "cat " + filepath.Join(outside, "secret.txt")
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		session: contracts.QuerySession{
+			RequestID: "req_1",
+			ChatID:    "chat_1",
+			RunID:     "run_1",
+		},
+		engine: &LLMAgentEngine{tools: executor},
+		execCtx: &contracts.ExecutionContext{Session: contracts.QuerySession{
+			AccessLevel:   contracts.AccessLevelAutoApprove,
+			WorkspaceRoot: root,
+		}},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "bash",
+			args:     map[string]any{"command": command},
+		},
+	}
+	var recordedApproval *chat.StepApproval
+	stream.onApprovalSummary = func(approval chat.StepApproval) {
+		copied := approval
+		copied.Decisions = append([]chat.StepApprovalDecision(nil), approval.Decisions...)
+		recordedApproval = &copied
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active bash: %v", err)
+	}
+	if len(executor.invocations) != 1 {
+		t.Fatalf("expected auto-approved bash to execute, got %#v", executor.invocations)
+	}
+	if recordedApproval == nil {
+		t.Fatal("expected auto-approved bash to record approval summary")
+	}
+	if len(recordedApproval.Decisions) != 1 || recordedApproval.Decisions[0].Decision != "auto_approved" {
+		t.Fatalf("expected auto-approved bash decision, got %#v", recordedApproval)
+	}
+	if recordedApproval.Decisions[0].RuleKey == "" || !strings.Contains(recordedApproval.LLMNotice, command) {
+		t.Fatalf("expected bash approval to include rule and command, got %#v", recordedApproval)
+	}
+}
+
+func TestFileReadFullAccessDoesNotRecordApprovalSummary(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinition("file_read")}}
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		session: contracts.QuerySession{
+			RequestID: "req_1",
+			ChatID:    "chat_1",
+			RunID:     "run_1",
+		},
+		engine: &LLMAgentEngine{tools: executor},
+		execCtx: &contracts.ExecutionContext{Session: contracts.QuerySession{
+			AccessLevel:   contracts.AccessLevelFullAccess,
+			WorkspaceRoot: root,
+		}},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_read",
+			args: map[string]any{
+				"file_path": filepath.Join(outside, "secret.txt"),
+			},
+		},
+	}
+	stream.onApprovalSummary = func(approval chat.StepApproval) {
+		t.Fatalf("expected full_access not to record approval summary, got %#v", approval)
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active read: %v", err)
+	}
+	if len(executor.invocations) != 1 {
+		t.Fatalf("expected full_access read to execute, got %#v", executor.invocations)
+	}
+	if len(stream.pendingHITLNotices) != 0 {
+		t.Fatalf("expected no pending approval notices for full_access, got %#v", stream.pendingHITLNotices)
+	}
+}
+
 func TestFileReadAccessRejectDoesNotExecute(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()

@@ -3069,6 +3069,79 @@ The tool results above already reflect these decisions; do not re-prompt for app
 	}
 }
 
+func TestLoadRawMessagesReplaysAutoApprovalSummaryFromStepLine(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-auto-approval-raw", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	toolTs := int64(6001)
+	resultTs := int64(6002)
+	if err := store.AppendStepLine("chat-auto-approval-raw", StepLine{
+		ChatID:    "chat-auto-approval-raw",
+		RunID:     "run-auto-approval-raw",
+		UpdatedAt: 6003,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{
+			{
+				Role: "assistant",
+				ToolCalls: []StoredToolCall{{
+					ID:   "tool-1",
+					Type: "function",
+					Function: StoredFunction{
+						Name:      "file_read",
+						Arguments: `{"file_path":"/tmp/secret.txt"}`,
+					},
+				}},
+				ToolID: "tool-1",
+				MsgID:  "msg-1",
+				Ts:     &toolTs,
+			},
+			{
+				Role:       "tool",
+				Name:       "file_read",
+				ToolCallID: "tool-1",
+				Content:    []ContentPart{{Type: "text", Text: "ok"}},
+				ToolID:     "tool-1",
+				Ts:         &resultTs,
+			},
+		},
+		Approval: &StepApproval{
+			Summary: `[AUTO] file_read /tmp/secret.txt → auto_approved（accessLevel=auto_approve）`,
+			LLMNotice: `[System audit — auto approval]
+The system auto-approved the following tool call(s) because accessLevel=auto_approve applies automatic approval to reviewable access-policy checks:
+1. tool=file_read command="file_read /tmp/secret.txt" decision=auto_approved reason="accessLevel=auto_approve"
+The tool results above already reflect these automatic approvals; do not re-prompt for approval.`,
+			Decisions: []StepApprovalDecision{{
+				ToolID:   "tool-1",
+				Command:  "file_read /tmp/secret.txt",
+				Decision: "auto_approved",
+				RuleKey:  "file-read::outside",
+				Reason:   "accessLevel=auto_approve",
+				Mode:     "approval",
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("append step line: %v", err)
+	}
+
+	rawMessages, err := store.LoadRawMessages("chat-auto-approval-raw", 5)
+	if err != nil {
+		t.Fatalf("load raw messages: %v", err)
+	}
+	if len(rawMessages) != 3 {
+		t.Fatalf("expected assistant, tool, synthetic user messages, got %#v", rawMessages)
+	}
+	if rawMessages[2]["role"] != "user" || !strings.Contains(stringValue(rawMessages[2]["content"]), "decision=auto_approved") {
+		t.Fatalf("expected auto approval LLM notice replayed as user raw message, got %#v", rawMessages[2])
+	}
+}
+
 func TestLoadRawMessagesReplaysSplitApprovalSummaryAfterToolResult(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

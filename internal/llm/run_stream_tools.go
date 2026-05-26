@@ -347,6 +347,7 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 		}
 	}
 
+	s.recordAccessPolicyAutoApproval(invocation)
 	result, invokeErr := s.engine.tools.Invoke(s.ctx, invocation.toolName, invocation.args, s.execCtx)
 	if invokeErr != nil {
 		if errors.Is(invokeErr, ErrRunInterrupted) {
@@ -459,6 +460,31 @@ func (s *llmRunStream) appendOriginalToolResult(invocation *preparedToolInvocati
 			s.onApprovalSummary(*approval)
 		}
 		s.pendingHITLNotices = nil
+	}
+}
+
+func (s *llmRunStream) recordAccessPolicyAutoApproval(invocation *preparedToolInvocation) {
+	if invocation == nil || invocation.hitlDecision != nil {
+		return
+	}
+	if plan := s.lookupFileAccessPlan(invocation); plan != nil && plan.AutoApproved {
+		invocation.hitlDecision = &hitlDecisionState{
+			Decision: "auto_approved",
+			Reason:   "accessLevel=auto_approve",
+			RuleKey:  strings.TrimSpace(plan.RuleKey),
+			Executed: true,
+			Mode:     "approval",
+		}
+		return
+	}
+	if review := s.lookupBashAccessReview(invocation); review.AutoApproved() {
+		invocation.hitlDecision = &hitlDecisionState{
+			Decision: "auto_approved",
+			Reason:   "accessLevel=auto_approve",
+			RuleKey:  strings.TrimSpace(review.RuleKey),
+			Executed: true,
+			Mode:     "approval",
+		}
 	}
 }
 
