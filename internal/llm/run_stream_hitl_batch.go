@@ -334,11 +334,11 @@ func (s *llmRunStream) buildHITLNoticeEntry(invocation *preparedToolInvocation) 
 	writePlan := s.lookupFileWritePlan(invocation)
 	decisionRuleKey := strings.TrimSpace(invocation.hitlDecision.RuleKey)
 	if writePlan != nil && (decisionRuleKey == "" || decisionRuleKey == writePlan.RuleKey) {
-		command = writePlan.CommandText
+		command = s.fileToolApprovalDisplayCommand(invocation, nil, writePlan)
 	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil {
-		command = s.fileAccessApprovalDisplayCommand(invocation, plan)
+		command = s.fileToolApprovalDisplayCommand(invocation, plan, nil)
 	} else if writePlan != nil {
-		command = writePlan.CommandText
+		command = s.fileToolApprovalDisplayCommand(invocation, nil, writePlan)
 	}
 	if strings.TrimSpace(command) == "" {
 		command = mapStringArg(invocation.args, "command")

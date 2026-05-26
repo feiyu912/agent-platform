@@ -250,13 +250,13 @@ func (s *llmRunStream) buildFormApprovalArgs(command string, result hitl.Interce
 
 func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) map[string]any {
 	command := mapStringArg(invocation.args, "command")
-	_, combinedWritePlan, combinedWriteApproval := s.combinedFileWriteApprovalPlans(invocation)
+	combinedAccessPlan, combinedWritePlan, combinedWriteApproval := s.combinedFileWriteApprovalPlans(invocation)
 	if combinedWriteApproval {
-		command = combinedWritePlan.CommandText
+		command = s.fileToolApprovalDisplayCommand(invocation, combinedAccessPlan, combinedWritePlan)
 	} else if plan := s.lookupFileAccessPlan(invocation); plan != nil && s.fileAccessPlanNeedsApproval(*plan) {
-		command = s.fileAccessApprovalDisplayCommand(invocation, plan)
+		command = s.fileToolApprovalDisplayCommand(invocation, plan, nil)
 	} else if plan := s.lookupFileWritePlan(invocation); plan != nil {
-		command = plan.CommandText
+		command = s.fileToolApprovalDisplayCommand(invocation, nil, plan)
 	} else if result := s.lookupWorkspaceHITL(invocation); result.Intercepted && strings.TrimSpace(result.MatchedCommand) != "" {
 		command = result.MatchedCommand + " (" + mapStringArg(invocation.args, "command") + ")"
 	}
@@ -310,8 +310,14 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 	return item
 }
 
-func (s *llmRunStream) fileAccessApprovalDisplayCommand(invocation *preparedToolInvocation, plan *filetools.AccessPlan) string {
-	if plan == nil {
+func (s *llmRunStream) fileToolApprovalDisplayCommand(invocation *preparedToolInvocation, accessPlan *filetools.AccessPlan, writePlan *filetools.WritePlan) string {
+	fallback := ""
+	if writePlan != nil {
+		fallback = writePlan.CommandText
+	} else if accessPlan != nil {
+		fallback = accessPlan.CommandText
+	}
+	if accessPlan == nil && writePlan == nil {
 		return ""
 	}
 	toolLabel := ""
@@ -321,11 +327,17 @@ func (s *llmRunStream) fileAccessApprovalDisplayCommand(invocation *preparedTool
 		}
 	}
 	if toolLabel == "" {
-		return plan.CommandText
+		return fallback
 	}
-	path := strings.TrimSpace(plan.Path)
-	if path == "" {
-		path = strings.TrimSpace(plan.RawPath)
+	path := ""
+	if writePlan != nil {
+		path = strings.TrimSpace(writePlan.FilePath)
+	}
+	if path == "" && accessPlan != nil {
+		path = strings.TrimSpace(accessPlan.Path)
+	}
+	if path == "" && accessPlan != nil {
+		path = strings.TrimSpace(accessPlan.RawPath)
 	}
 	if path == "" {
 		return toolLabel

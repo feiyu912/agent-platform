@@ -264,6 +264,16 @@ func backendToolDefinitionWithLabel(name string, label string) api.ToolDetailRes
 	return tool
 }
 
+func resolvedTestPath(t *testing.T, root string, elems ...string) string {
+	t.Helper()
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("eval path %s: %v", root, err)
+	}
+	parts := append([]string{resolvedRoot}, elems...)
+	return filepath.Join(parts...)
+}
+
 func writeToolDefinition() api.ToolDetailResponse {
 	return backendToolDefinition("file_write")
 }
@@ -1675,6 +1685,52 @@ func TestWriteToolEmitsApprovalBeforeExecuting(t *testing.T) {
 	}
 }
 
+func TestWriteToolApprovalUsesToolLabelInCommand(t *testing.T) {
+	root := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinitionWithLabel("file_write", "写入文件")}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     root,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					MaxBatchOps:          20,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_write",
+			args: map[string]any{
+				"file_path":   "owner.md",
+				"content":     "hello",
+				"description": "写入 owner 文档",
+			},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active write: %v", err)
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
+		t.Fatalf("expected approval ask, got %#v", stream.pending)
+	}
+	item, _ := ask.Approvals[0].(map[string]any)
+	expectedCommand := "写入文件 " + resolvedTestPath(t, root, "owner.md")
+	if item["command"] != expectedCommand || strings.Contains(fmt.Sprint(item["command"]), "bytes") {
+		t.Fatalf("unexpected labeled write approval command: %#v", item)
+	}
+}
+
 func TestWriteToolApprovalExecutesAndWritesFile(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{
@@ -1779,6 +1835,52 @@ func TestEditToolEmitsApprovalBeforeExecuting(t *testing.T) {
 	}
 	if item["description"] != "编辑 owner 文档" {
 		t.Fatalf("unexpected approval description: %#v", item)
+	}
+}
+
+func TestEditToolApprovalUsesToolLabelInCommand(t *testing.T) {
+	root := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinitionWithLabel("file_edit", "编辑文件")}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     root,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_edit",
+			args: map[string]any{
+				"file_path":   "owner.md",
+				"old_string":  "hello",
+				"new_string":  "hi",
+				"description": "编辑 owner 文档",
+			},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active edit: %v", err)
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
+		t.Fatalf("expected approval ask, got %#v", stream.pending)
+	}
+	item, _ := ask.Approvals[0].(map[string]any)
+	expectedCommand := "编辑文件 " + resolvedTestPath(t, root, "owner.md")
+	if item["command"] != expectedCommand || strings.Contains(fmt.Sprint(item["command"]), "bytes") {
+		t.Fatalf("unexpected labeled edit approval command: %#v", item)
 	}
 }
 
@@ -2241,10 +2343,86 @@ func TestFileGrepAccessApprovalNoticeUsesToolLabel(t *testing.T) {
 	}
 }
 
+func TestFileWriteAndEditApprovalNoticeUseToolLabel(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		toolName      string
+		label         string
+		args          map[string]any
+		expectedStart string
+	}{
+		{
+			name:     "write",
+			toolName: "file_write",
+			label:    "写入文件",
+			args: map[string]any{
+				"file_path":   "owner.md",
+				"content":     "hello",
+				"description": "写入 owner 文档",
+			},
+			expectedStart: "写入文件 ",
+		},
+		{
+			name:     "edit",
+			toolName: "file_edit",
+			label:    "编辑文件",
+			args: map[string]any{
+				"file_path":   "owner.md",
+				"old_string":  "hello",
+				"new_string":  "hi",
+				"description": "编辑 owner 文档",
+			},
+			expectedStart: "编辑文件 ",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			stream := &llmRunStream{
+				ctx: context.Background(),
+				engine: &LLMAgentEngine{
+					cfg: config.Config{
+						FileTools: config.FileToolsConfig{
+							WorkingDirectory:  root,
+							AllowedReadPaths:  []string{"."},
+							AllowedWritePaths: []string{"."},
+							MaxReadBytes:      1024,
+							MaxWriteBytes:     1024,
+						},
+					},
+					tools: stubToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinitionWithLabel(tc.toolName, tc.label)}},
+				},
+				execCtx: &contracts.ExecutionContext{},
+			}
+			invocation := &preparedToolInvocation{
+				toolID:   "tool_1",
+				toolName: tc.toolName,
+				args:     tc.args,
+				hitlDecision: &hitlDecisionState{
+					Decision: "approve",
+					Mode:     "approval",
+				},
+			}
+
+			stream.appendOriginalToolResult(invocation, contracts.ToolExecutionResult{Output: "ok"})
+
+			if len(stream.messages) != 2 {
+				t.Fatalf("expected tool result and audit notice, got %#v", stream.messages)
+			}
+			expectedCommand := tc.expectedStart + resolvedTestPath(t, root, "owner.md")
+			noticeText, _ := stream.messages[1].Content.(string)
+			if !strings.Contains(noticeText, `[System audit — HITL approval batch]`) ||
+				!strings.Contains(noticeText, `tool=`+tc.toolName+` command="`+expectedCommand+`" decision=approve`) ||
+				strings.Contains(noticeText, `command="`+tc.toolName+` `) {
+				t.Fatalf("expected HITL audit notice to use tool label, got %#v", stream.messages[1])
+			}
+		})
+	}
+}
+
 func TestWriteOutsideAllowedPathsCombinesPathAndContentApproval(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
-	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{writeToolDefinition()}}
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinitionWithLabel("file_write", "写入文件")}}
 	stream := &llmRunStream{
 		ctx:     context.Background(),
 		session: contracts.QuerySession{RunID: "run_1"},
@@ -2286,8 +2464,9 @@ func TestWriteOutsideAllowedPathsCombinesPathAndContentApproval(t *testing.T) {
 		t.Fatalf("expected write approval ask, got %#v", stream.pending)
 	}
 	item, _ := ask.Approvals[0].(map[string]any)
-	if !strings.Contains(fmt.Sprint(item["command"]), "file_write ") || !strings.Contains(fmt.Sprint(item["command"]), "(5 bytes)") {
-		t.Fatalf("expected combined approval command to include write size, got %#v", item)
+	expectedCommand := "写入文件 " + resolvedTestPath(t, outside, "owner.md")
+	if item["command"] != expectedCommand || strings.Contains(fmt.Sprint(item["command"]), "file_write ") || strings.Contains(fmt.Sprint(item["command"]), "bytes") {
+		t.Fatalf("expected combined approval command to use write label, got %#v", item)
 	}
 	if !strings.Contains(fmt.Sprint(item["description"]), "写入 owner 文档") || !strings.Contains(fmt.Sprint(item["description"]), "路径超出允许目录") {
 		t.Fatalf("expected combined approval description, got %#v", item)
@@ -2295,6 +2474,58 @@ func TestWriteOutsideAllowedPathsCombinesPathAndContentApproval(t *testing.T) {
 	options, _ := item["options"].([]any)
 	if !approvalOptionsContainDecision(options, "approve_rule_run") {
 		t.Fatalf("expected approve_rule_run option, got %#v", options)
+	}
+}
+
+func TestEditOutsideAllowedPathsCombinesPathAndContentApprovalUsesToolLabel(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{backendToolDefinitionWithLabel("file_edit", "编辑文件")}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: contracts.QuerySession{RunID: "run_1"},
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     root,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_edit",
+			args: map[string]any{
+				"file_path":   filepath.Join(outside, "owner.md"),
+				"old_string":  "",
+				"new_string":  "hello",
+				"description": "编辑 owner 文档",
+			},
+		},
+	}
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active edit: %v", err)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected edit not to execute before combined approval, got %#v", executor.invocations)
+	}
+	ask, ok := stream.pending[0].(contracts.DeltaAwaitAsk)
+	if !ok || ask.Mode != "approval" || len(ask.Approvals) != 1 {
+		t.Fatalf("expected edit approval ask, got %#v", stream.pending)
+	}
+	item, _ := ask.Approvals[0].(map[string]any)
+	expectedCommand := "编辑文件 " + resolvedTestPath(t, outside, "owner.md")
+	if item["command"] != expectedCommand || strings.Contains(fmt.Sprint(item["command"]), "file_edit ") || strings.Contains(fmt.Sprint(item["command"]), "bytes") {
+		t.Fatalf("expected combined edit approval command to use edit label, got %#v", item)
+	}
+	if !strings.Contains(fmt.Sprint(item["description"]), "编辑 owner 文档") || !strings.Contains(fmt.Sprint(item["description"]), "路径超出允许目录") {
+		t.Fatalf("expected combined edit approval description, got %#v", item)
 	}
 }
 
