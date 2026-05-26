@@ -1,6 +1,8 @@
 package server
 
 import (
+	"reflect"
+
 	"agent-platform/internal/api"
 	"agent-platform/internal/chat"
 	"agent-platform/internal/contracts"
@@ -37,21 +39,15 @@ func (s *Server) prepareSystemInitCache(req api.QueryRequest, session *contracts
 	pendingSystems := make([]chat.QueryLineSystemInit, 0, len(profiles))
 	for _, profile := range profiles {
 		initLine := systemInits[profile.CacheKey]
-		if initLine != nil && initLine.Fingerprint == profile.Fingerprint {
-			cache[profile.CacheKey] = contracts.SystemInitSnapshot{
-				Fingerprint:   initLine.Fingerprint,
-				SystemMessage: cloneMap(profile.SystemMessage),
-				Tools:         cloneAnySlice(initLine.Tools),
-			}
-			continue
-		}
 		system := chat.QueryLineSystemInit{
 			Fingerprint:   profile.Fingerprint,
 			CacheKey:      profile.CacheKey,
 			SystemMessage: cloneMap(profile.SystemMessage),
 			Tools:         cloneAnySlice(profile.Tools),
 		}
-		pendingSystems = append(pendingSystems, system)
+		if initLine == nil || !sameSystemInitPayload(initLine, system) {
+			pendingSystems = append(pendingSystems, system)
+		}
 		cache[profile.CacheKey] = contracts.SystemInitSnapshot{
 			Fingerprint:   profile.Fingerprint,
 			SystemMessage: cloneMap(profile.SystemMessage),
@@ -62,6 +58,15 @@ func (s *Server) prepareSystemInitCache(req api.QueryRequest, session *contracts
 		session.SystemInitCache = cache
 	}
 	return pendingSystems, nil
+}
+
+func sameSystemInitPayload(initLine *chat.SystemInitLine, system chat.QueryLineSystemInit) bool {
+	if initLine == nil {
+		return false
+	}
+	return initLine.Fingerprint == system.Fingerprint &&
+		reflect.DeepEqual(initLine.SystemMessage, system.SystemMessage) &&
+		reflect.DeepEqual(initLine.Tools, system.Tools)
 }
 
 func (s *Server) buildSystemInitsForChildTask(req api.QueryRequest, session *contracts.QuerySession) []chat.QueryLineSystemInit {

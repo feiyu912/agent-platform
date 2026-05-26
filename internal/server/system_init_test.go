@@ -25,7 +25,7 @@ func (s systemInitStaticToolExecutor) Invoke(context.Context, string, map[string
 	return contracts.ToolExecutionResult{}, nil
 }
 
-func TestPrepareSystemInitCacheUsesFreshSystemMessageOnFingerprintMatch(t *testing.T) {
+func TestPrepareSystemInitCacheWritesFreshSystemMessageOnPayloadChange(t *testing.T) {
 	store, err := chat.NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new chat store: %v", err)
@@ -50,7 +50,6 @@ func TestPrepareSystemInitCacheUsesFreshSystemMessageOnFingerprintMatch(t *testi
 	if len(oldProfiles) != 1 {
 		t.Fatalf("expected one system init profile, got %#v", oldProfiles)
 	}
-	cachedTools := []any{map[string]any{"source": "disk-cache"}}
 	if err := store.AppendQueryLine(req.ChatID, chat.QueryLine{
 		Type:      "query",
 		ChatID:    req.ChatID,
@@ -61,7 +60,7 @@ func TestPrepareSystemInitCacheUsesFreshSystemMessageOnFingerprintMatch(t *testi
 			Fingerprint:   oldProfiles[0].Fingerprint,
 			CacheKey:      oldProfiles[0].CacheKey,
 			SystemMessage: oldProfiles[0].SystemMessage,
-			Tools:         cachedTools,
+			Tools:         oldProfiles[0].Tools,
 		}},
 	}); err != nil {
 		t.Fatalf("append system init: %v", err)
@@ -82,8 +81,11 @@ func TestPrepareSystemInitCacheUsesFreshSystemMessageOnFingerprintMatch(t *testi
 	if err != nil {
 		t.Fatalf("prepare system init cache: %v", err)
 	}
-	if len(pending) != 0 {
-		t.Fatalf("did not expect unchanged fingerprint to append system cache line, got %#v", pending)
+	if len(pending) != 1 {
+		t.Fatalf("expected changed system payload to append system cache line, got %#v", pending)
+	}
+	if pending[0].Fingerprint != oldProfiles[0].Fingerprint {
+		t.Fatalf("expected same fingerprint to be retained, got %#v", pending[0])
 	}
 	snapshot, ok := newSession.SystemInitCache["react:main"]
 	if !ok {
@@ -93,8 +95,12 @@ func TestPrepareSystemInitCacheUsesFreshSystemMessageOnFingerprintMatch(t *testi
 	if !strings.Contains(content, "fresh session memory") || strings.Contains(content, "stale session memory") {
 		t.Fatalf("expected fresh dynamic system message, got %q", content)
 	}
-	if !reflect.DeepEqual(snapshot.Tools, cachedTools) {
-		t.Fatalf("expected cached tools %#v, got %#v", cachedTools, snapshot.Tools)
+	pendingContent, _ := pending[0].SystemMessage["content"].(string)
+	if pendingContent != content {
+		t.Fatalf("expected pending system to match session cache, pending=%q cache=%q", pendingContent, content)
+	}
+	if !reflect.DeepEqual(snapshot.Tools, pending[0].Tools) {
+		t.Fatalf("expected session cache tools to match pending tools, pending=%#v cache=%#v", pending[0].Tools, snapshot.Tools)
 	}
 }
 
@@ -147,7 +153,7 @@ func TestPrepareSystemInitCacheReturnsPendingLineOnFingerprintChange(t *testing.
 	}
 }
 
-func TestMainQueryStillDedupsSystemsByFingerprint(t *testing.T) {
+func TestMainQueryDedupsSystemsOnlyWhenPayloadMatches(t *testing.T) {
 	store, err := chat.NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new chat store: %v", err)
@@ -162,15 +168,13 @@ func TestMainQueryStillDedupsSystemsByFingerprint(t *testing.T) {
 		SystemInits: llm.SystemInitProfileBuilder{},
 	}}
 	session := contracts.QuerySession{
-		RunID:                "run-1",
-		ChatID:               "chat-1",
-		AgentKey:             "agent",
-		ModelKey:             "mock-model",
-		ToolNames:            []string{"datetime"},
-		Mode:                 "REACT",
-		ContextTags:          []string{"system"},
-		PromptAppend:         contracts.DefaultPromptAppendConfig(),
-		AgentHasMemoryConfig: true,
+		RunID:        "run-1",
+		ChatID:       "chat-1",
+		AgentKey:     "agent",
+		ModelKey:     "mock-model",
+		ToolNames:    []string{"datetime"},
+		Mode:         "REACT",
+		PromptAppend: contracts.DefaultPromptAppendConfig(),
 	}
 
 	firstPending, err := server.prepareSystemInitCache(req, &session, true)
