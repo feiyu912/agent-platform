@@ -219,7 +219,7 @@ func (w *StepWriter) planningSnapshotEvent(source stream.EventData) stream.Event
 		payload["planningId"] = w.latestPlanning.PlanningID
 		payload["planningFile"] = planningFileDisplayName(w.latestPlanning.PlanningFile)
 		payload["title"] = w.latestPlanning.Title
-		payload["markdown"] = w.latestPlanning.Markdown
+		payload["text"] = w.latestPlanning.Markdown
 		payload["updatedAt"] = w.latestPlanning.UpdatedAt
 	}
 	if value := strings.TrimSpace(source.String("chatId")); value != "" {
@@ -294,7 +294,9 @@ func (w *StepWriter) updatePlanning(event stream.EventData) {
 	if value := event.String("delta"); value != "" {
 		w.latestPlanning.Markdown += value
 	}
-	if value := strings.TrimSpace(event.String("markdown")); value != "" {
+	if value := event.String("text"); value != "" {
+		w.latestPlanning.Markdown = value
+	} else if value := event.String("markdown"); value != "" {
 		w.latestPlanning.Markdown = value
 	}
 	if updatedAt := event.Value("updatedAt"); updatedAt != nil {

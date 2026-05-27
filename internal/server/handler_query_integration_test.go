@@ -1622,14 +1622,23 @@ func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) 
 			if strings.TrimSpace(stringValue(planning["planningId"])) == "" || strings.TrimSpace(stringValue(planning["planningFile"])) == "" {
 				t.Fatalf("expected persisted planning state, got %#v", chatResp.Data.Planning)
 			}
-			if !strings.Contains(stringValue(planning["markdown"]), "## Summary") {
-				t.Fatalf("expected persisted planning markdown, got %#v", planning)
+			if !strings.Contains(stringValue(planning["text"]), "## Summary") {
+				t.Fatalf("expected persisted planning text, got %#v", planning)
+			}
+			if _, ok := planning["markdown"]; ok {
+				t.Fatalf("did not expect persisted planning markdown field, got %#v", planning)
 			}
 			planningSnapshotCount := 0
 			for _, ev := range chatResp.Data.Events {
 				switch ev.Type {
 				case "planning.snapshot":
 					planningSnapshotCount++
+					if !strings.Contains(ev.String("text"), "## Summary") {
+						t.Fatalf("expected replayed planning.snapshot text, got %#v", ev.Map())
+					}
+					if ev.Value("markdown") != nil {
+						t.Fatalf("did not expect replayed planning.snapshot markdown field, got %#v", ev.Map())
+					}
 				case "planning.start", "planning.delta", "planning.end":
 					t.Fatalf("did not expect default replay planning debug event %s in %#v", ev.Type, chatResp.Data.Events)
 				}

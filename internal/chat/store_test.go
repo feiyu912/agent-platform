@@ -1973,8 +1973,11 @@ func TestStepWriterPlanningLifecyclePersistsSnapshotByDefault(t *testing.T) {
 	if lines[0]["_type"] != "planning" || event["type"] != "planning.snapshot" {
 		t.Fatalf("expected planning.snapshot line, got %#v", lines[0])
 	}
-	if event["markdown"] != "# Plan\n\nBody" || event["planningId"] != "plan-run-planning" || event["planningFile"] != "plan-run-planning.md" {
+	if event["text"] != "# Plan\n\nBody" || event["planningId"] != "plan-run-planning" || event["planningFile"] != "plan-run-planning.md" {
 		t.Fatalf("unexpected planning snapshot event %#v", event)
+	}
+	if _, ok := event["markdown"]; ok {
+		t.Fatalf("did not expect public planning snapshot markdown field %#v", event)
 	}
 
 	detail, err := store.LoadChat("chat-planning-snapshot")
@@ -2071,8 +2074,11 @@ func TestLoadChatReplaysSinglePlanningSnapshotFromLegacyLifecycleEvents(t *testi
 		t.Fatalf("unexpected replayed planning lifecycle events %#v", detail.Events)
 	}
 	snapshot := detailEventByType(detail.Events, "planning.snapshot")
-	if snapshot.String("markdown") != "# Final\n\nBody" {
-		t.Fatalf("expected snapshot markdown to prefer canonical snapshot, got %#v", snapshot.Map())
+	if snapshot.String("text") != "# Final\n\nBody" {
+		t.Fatalf("expected snapshot text to prefer canonical snapshot, got %#v", snapshot.Map())
+	}
+	if snapshot.Value("markdown") != nil {
+		t.Fatalf("did not expect replayed planning snapshot markdown, got %#v", snapshot.Map())
 	}
 	if detail.Planning == nil || detail.Planning.Markdown != "# Final\n\nBody" {
 		t.Fatalf("expected planning state from canonical snapshot, got %#v", detail.Planning)
@@ -2125,8 +2131,11 @@ func TestLoadChatSynthesizesPlanningSnapshotFromLegacyDeltas(t *testing.T) {
 		t.Fatalf("planning.snapshot count = %d, events %#v", got, detail.Events)
 	}
 	snapshot := detailEventByType(detail.Events, "planning.snapshot")
-	if snapshot.String("markdown") != "# Draft\n\nBody" {
-		t.Fatalf("expected synthesized snapshot markdown from deltas, got %#v", snapshot.Map())
+	if snapshot.String("text") != "# Draft\n\nBody" {
+		t.Fatalf("expected synthesized snapshot text from deltas, got %#v", snapshot.Map())
+	}
+	if snapshot.Value("markdown") != nil {
+		t.Fatalf("did not expect synthesized planning snapshot markdown, got %#v", snapshot.Map())
 	}
 	if detail.Planning == nil || detail.Planning.Markdown != "# Draft\n\nBody" {
 		t.Fatalf("expected planning state from synthesized snapshot, got %#v", detail.Planning)

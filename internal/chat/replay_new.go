@@ -454,18 +454,18 @@ func taskToolIDFromLine(line map[string]any) string {
 }
 
 type replayPlanningAggregate struct {
-	chatID           string
-	runID            string
-	planningID       string
-	planningFile     string
-	title            string
-	deltaMarkdown    string
-	snapshotMarkdown string
-	updatedAt        int64
-	timestamp        int64
-	fallbackIndex    int
-	snapshotIndex    int
-	hasSnapshot      bool
+	chatID        string
+	runID         string
+	planningID    string
+	planningFile  string
+	title         string
+	deltaText     string
+	snapshotText  string
+	updatedAt     int64
+	timestamp     int64
+	fallbackIndex int
+	snapshotIndex int
+	hasSnapshot   bool
 }
 
 func collectPlanningReplayEvents(lines []map[string]any) map[int][]map[string]any {
@@ -565,16 +565,16 @@ func (a *replayPlanningAggregate) apply(lineIndex int, event map[string]any, lin
 	a.fallbackIndex = lineIndex
 	switch eventType {
 	case "planning.delta":
-		a.deltaMarkdown += stringFromAny(event["delta"])
+		a.deltaText += stringFromAny(event["delta"])
 	case "planning.snapshot":
 		a.hasSnapshot = true
 		a.snapshotIndex = lineIndex
-		markdown := stringFromAny(event["markdown"])
-		if markdown == "" {
-			markdown = stringFromAny(event["text"])
+		text := stringFromAny(event["text"])
+		if text == "" {
+			text = stringFromAny(event["markdown"])
 		}
-		if markdown != "" {
-			a.snapshotMarkdown = markdown
+		if text != "" {
+			a.snapshotText = text
 		}
 	}
 }
@@ -593,9 +593,9 @@ func (a *replayPlanningAggregate) snapshotEvent() map[string]any {
 	if a == nil || (strings.TrimSpace(a.planningID) == "" && strings.TrimSpace(a.planningFile) == "") {
 		return nil
 	}
-	markdown := a.snapshotMarkdown
-	if markdown == "" {
-		markdown = a.deltaMarkdown
+	text := a.snapshotText
+	if text == "" {
+		text = a.deltaText
 	}
 	updatedAt := a.updatedAt
 	if updatedAt == 0 {
@@ -609,7 +609,7 @@ func (a *replayPlanningAggregate) snapshotEvent() map[string]any {
 		"chatId":       a.chatID,
 		"runId":        a.runID,
 		"title":        a.title,
-		"markdown":     markdown,
+		"text":         text,
 		"updatedAt":    updatedAt,
 	}
 }
@@ -623,12 +623,16 @@ func parsePlanningFromEvent(event map[string]any) *PlanningState {
 	if planningID == "" && planningFile == "" {
 		return nil
 	}
+	text := stringFromAny(event["text"])
+	if text == "" {
+		text = stringFromAny(event["markdown"])
+	}
 	return &PlanningState{
 		PlanningID:   planningID,
 		PlanningFile: planningFile,
 		Title:        strings.TrimSpace(stringFromAny(event["title"])),
 		Status:       strings.TrimSpace(stringFromAny(event["status"])),
-		Markdown:     strings.TrimSpace(stringFromAny(event["markdown"])),
+		Markdown:     text,
 		UpdatedAt:    int64FromAny(event["updatedAt"]),
 	}
 }
