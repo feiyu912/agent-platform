@@ -53,8 +53,8 @@ func TestLLMChatTraceWritesSimpleCompletion(t *testing.T) {
 	if response["content"] != "hello world" || response["finishReason"] != "stop" {
 		t.Fatalf("unexpected response: %#v", response)
 	}
-	if _, err := os.Stat(filepath.Join(recordDir, "run_2.json")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("did not expect run_2.json, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(recordDir, "run_trace_2.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("did not expect run_trace_2.json, stat err=%v", err)
 	}
 }
 
@@ -187,6 +187,22 @@ func TestLLMChatTraceMaskSensitivePreservesMetadata(t *testing.T) {
 	}
 }
 
+func TestSafeTraceRunID(t *testing.T) {
+	tests := map[string]string{
+		" run_1 ":    "run_1",
+		"chat/run/1": "chat_run_1",
+		`chat\run\1`: "chat_run_1",
+		"":           "unknown",
+		".":          "unknown",
+		"..":         "unknown",
+	}
+	for input, want := range tests {
+		if got := safeTraceRunID(input); got != want {
+			t.Fatalf("safeTraceRunID(%q)=%q want %q", input, got, want)
+		}
+	}
+}
+
 func newTraceTestEngine(t *testing.T, recordDir string, baseURL string, executor contracts.ToolExecutor) *LLMAgentEngine {
 	t.Helper()
 	if executor == nil {
@@ -249,7 +265,7 @@ func drainTraceTestStream(t *testing.T, stream contracts.AgentStream) {
 
 func readTraceFile(t *testing.T, recordDir string, seq int) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(recordDir, "run_"+strconvItoa(seq)+".json"))
+	data, err := os.ReadFile(filepath.Join(recordDir, "run_trace_"+strconvItoa(seq)+".json"))
 	if err != nil {
 		t.Fatalf("read trace file: %v", err)
 	}

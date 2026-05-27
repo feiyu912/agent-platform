@@ -52,9 +52,26 @@ func (s *llmRunStream) newChatTrace(runSeq int, prepared preparedProviderRequest
 	return &llmChatTrace{
 		enabled:       true,
 		maskSensitive: cfg.MaskSensitive,
-		path:          filepath.Join(cfg.RecordDir, "run_"+strconvItoa(runSeq)+".json"),
+		path:          filepath.Join(cfg.RecordDir, safeTraceRunID(s.session.RunID)+"_"+strconvItoa(runSeq)+".json"),
 		payload:       payload,
 	}
+}
+
+func safeTraceRunID(runID string) string {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return "unknown"
+	}
+	replacer := strings.NewReplacer(
+		"/", "_",
+		"\\", "_",
+		string(filepath.Separator), "_",
+	)
+	safe := strings.TrimSpace(replacer.Replace(runID))
+	if safe == "" || safe == "." || safe == ".." {
+		return "unknown"
+	}
+	return safe
 }
 
 func traceToolsFromRequest(request map[string]any) any {
