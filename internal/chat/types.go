@@ -2,6 +2,8 @@ package chat
 
 import "agent-platform/internal/stream"
 
+const ToolResultsDirName = ".tool-results"
+
 // ---------------------------------------------------------------------------
 // Plan / Artifact state (shared by step lines and API responses)
 // ---------------------------------------------------------------------------

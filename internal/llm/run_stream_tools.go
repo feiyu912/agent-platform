@@ -436,6 +436,7 @@ func publishedArtifactMaps(raw any) []map[string]any {
 
 func (s *llmRunStream) appendOriginalToolResult(invocation *preparedToolInvocation, result ToolExecutionResult) {
 	result = applyHITLMetadata(result, invocation)
+	result = s.maybeSpillToolResult(invocation, result)
 	s.previousToolResult = structuredOrOutput(result)
 	content := s.toolResultContent(invocation.toolName, result)
 	s.pending = append(s.pending, DeltaToolResult{
