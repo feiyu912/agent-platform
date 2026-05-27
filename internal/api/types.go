@@ -383,6 +383,13 @@ type UpdateAgentRequest struct {
 	AgentsPrompt *string        `json:"agentsPrompt,omitempty"`
 }
 
+type UpdateAgentModelConfigRequest struct {
+	Key             string `json:"key,omitempty"`
+	AgentKey        string `json:"agentKey,omitempty"`
+	ModelKey        string `json:"modelKey"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+}
+
 type DeleteAgentRequest struct {
 	Key      string `json:"key"`
 	AgentKey string `json:"agentKey,omitempty"`

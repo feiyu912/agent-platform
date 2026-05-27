@@ -284,6 +284,141 @@ func TestAgentCreateCoderPreservesExplicitModelConfig(t *testing.T) {
 	}
 }
 
+func TestAgentModelConfigUpdatePersistsCoderDefaults(t *testing.T) {
+	fixture := newTestFixture(t)
+	workspaceDir := t.TempDir()
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "coder-model-config",
+		"definition": map[string]any{
+			"key":  "coder-model-config",
+			"name": "coder-model-config",
+			"mode": "CODER",
+			"runtimeConfig": map[string]any{
+				"workspaceRoot": workspaceDir,
+			},
+		},
+		"soulPrompt":   "Soul stays",
+		"agentsPrompt": "Agents stay",
+	})
+	if created.Source == nil {
+		t.Fatalf("expected created source")
+	}
+
+	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/model-config", map[string]any{
+		"agentKey":        "coder-model-config",
+		"modelKey":        "mock-model",
+		"reasoningEffort": "HIGH",
+	})
+	modelConfig, _ := updated.Definition["modelConfig"].(map[string]any)
+	reasoning, _ := modelConfig["reasoning"].(map[string]any)
+	if modelConfig["modelKey"] != "mock-model" || reasoning["enabled"] != true || reasoning["effort"] != "HIGH" {
+		t.Fatalf("expected persisted model config, got %#v", modelConfig)
+	}
+	if updated.SoulPrompt != "Soul stays" || updated.AgentsPrompt != "Agents stay" {
+		t.Fatalf("prompts should be preserved, got soul=%q agents=%q", updated.SoulPrompt, updated.AgentsPrompt)
+	}
+	data, err := os.ReadFile(updated.Source.Path)
+	if err != nil {
+		t.Fatalf("read updated agent file: %v", err)
+	}
+	if !strings.Contains(string(data), "modelKey: mock-model") ||
+		!strings.Contains(string(data), "enabled: true") ||
+		!strings.Contains(string(data), "effort: HIGH") {
+		t.Fatalf("agent.yml did not persist model config:\n%s", data)
+	}
+}
+
+func TestAgentModelConfigUpdatePersistsNoneReasoning(t *testing.T) {
+	fixture := newTestFixture(t)
+	workspaceDir := t.TempDir()
+	postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "coder-model-none",
+		"definition": map[string]any{
+			"key":  "coder-model-none",
+			"name": "coder-model-none",
+			"mode": "CODER",
+			"runtimeConfig": map[string]any{
+				"workspaceRoot": workspaceDir,
+			},
+		},
+	})
+
+	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/model-config", map[string]any{
+		"key":             "coder-model-none",
+		"modelKey":        "mock-model",
+		"reasoningEffort": "NONE",
+	})
+	modelConfig, _ := updated.Definition["modelConfig"].(map[string]any)
+	reasoning, _ := modelConfig["reasoning"].(map[string]any)
+	if modelConfig["modelKey"] != "mock-model" || reasoning["enabled"] != false {
+		t.Fatalf("expected NONE reasoning config, got %#v", modelConfig)
+	}
+	if _, ok := reasoning["effort"]; ok {
+		t.Fatalf("NONE reasoning should omit effort, got %#v", reasoning)
+	}
+	agents := fixture.server.deps.Registry.Agents("all")
+	var matched api.AgentSummary
+	for _, agent := range agents {
+		if agent.Key == "coder-model-none" {
+			matched = agent
+			break
+		}
+	}
+	if matched.DefaultModelKey != "mock-model" || matched.DefaultReasoningEffort != "NONE" {
+		t.Fatalf("expected NONE defaults after reload, got %#v", matched)
+	}
+}
+
+func TestAgentModelConfigUpdateRejectsInvalidRequests(t *testing.T) {
+	fixture := newTestFixture(t)
+	workspaceDir := t.TempDir()
+	postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "coder-model-errors",
+		"definition": map[string]any{
+			"key":  "coder-model-errors",
+			"name": "coder-model-errors",
+			"mode": "CODER",
+			"runtimeConfig": map[string]any{
+				"workspaceRoot": workspaceDir,
+			},
+		},
+	})
+	postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+		"key": "react-model-errors",
+		"definition": map[string]any{
+			"key":         "react-model-errors",
+			"name":        "react-model-errors",
+			"mode":        "REACT",
+			"modelConfig": map[string]any{"modelKey": "mock-model"},
+		},
+	})
+
+	cases := []struct {
+		name   string
+		body   map[string]any
+		status int
+	}{
+		{name: "missing agent", body: map[string]any{"agentKey": "missing-agent", "modelKey": "mock-model", "reasoningEffort": "HIGH"}, status: http.StatusNotFound},
+		{name: "non coder", body: map[string]any{"agentKey": "react-model-errors", "modelKey": "mock-model", "reasoningEffort": "HIGH"}, status: http.StatusBadRequest},
+		{name: "unknown model", body: map[string]any{"agentKey": "coder-model-errors", "modelKey": "missing-model", "reasoningEffort": "HIGH"}, status: http.StatusBadRequest},
+		{name: "bad reasoning", body: map[string]any{"agentKey": "coder-model-errors", "modelKey": "mock-model", "reasoningEffort": "FAST"}, status: http.StatusBadRequest},
+		{name: "bad key", body: map[string]any{"agentKey": "../bad", "modelKey": "mock-model", "reasoningEffort": "HIGH"}, status: http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(tc.body)
+			if err != nil {
+				t.Fatalf("marshal request: %v", err)
+			}
+			rec := httptest.NewRecorder()
+			fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/agent/model-config", bytes.NewReader(body)))
+			if rec.Code != tc.status {
+				t.Fatalf("expected %d, got %d: %s", tc.status, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestAgentOpenWorkspaceRejectsUnknownWorkspace(t *testing.T) {
 	fixture := newTestFixture(t)
 	rec := httptest.NewRecorder()
@@ -489,6 +624,60 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 	}
 	if createFrame.Frame != ws.FrameResponse || createFrame.ID != "create-agent" || created.Key != "ws-agent" || created.SoulPrompt != "WS Soul" {
 		t.Fatalf("unexpected create frame %#v data=%#v", createFrame, created)
+	}
+
+	workspaceDir := t.TempDir()
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/agent/create",
+		ID:    "create-coder",
+		Payload: ws.MarshalPayload(map[string]any{
+			"key": "ws-coder",
+			"definition": map[string]any{
+				"key":  "ws-coder",
+				"name": "WS Coder",
+				"mode": "CODER",
+				"runtimeConfig": map[string]any{
+					"workspaceRoot": workspaceDir,
+				},
+			},
+		}),
+	}); err != nil {
+		t.Fatalf("write coder create request: %v", err)
+	}
+	var coderCreateFrame ws.ResponseFrame
+	if err := conn.ReadJSON(&coderCreateFrame); err != nil {
+		t.Fatalf("read coder create response: %v", err)
+	}
+	if coderCreateFrame.Frame != ws.FrameResponse || coderCreateFrame.ID != "create-coder" {
+		t.Fatalf("unexpected coder create frame %#v", coderCreateFrame)
+	}
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/agent/model-config",
+		ID:    "update-coder-model",
+		Payload: ws.MarshalPayload(map[string]any{
+			"agentKey":        "ws-coder",
+			"modelKey":        "mock-model",
+			"reasoningEffort": "NONE",
+		}),
+	}); err != nil {
+		t.Fatalf("write model config request: %v", err)
+	}
+	var modelConfigFrame ws.ResponseFrame
+	if err := conn.ReadJSON(&modelConfigFrame); err != nil {
+		t.Fatalf("read model config response: %v", err)
+	}
+	modelUpdated, err := marshalAgentResponseData[api.AgentDetailResponse](modelConfigFrame.Data)
+	if err != nil {
+		t.Fatalf("decode model config data: %v", err)
+	}
+	modelConfig, _ := modelUpdated.Definition["modelConfig"].(map[string]any)
+	reasoning, _ := modelConfig["reasoning"].(map[string]any)
+	if modelConfigFrame.Frame != ws.FrameResponse || modelConfigFrame.ID != "update-coder-model" ||
+		modelConfig["modelKey"] != "mock-model" || reasoning["enabled"] != false {
+		t.Fatalf("unexpected model config frame %#v data=%#v", modelConfigFrame, modelUpdated)
 	}
 
 	if err := conn.WriteJSON(ws.RequestFrame{

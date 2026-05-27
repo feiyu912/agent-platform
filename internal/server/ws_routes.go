@@ -80,6 +80,7 @@ func (s *Server) registerWSRoutes(handler *ws.Handler) {
 	handler.RegisterRoute("/api/agent", s.wsAgent)
 	handler.RegisterRoute("/api/agent/create", s.wsAgentCreate)
 	handler.RegisterRoute("/api/agent/update", s.wsAgentUpdate)
+	handler.RegisterRoute("/api/agent/model-config", s.wsAgentModelConfig)
 	handler.RegisterRoute("/api/agent/delete", s.wsAgentDelete)
 	handler.RegisterRoute("/api/agent/editor-options", s.wsAgentEditorOptions)
 	handler.RegisterRoute("/api/model-options", s.wsModelOptions)

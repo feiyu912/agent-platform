@@ -340,10 +340,26 @@ func agentSummaryCoderDefaults(def AgentDefinition) (string, string) {
 		settings.Plan.ReasoningEffort,
 		settings.Summary.ReasoningEffort,
 	)
+	if strings.TrimSpace(reasoningEffort) == "" && agentSummaryReasoningDisabled(def.StageSettings) {
+		reasoningEffort = "NONE"
+	}
 	if strings.TrimSpace(reasoningEffort) == "" {
 		reasoningEffort = "MEDIUM"
 	}
 	return modelKey, reasoningEffort
+}
+
+func agentSummaryReasoningDisabled(raw map[string]any) bool {
+	for _, key := range []string{"execute", "plan", "summary"} {
+		node := contracts.AnyMapNode(raw[key])
+		if enabled, ok := node["reasoningEnabled"].(bool); ok && !enabled {
+			return true
+		}
+	}
+	if enabled, ok := raw["reasoningEnabled"].(bool); ok && !enabled {
+		return true
+	}
+	return false
 }
 
 func firstNonBlankString(values ...string) string {
