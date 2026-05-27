@@ -85,7 +85,7 @@ func approvalAuditMessage(approval *StepApproval, ts int64) (StoredMessage, bool
 	if approval == nil {
 		return StoredMessage{}, false
 	}
-	notice := approval.LLMNotice
+	notice := approval.Notice
 	if strings.TrimSpace(notice) == "" {
 		notice = approval.Summary
 	}

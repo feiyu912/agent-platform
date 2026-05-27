@@ -1407,8 +1407,8 @@ func TestStepWriterReusesReactSeqForSplitHITLToolResult(t *testing.T) {
 		},
 	})
 	writer.RecordApproval(StepApproval{
-		Summary:   `[HITL] git push origin main -> approve`,
-		LLMNotice: `[System audit - HITL approval batch]`,
+		Summary: `[HITL] git push origin main -> approve`,
+		Notice:  `[System audit - HITL approval batch]`,
 		Decisions: []StepApprovalDecision{{
 			ToolID:   "tool-1",
 			Command:  "git push origin main",
@@ -2881,8 +2881,8 @@ func TestStepWriterPersistsInlineApprovalMessage(t *testing.T) {
 		},
 	})
 	writer.RecordApproval(StepApproval{
-		Summary:   `[HITL] chmod 777 ~/a.sh → approve`,
-		LLMNotice: `[System audit — HITL approval batch]`,
+		Summary: `[HITL] chmod 777 ~/a.sh → approve`,
+		Notice:  `[System audit — HITL approval batch]`,
 		Decisions: []StepApprovalDecision{{
 			ToolID:   "tool-1",
 			Command:  "chmod 777 ~/a.sh",
@@ -2911,7 +2911,7 @@ func TestStepWriterPersistsInlineApprovalMessage(t *testing.T) {
 		t.Fatalf("expected inline approval user message after tool result, got %#v", approvalMessage)
 	}
 	if text := extractTextFromContent(approvalMessage["content"]); text != `[System audit — HITL approval batch]` {
-		t.Fatalf("expected approval llmNotice as message content, got %#v", approvalMessage)
+		t.Fatalf("expected approval notice as message content, got %#v", approvalMessage)
 	}
 	approval, ok := approvalMessage["approval"].(map[string]any)
 	if !ok {
@@ -2920,8 +2920,11 @@ func TestStepWriterPersistsInlineApprovalMessage(t *testing.T) {
 	if _, ok := approval["ruleKey"]; ok {
 		t.Fatalf("did not expect approval.ruleKey outside decisions, got %#v", approval)
 	}
-	if approval["summary"] != `[HITL] chmod 777 ~/a.sh → approve` || approval["llmNotice"] != `[System audit — HITL approval batch]` {
-		t.Fatalf("expected approval summary and llmNotice metadata, got %#v", approval)
+	if approval["summary"] != `[HITL] chmod 777 ~/a.sh → approve` {
+		t.Fatalf("expected approval summary metadata, got %#v", approval)
+	}
+	if _, ok := approval["notice"]; ok {
+		t.Fatalf("did not expect persisted approval notice metadata, got %#v", approval)
 	}
 }
 
@@ -2955,8 +2958,8 @@ func TestStepWriterPersistsFormApprovalDecisionPayload(t *testing.T) {
 		},
 	})
 	writer.RecordApproval(StepApproval{
-		Summary:   "[HITL] mock create-leave --payload '{...}' → approve\n  提交参数: {\"applicant_id\":\"E1001\",\"days\":2,\"leave_type\":\"annual\"}",
-		LLMNotice: "[System audit — HITL approval batch]\nsubmitted_payload={\"applicant_id\":\"E1001\",\"days\":2,\"leave_type\":\"annual\"}",
+		Summary: "[HITL] mock create-leave --payload '{...}' → approve\n  提交参数: {\"applicant_id\":\"E1001\",\"days\":2,\"leave_type\":\"annual\"}",
+		Notice:  "[System audit — HITL approval batch]\nsubmitted_payload={\"applicant_id\":\"E1001\",\"days\":2,\"leave_type\":\"annual\"}",
 		Decisions: []StepApprovalDecision{{
 			ToolID:   "tool-1",
 			Command:  "mock create-leave --payload '{...}'",
@@ -2990,8 +2993,11 @@ func TestStepWriterPersistsFormApprovalDecisionPayload(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected approval metadata on inline user message, got %#v", approvalMessage)
 	}
-	if approval["summary"] == approval["llmNotice"] || approval["llmNotice"] == "" {
-		t.Fatalf("expected distinct persisted form approval llmNotice, got %#v", approval)
+	if approval["summary"] == "" {
+		t.Fatalf("expected persisted form approval summary, got %#v", approval)
+	}
+	if _, ok := approval["notice"]; ok {
+		t.Fatalf("did not expect persisted form approval notice metadata, got %#v", approval)
 	}
 	decisions, ok := approval["decisions"].([]any)
 	if !ok || len(decisions) != 1 {
@@ -3025,7 +3031,7 @@ func TestLoadRawMessagesReplaysInlineApprovalMessage(t *testing.T) {
 	approvalTs := int64(5003)
 	approval := &StepApproval{
 		Summary: `[HITL] chmod 777 ~/a.sh → approve`,
-		LLMNotice: `[System audit — HITL approval batch]
+		Notice: `[System audit — HITL approval batch]
 The user reviewed the following tool call(s) and submitted decisions:
 1. tool=bash command="chmod 777 ~/a.sh" decision=approve reason=""
 The tool results above already reflect these decisions; do not re-prompt for approval and do not retry rejected calls.`,
@@ -3067,7 +3073,7 @@ The tool results above already reflect these decisions; do not re-prompt for app
 			},
 			{
 				Role:     "user",
-				Content:  textContent(approval.LLMNotice),
+				Content:  textContent(approval.Notice),
 				Approval: approval,
 				Ts:       &approvalTs,
 			},
@@ -3123,7 +3129,7 @@ func TestLoadRawMessagesReplaysAutoApprovalSummaryFromStepLine(t *testing.T) {
 	approvalTs := int64(6003)
 	approval := &StepApproval{
 		Summary: `[AUTO] file_read /tmp/secret.txt → auto_approved（accessLevel=auto_approve）`,
-		LLMNotice: `[System audit — auto approval]
+		Notice: `[System audit — auto approval]
 The system auto-approved the following tool call(s) because accessLevel=auto_approve applies automatic approval to reviewable access-policy checks:
 1. tool=file_read command="file_read /tmp/secret.txt" decision=auto_approved reason="accessLevel=auto_approve"
 The tool results above already reflect these automatic approvals; do not re-prompt for approval.`,
@@ -3167,7 +3173,7 @@ The tool results above already reflect these automatic approvals; do not re-prom
 			},
 			{
 				Role:     "user",
-				Content:  textContent(approval.LLMNotice),
+				Content:  textContent(approval.Notice),
 				Approval: approval,
 				Ts:       &approvalTs,
 			},
@@ -3215,7 +3221,7 @@ func TestLoadRawMessagesReplaysSplitApprovalSummaryAfterToolResult(t *testing.T)
 	approvalTs := int64(5003)
 	approval := &StepApproval{
 		Summary: `[HITL] mock create-leave → reject（timeout）`,
-		LLMNotice: `[System audit — HITL approval batch]
+		Notice: `[System audit — HITL approval batch]
 The user reviewed the following tool call(s) and submitted decisions:
 1. tool=bash command="mock create-leave" decision=reject reason="timeout"
 The tool results above already reflect these decisions; do not re-prompt for approval and do not retry rejected calls.`,
@@ -3264,7 +3270,7 @@ The tool results above already reflect these decisions; do not re-prompt for app
 			Ts:         &resultTs,
 		}, {
 			Role:     "user",
-			Content:  textContent(approval.LLMNotice),
+			Content:  textContent(approval.Notice),
 			Approval: approval,
 			Ts:       &approvalTs,
 		}},
@@ -3368,8 +3374,8 @@ func TestLoadRawMessagesFlushesApprovalSummaryBeforeNextRun(t *testing.T) {
 			Role:    "user",
 			Content: textContent("[System audit — HITL approval batch]\nfirst approval"),
 			Approval: &StepApproval{
-				Summary:   "[HITL] first approval",
-				LLMNotice: "[System audit — HITL approval batch]\nfirst approval",
+				Summary: "[HITL] first approval",
+				Notice:  "[System audit — HITL approval batch]\nfirst approval",
 			},
 		}},
 	}); err != nil {

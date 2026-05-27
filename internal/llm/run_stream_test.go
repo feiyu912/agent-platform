@@ -2359,10 +2359,10 @@ func TestFileReadAccessAutoApproveRecordsApprovalSummary(t *testing.T) {
 	if len(recordedApproval.Decisions) != 1 || recordedApproval.Decisions[0].Decision != "auto_approved" {
 		t.Fatalf("expected auto-approved decision, got %#v", recordedApproval)
 	}
-	if !strings.Contains(recordedApproval.LLMNotice, "[System audit — auto approval]") ||
-		!strings.Contains(recordedApproval.LLMNotice, "accessLevel=auto_approve") ||
-		strings.Contains(recordedApproval.LLMNotice, "The user reviewed") {
-		t.Fatalf("unexpected auto approval notice %q", recordedApproval.LLMNotice)
+	if !strings.Contains(recordedApproval.Notice, "[System audit — auto approval]") ||
+		!strings.Contains(recordedApproval.Notice, "accessLevel=auto_approve") ||
+		strings.Contains(recordedApproval.Notice, "The user reviewed") {
+		t.Fatalf("unexpected auto approval notice %q", recordedApproval.Notice)
 	}
 	if !strings.Contains(recordedApproval.Summary, "[AUTO]") {
 		t.Fatalf("expected auto approval frontend summary, got %#v", recordedApproval)
@@ -2411,7 +2411,7 @@ func TestBashAccessAutoApproveRecordsApprovalSummary(t *testing.T) {
 	if len(recordedApproval.Decisions) != 1 || recordedApproval.Decisions[0].Decision != "auto_approved" {
 		t.Fatalf("expected auto-approved bash decision, got %#v", recordedApproval)
 	}
-	if recordedApproval.Decisions[0].RuleKey == "" || !strings.Contains(recordedApproval.LLMNotice, command) {
+	if recordedApproval.Decisions[0].RuleKey == "" || !strings.Contains(recordedApproval.Notice, command) {
 		t.Fatalf("expected bash approval to include rule and command, got %#v", recordedApproval)
 	}
 }
@@ -3672,7 +3672,7 @@ func TestPrepareQueuedBashApprovalBatch_AppendsSingleSummaryAfterAllApprovedResu
 	if recordedApproval == nil {
 		t.Fatal("expected approval batch to be recorded")
 	}
-	if recordedApproval.LLMNotice != text {
+	if recordedApproval.Notice != text {
 		t.Fatalf("expected recorded approval LLM notice to match user message, got %#v", recordedApproval)
 	}
 	if !strings.Contains(recordedApproval.Summary, `[HITL] 审批结果：`) || !strings.Contains(recordedApproval.Summary, `1. chmod 777 ~/a.sh → approve`) {

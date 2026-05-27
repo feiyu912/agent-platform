@@ -514,7 +514,7 @@ func buildHITLBatchSummaryAndApproval(entries []hitlNoticeEntry) (string, *chat.
 
 	approval := &chat.StepApproval{
 		Summary:   frontendSummary,
-		LLMNotice: llmNotice,
+		Notice:    llmNotice,
 		Decisions: make([]chat.StepApprovalDecision, 0, len(entries)),
 	}
 	for _, entry := range entries {

@@ -174,8 +174,8 @@ func (s *FileStore) SearchSession(chatID string, query string, limit int) ([]Sea
 				text := searchMessageText(msg)
 				if approval, ok := msg["approval"].(map[string]any); ok {
 					approvalText := strings.TrimSpace(strings.Join([]string{
+						text,
 						stringValue(approval["summary"]),
-						stringValue(approval["llmNotice"]),
 					}, "\n"))
 					if score := sessionSearchScore(approvalText, needle); score > 0 {
 						hitTimestamp := int64FromAny(msg["ts"])
