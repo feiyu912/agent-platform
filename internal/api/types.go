@@ -390,6 +390,11 @@ type UpdateAgentModelConfigRequest struct {
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
+type AgentModelConfigResponse struct {
+	Key         string         `json:"key"`
+	ModelConfig map[string]any `json:"modelConfig"`
+}
+
 type DeleteAgentRequest struct {
 	Key      string `json:"key"`
 	AgentKey string `json:"agentKey,omitempty"`

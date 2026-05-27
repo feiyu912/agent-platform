@@ -263,46 +263,46 @@ func (s *Server) updateAgent(ctx context.Context, req api.UpdateAgentRequest) (a
 	return s.reloadAndLoadAgent(ctx, key)
 }
 
-func (s *Server) updateAgentModelConfig(ctx context.Context, req api.UpdateAgentModelConfigRequest) (api.AgentDetailResponse, error) {
+func (s *Server) updateAgentModelConfig(ctx context.Context, req api.UpdateAgentModelConfigRequest) (api.AgentModelConfigResponse, error) {
 	editor, err := s.agentEditor()
 	if err != nil {
-		return api.AgentDetailResponse{}, err
+		return api.AgentModelConfigResponse{}, err
 	}
 	key := firstNonBlank(req.Key, req.AgentKey)
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "agentKey is required")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "agentKey is required")
 	}
 	modelKey := strings.TrimSpace(req.ModelKey)
 	if modelKey == "" {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "modelKey is required")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "modelKey is required")
 	}
 	reasoningEffort, ok := normalizeCoderReasoningEffort(req.ReasoningEffort)
 	if !ok {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "reasoningEffort must be NONE, LOW, MEDIUM, or HIGH")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "reasoningEffort must be NONE, LOW, MEDIUM, or HIGH")
 	}
 	if s.deps.Models == nil {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusServiceUnavailable, "unavailable", "model registry is not configured")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusServiceUnavailable, "unavailable", "model registry is not configured")
 	}
 	if _, err := s.deps.Models.GetModel(modelKey); err != nil {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", err.Error())
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", err.Error())
 	}
 	files, found, err := editor.EditableAgent(key)
 	if err != nil {
-		return api.AgentDetailResponse{}, mapAgentEditError(err)
+		return api.AgentModelConfigResponse{}, mapAgentEditError(err)
 	}
 	if !found {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusNotFound, "not_found", "editable agent not found")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusNotFound, "not_found", "editable agent not found")
 	}
 	if files.Source.Path == "" || files.Source.Kind == "" {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "editable agent source is missing")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "editable agent source is missing")
 	}
 	def, ok := s.deps.Registry.AgentDefinition(key)
 	if !ok {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusNotFound, "not_found", "agent not found")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusNotFound, "not_found", "agent not found")
 	}
 	if !strings.EqualFold(strings.TrimSpace(def.Mode), catalog.AgentModeCoder) {
-		return api.AgentDetailResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "agent model config can only be updated for CODER agents")
+		return api.AgentModelConfigResponse{}, newAgentStatusError(http.StatusBadRequest, "invalid_request", "agent model config can only be updated for CODER agents")
 	}
 
 	definition := contracts.CloneMap(files.Definition)
@@ -328,9 +328,17 @@ func (s *Server) updateAgentModelConfig(ctx context.Context, req api.UpdateAgent
 	definition["modelConfig"] = modelConfig
 
 	if _, err := editor.UpdateEditableAgent(key, definition, &files.SoulPrompt, &files.AgentsPrompt); err != nil {
-		return api.AgentDetailResponse{}, mapAgentEditError(err)
+		return api.AgentModelConfigResponse{}, mapAgentEditError(err)
 	}
-	return s.reloadAndLoadAgent(ctx, key)
+	if s.deps.Registry != nil {
+		if err := s.deps.Registry.Reload(ctx, "agents"); err != nil {
+			return api.AgentModelConfigResponse{}, err
+		}
+	}
+	return api.AgentModelConfigResponse{
+		Key:         key,
+		ModelConfig: modelConfig,
+	}, nil
 }
 
 func (s *Server) deleteAgent(ctx context.Context, req api.DeleteAgentRequest) (map[string]any, error) {

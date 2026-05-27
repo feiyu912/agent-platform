@@ -304,20 +304,40 @@ func TestAgentModelConfigUpdatePersistsCoderDefaults(t *testing.T) {
 		t.Fatalf("expected created source")
 	}
 
-	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/model-config", map[string]any{
+	body, err := json.Marshal(map[string]any{
 		"agentKey":        "coder-model-config",
 		"modelKey":        "mock-model",
 		"reasoningEffort": "HIGH",
 	})
-	modelConfig, _ := updated.Definition["modelConfig"].(map[string]any)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/agent/model-config", bytes.NewReader(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("model config returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var rawResponse api.ApiResponse[map[string]any]
+	if err := json.Unmarshal(rec.Body.Bytes(), &rawResponse); err != nil {
+		t.Fatalf("decode raw response: %v", err)
+	}
+	if len(rawResponse.Data) != 2 {
+		t.Fatalf("expected compact model config response, got %#v", rawResponse.Data)
+	}
+	if rawResponse.Data["key"] != "coder-model-config" {
+		t.Fatalf("expected response key, got %#v", rawResponse.Data)
+	}
+	rawModelConfig, _ := rawResponse.Data["modelConfig"].(map[string]any)
+	rawReasoning, _ := rawModelConfig["reasoning"].(map[string]any)
+	if rawModelConfig["modelKey"] != "mock-model" || rawReasoning["enabled"] != true || rawReasoning["effort"] != "HIGH" {
+		t.Fatalf("expected compact persisted model config, got %#v", rawModelConfig)
+	}
+	modelConfig := rawModelConfig
 	reasoning, _ := modelConfig["reasoning"].(map[string]any)
 	if modelConfig["modelKey"] != "mock-model" || reasoning["enabled"] != true || reasoning["effort"] != "HIGH" {
 		t.Fatalf("expected persisted model config, got %#v", modelConfig)
 	}
-	if updated.SoulPrompt != "Soul stays" || updated.AgentsPrompt != "Agents stay" {
-		t.Fatalf("prompts should be preserved, got soul=%q agents=%q", updated.SoulPrompt, updated.AgentsPrompt)
-	}
-	data, err := os.ReadFile(updated.Source.Path)
+	data, err := os.ReadFile(created.Source.Path)
 	if err != nil {
 		t.Fatalf("read updated agent file: %v", err)
 	}
@@ -331,7 +351,7 @@ func TestAgentModelConfigUpdatePersistsCoderDefaults(t *testing.T) {
 func TestAgentModelConfigUpdatePersistsNoneReasoning(t *testing.T) {
 	fixture := newTestFixture(t)
 	workspaceDir := t.TempDir()
-	postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
 		"key": "coder-model-none",
 		"definition": map[string]any{
 			"key":  "coder-model-none",
@@ -343,18 +363,25 @@ func TestAgentModelConfigUpdatePersistsNoneReasoning(t *testing.T) {
 		},
 	})
 
-	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/model-config", map[string]any{
+	updated := postAgentJSON[api.AgentModelConfigResponse](t, fixture.server, "/api/agent/model-config", map[string]any{
 		"key":             "coder-model-none",
 		"modelKey":        "mock-model",
 		"reasoningEffort": "NONE",
 	})
-	modelConfig, _ := updated.Definition["modelConfig"].(map[string]any)
+	modelConfig := updated.ModelConfig
 	reasoning, _ := modelConfig["reasoning"].(map[string]any)
 	if modelConfig["modelKey"] != "mock-model" || reasoning["enabled"] != false {
 		t.Fatalf("expected NONE reasoning config, got %#v", modelConfig)
 	}
 	if _, ok := reasoning["effort"]; ok {
 		t.Fatalf("NONE reasoning should omit effort, got %#v", reasoning)
+	}
+	data, err := os.ReadFile(created.Source.Path)
+	if err != nil {
+		t.Fatalf("read updated agent file: %v", err)
+	}
+	if strings.Contains(string(data), "effort:") {
+		t.Fatalf("NONE reasoning should not persist effort:\n%s", data)
 	}
 	agents := fixture.server.deps.Registry.Agents("all")
 	var matched api.AgentSummary
@@ -669,11 +696,11 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 	if err := conn.ReadJSON(&modelConfigFrame); err != nil {
 		t.Fatalf("read model config response: %v", err)
 	}
-	modelUpdated, err := marshalAgentResponseData[api.AgentDetailResponse](modelConfigFrame.Data)
+	modelUpdated, err := marshalAgentResponseData[api.AgentModelConfigResponse](modelConfigFrame.Data)
 	if err != nil {
 		t.Fatalf("decode model config data: %v", err)
 	}
-	modelConfig, _ := modelUpdated.Definition["modelConfig"].(map[string]any)
+	modelConfig := modelUpdated.ModelConfig
 	reasoning, _ := modelConfig["reasoning"].(map[string]any)
 	if modelConfigFrame.Frame != ws.FrameResponse || modelConfigFrame.ID != "update-coder-model" ||
 		modelConfig["modelKey"] != "mock-model" || reasoning["enabled"] != false {
