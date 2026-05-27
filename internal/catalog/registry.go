@@ -37,6 +37,7 @@ type AgentDefinition struct {
 	ModelKey          string
 	Mode              string
 	CoderBackend      string
+	ACPProxyID        string
 	VisibilityScopes  []string
 	KanbanConcurrency int
 	Tools             []string
@@ -276,6 +277,9 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 		}
 		if strings.EqualFold(strings.TrimSpace(def.Mode), AgentModeCoder) && strings.TrimSpace(def.CoderBackend) != "" {
 			summary.Meta["coderBackend"] = strings.ToLower(strings.TrimSpace(def.CoderBackend))
+			if strings.TrimSpace(def.ACPProxyID) != "" {
+				summary.Meta["acpProxyId"] = strings.TrimSpace(def.ACPProxyID)
+			}
 		}
 		if strings.TrimSpace(def.Type) != "" {
 			summary.Meta["type"] = def.Type

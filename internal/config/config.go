@@ -16,7 +16,6 @@ type Config struct {
 	CoderPrompts    CoderPromptsConfig
 	MemoryPrompts   MemoryPromptsConfig
 	CoderSettings   CoderSettingsConfig
-	CoderACP        CoderACPConfig
 	VisionRecognize VisionRecognizeConfig
 	Providers       CatalogConfig
 	Models          CatalogConfig
@@ -111,6 +110,7 @@ type MemoryPromptsConfig struct {
 type CoderSettingsConfig struct {
 	WorkspaceAgents CoderWorkspaceAgentsConfig
 	DefaultAgent    CoderDefaultAgentConfig
+	ACPProxies      map[string]CoderACPProxyConfig
 }
 
 type CoderWorkspaceAgentsConfig struct {
@@ -123,7 +123,7 @@ type CoderDefaultAgentConfig struct {
 	ReasoningEffort string
 }
 
-type CoderACPConfig struct {
+type CoderACPProxyConfig struct {
 	BaseURL   string
 	AuthToken string
 	TimeoutMs int

@@ -228,7 +228,9 @@ func TestACPCoderQueryUsesGlobalProxyAndForwardsWorkspaceAndModel(t *testing.T) 
 		writeProviderSSE(t, w, `[DONE]`)
 	}, testFixtureOptions{
 		configure: func(cfg *config.Config) {
-			cfg.CoderACP.BaseURL = upstream.URL
+			cfg.CoderSettings.ACPProxies = map[string]config.CoderACPProxyConfig{
+				"codex": {BaseURL: upstream.URL, AuthToken: "coder-token", TimeoutMs: 420000},
+			}
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
 			writeAgentConfig(t, filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml"), []string{
@@ -241,6 +243,7 @@ func TestACPCoderQueryUsesGlobalProxyAndForwardsWorkspaceAndModel(t *testing.T) 
 				"  modelKey: mock-model",
 				"runtimeConfig:",
 				"  coderBackend: acp",
+				"  acpProxyId: codex",
 				"  workspaceRoot: " + filepath.ToSlash(workspace),
 				"projectConfig:",
 				"  git:",
@@ -292,7 +295,9 @@ func TestACPCoderRejectsRequestCWDParam(t *testing.T) {
 		writeProviderSSE(t, w, `[DONE]`)
 	}, testFixtureOptions{
 		configure: func(cfg *config.Config) {
-			cfg.CoderACP.BaseURL = upstream.URL
+			cfg.CoderSettings.ACPProxies = map[string]config.CoderACPProxyConfig{
+				"codex": {BaseURL: upstream.URL},
+			}
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
 			writeAgentConfig(t, filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml"), []string{
@@ -300,6 +305,7 @@ func TestACPCoderRejectsRequestCWDParam(t *testing.T) {
 				"mode: CODER",
 				"runtimeConfig:",
 				"  coderBackend: acp",
+				"  acpProxyId: codex",
 				"  workspaceRoot: " + filepath.ToSlash(t.TempDir()),
 			})
 		},
@@ -321,7 +327,9 @@ func TestACPCoderRejectsPlanningMode(t *testing.T) {
 		writeProviderSSE(t, w, `[DONE]`)
 	}, testFixtureOptions{
 		configure: func(cfg *config.Config) {
-			cfg.CoderACP.BaseURL = "http://127.0.0.1:3211"
+			cfg.CoderSettings.ACPProxies = map[string]config.CoderACPProxyConfig{
+				"codex": {BaseURL: "http://127.0.0.1:3211"},
+			}
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
 			writeAgentConfig(t, filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml"), []string{
@@ -329,6 +337,7 @@ func TestACPCoderRejectsPlanningMode(t *testing.T) {
 				"mode: CODER",
 				"runtimeConfig:",
 				"  coderBackend: acp",
+				"  acpProxyId: codex",
 				"  workspaceRoot: " + filepath.ToSlash(t.TempDir()),
 			})
 		},
@@ -339,6 +348,35 @@ func TestACPCoderRejectsPlanningMode(t *testing.T) {
 	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/query", body))
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "planningMode is not supported") {
 		t.Fatalf("expected planningMode rejection, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestACPCoderRejectsUnknownProxyID(t *testing.T) {
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `[DONE]`)
+	}, testFixtureOptions{
+		configure: func(cfg *config.Config) {
+			cfg.CoderSettings.ACPProxies = map[string]config.CoderACPProxyConfig{
+				"other": {BaseURL: "http://127.0.0.1:3211"},
+			}
+		},
+		setupRuntime: func(_ string, cfg *config.Config) {
+			writeAgentConfig(t, filepath.Join(cfg.Paths.AgentsDir, "mock-agent", "agent.yml"), []string{
+				"key: mock-agent",
+				"mode: CODER",
+				"runtimeConfig:",
+				"  coderBackend: acp",
+				"  acpProxyId: codex",
+				"  workspaceRoot: " + filepath.ToSlash(t.TempDir()),
+			})
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"agentKey":"mock-agent","message":"proxy"}`)
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/query", body))
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "ACP proxy") {
+		t.Fatalf("expected ACP proxy config error, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

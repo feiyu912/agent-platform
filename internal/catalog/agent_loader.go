@@ -327,9 +327,14 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 	runtimeConfig := mapNode(root["runtimeConfig"])
 	def.CoderBackend = AgentCoderBackendNative
 	if len(runtimeConfig) > 0 {
-		coderBackend, err := normalizeAgentCoderBackend(stringNode(runtimeConfig["coderBackend"]))
+		def.ACPProxyID = stringNode(runtimeConfig["acpProxyId"])
+		rawCoderBackend := stringNode(runtimeConfig["coderBackend"])
+		coderBackend, err := normalizeAgentCoderBackend(rawCoderBackend)
 		if err != nil {
 			return AgentDefinition{}, nil, err
+		}
+		if strings.TrimSpace(rawCoderBackend) == "" && strings.TrimSpace(def.ACPProxyID) != "" {
+			coderBackend = AgentCoderBackendACP
 		}
 		def.CoderBackend = coderBackend
 		def.Runtime = map[string]any{

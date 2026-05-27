@@ -276,6 +276,9 @@ func (s *Server) buildAgentDetailMeta(def catalog.AgentDefinition) (string, map[
 	}
 	if strings.EqualFold(strings.TrimSpace(def.Mode), catalog.AgentModeCoder) && strings.TrimSpace(def.CoderBackend) != "" {
 		meta["coderBackend"] = strings.ToLower(strings.TrimSpace(def.CoderBackend))
+		if strings.TrimSpace(def.ACPProxyID) != "" {
+			meta["acpProxyId"] = strings.TrimSpace(def.ACPProxyID)
+		}
 	}
 	if strings.TrimSpace(def.Workspace.Root) != "" {
 		workspaceMeta := map[string]any{

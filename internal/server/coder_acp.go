@@ -17,21 +17,35 @@ func (s *Server) applyProxyRoutingConfig(def *catalog.AgentDefinition) *statusEr
 	if def == nil || !catalog.AgentUsesACPCoderBackend(*def) {
 		return nil
 	}
-	baseURL := strings.TrimSpace(s.deps.Config.CoderACP.BaseURL)
+	proxyID := strings.TrimSpace(def.ACPProxyID)
+	if proxyID == "" {
+		return &statusError{
+			status:  http.StatusServiceUnavailable,
+			message: "runtimeConfig.acpProxyId is required for CODER agents using runtimeConfig.coderBackend: acp",
+		}
+	}
+	proxy, ok := s.deps.Config.CoderSettings.ACPProxies[proxyID]
+	if !ok {
+		return &statusError{
+			status:  http.StatusServiceUnavailable,
+			message: "ACP proxy " + `"` + proxyID + `" is not configured in configs/coder-settings.yml acp-proxies`,
+		}
+	}
+	baseURL := strings.TrimSpace(proxy.BaseURL)
 	if baseURL == "" {
 		return &statusError{
 			status:  http.StatusServiceUnavailable,
-			message: "CODER_ACP_BASE_URL is required for CODER agents using runtimeConfig.coderBackend: acp",
+			message: "ACP proxy " + `"` + proxyID + `" is missing base-url in configs/coder-settings.yml acp-proxies`,
 		}
 	}
-	timeoutMs := s.deps.Config.CoderACP.TimeoutMs
+	timeoutMs := proxy.TimeoutMs
 	if timeoutMs <= 0 {
 		timeoutMs = 300000
 	}
 	def.ProxyConfig = &catalog.ProxyConfig{
 		BaseURL:   baseURL,
 		Transport: "ws",
-		Token:     strings.TrimSpace(s.deps.Config.CoderACP.AuthToken),
+		Token:     strings.TrimSpace(proxy.AuthToken),
 		TimeoutMs: timeoutMs,
 	}
 	return nil

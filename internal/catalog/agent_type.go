@@ -261,6 +261,7 @@ func normalizeAgentCoderBackend(value string) (string, error) {
 }
 
 func ValidateAgentCoderBackend(def AgentDefinition) error {
+	acpProxyID := strings.TrimSpace(def.ACPProxyID)
 	switch strings.ToLower(strings.TrimSpace(def.CoderBackend)) {
 	case "", AgentCoderBackendNative:
 		return nil
@@ -268,8 +269,11 @@ func ValidateAgentCoderBackend(def AgentDefinition) error {
 		if !strings.EqualFold(strings.TrimSpace(def.Mode), AgentModeCoder) {
 			return fmt.Errorf("runtimeConfig.coderBackend: acp is only supported for mode: CODER")
 		}
+		if acpProxyID == "" {
+			return fmt.Errorf("runtimeConfig.acpProxyId is required when runtimeConfig.coderBackend: acp")
+		}
 		if def.ProxyConfig != nil {
-			return fmt.Errorf("proxyConfig is not supported for CODER agents using runtimeConfig.coderBackend: acp; configure CODER_ACP_BASE_URL globally")
+			return fmt.Errorf("proxyConfig is not supported for CODER agents using runtimeConfig.coderBackend: acp; configure configs/coder-settings.yml acp-proxies and runtimeConfig.acpProxyId")
 		}
 		if len(def.Project.PromptFiles) > 0 {
 			return fmt.Errorf("projectConfig.promptFiles is not supported for CODER agents using runtimeConfig.coderBackend: acp")

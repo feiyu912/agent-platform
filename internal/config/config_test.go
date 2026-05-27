@@ -55,8 +55,8 @@ func TestLoadDefaults(t *testing.T) {
 		if cfg.BashHITL.DefaultTimeoutMs != 120000 {
 			t.Fatalf("expected default bash HITL timeout 120000, got %d", cfg.BashHITL.DefaultTimeoutMs)
 		}
-		if cfg.CoderACP.BaseURL != "" || cfg.CoderACP.TimeoutMs != 300000 {
-			t.Fatalf("unexpected coder ACP defaults: %#v", cfg.CoderACP)
+		if got := cfg.CoderSettings.ACPProxies["codex"]; got.BaseURL != "http://127.0.0.1:3211" || got.TimeoutMs != 300000 {
+			t.Fatalf("unexpected default codex ACP proxy: %#v", got)
 		}
 		if cfg.Defaults.Budget.Hitl.TimeoutMs != 0 {
 			t.Fatalf("expected default HITL budget timeout 0, got %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
@@ -264,16 +264,26 @@ func TestLoadCoderSettingsMissingFileLeavesEmpty(t *testing.T) {
 			if cfg.CoderSettings.DefaultAgent.ModelKey != "" || cfg.CoderSettings.DefaultAgent.ReasoningEffort != "" {
 				t.Fatalf("expected empty coder default agent config, got %#v", cfg.CoderSettings.DefaultAgent)
 			}
+			if len(cfg.CoderSettings.ACPProxies) != 0 {
+				t.Fatalf("expected empty coder ACP proxies config, got %#v", cfg.CoderSettings.ACPProxies)
+			}
 		})
 	})
 }
 
 func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
-	withIsolatedEnv(t, nil, func() {
+	withIsolatedEnv(t, map[string]string{"CODEX_ACP_PROXY_TOKEN": "coder-token"}, func() {
 		content := "" +
 			"default-agent:\n" +
 			"  modelKey: deepseek-v4-pro\n" +
 			"  reasoningEffort: MEDIUM\n" +
+			"acp-proxies:\n" +
+			"  codex:\n" +
+			"    base-url: http://127.0.0.1:3211\n" +
+			"    auth-token: ${CODEX_ACP_PROXY_TOKEN:}\n" +
+			"  codex-alt:\n" +
+			"    base-url: http://127.0.0.1:3212\n" +
+			"    timeout-ms: 420000\n" +
 			"workspace-agents:\n" +
 			"  enabled: true\n" +
 			"  file: RULES.md\n"
@@ -287,6 +297,27 @@ func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
 			}
 			if cfg.CoderSettings.DefaultAgent.ModelKey != "deepseek-v4-pro" || cfg.CoderSettings.DefaultAgent.ReasoningEffort != "MEDIUM" {
 				t.Fatalf("unexpected coder default agent override: %#v", cfg.CoderSettings.DefaultAgent)
+			}
+			if got := cfg.CoderSettings.ACPProxies["codex"]; got.BaseURL != "http://127.0.0.1:3211" || got.AuthToken != "coder-token" || got.TimeoutMs != 300000 {
+				t.Fatalf("unexpected codex ACP proxy config: %#v", got)
+			}
+			if got := cfg.CoderSettings.ACPProxies["codex-alt"]; got.BaseURL != "http://127.0.0.1:3212" || got.TimeoutMs != 420000 {
+				t.Fatalf("unexpected codex-alt ACP proxy config: %#v", got)
+			}
+		})
+	})
+}
+
+func TestLoadCoderSettingsRejectsACPProxyWithoutBaseURL(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"acp-proxies:\n" +
+			"  codex:\n" +
+			"    timeout-ms: 300000\n"
+		withProjectFileContents(t, filepath.Join("configs", "coder-settings.yml"), &content, func() {
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "acp-proxies.codex.base-url is required") {
+				t.Fatalf("expected missing base-url error, got %v", err)
 			}
 		})
 	})
@@ -737,9 +768,6 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"CONTAINER_HUB_BASE_URL":               "http://127.0.0.1:18000",
 		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS": "60000",
-		"CODER_ACP_BASE_URL":                   "http://127.0.0.1:3211",
-		"CODER_ACP_AUTH_TOKEN":                 "coder-token",
-		"CODER_ACP_TIMEOUT_MS":                 "420000",
 	}, func() {
 		content := "" +
 			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
@@ -760,9 +788,6 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 			}
 			if cfg.ContainerHub.BaseURL != "http://127.0.0.1:18000" {
 				t.Fatalf("unexpected base url: %q", cfg.ContainerHub.BaseURL)
-			}
-			if cfg.CoderACP.BaseURL != "http://127.0.0.1:3211" || cfg.CoderACP.AuthToken != "coder-token" || cfg.CoderACP.TimeoutMs != 420000 {
-				t.Fatalf("unexpected coder ACP config: %#v", cfg.CoderACP)
 			}
 			if !cfg.Bash.ShellFeaturesEnabled {
 				t.Fatalf("expected shell features enabled from yaml")
