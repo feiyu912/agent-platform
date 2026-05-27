@@ -16,6 +16,7 @@ type Config struct {
 	CoderPrompts    CoderPromptsConfig
 	MemoryPrompts   MemoryPromptsConfig
 	CoderSettings   CoderSettingsConfig
+	CoderACP        CoderACPConfig
 	VisionRecognize VisionRecognizeConfig
 	Providers       CatalogConfig
 	Models          CatalogConfig
@@ -120,6 +121,12 @@ type CoderWorkspaceAgentsConfig struct {
 type CoderDefaultAgentConfig struct {
 	ModelKey        string
 	ReasoningEffort string
+}
+
+type CoderACPConfig struct {
+	BaseURL   string
+	AuthToken string
+	TimeoutMs int
 }
 
 type VisionRecognizeConfig struct {

@@ -39,7 +39,7 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	if strings.EqualFold(prepared.agentDef.Mode, "PROXY") {
+	if isProxyRoutedAgent(prepared.agentDef) {
 		s.wsProxyQuery(ctx, conn, req, prepared)
 		return
 	}

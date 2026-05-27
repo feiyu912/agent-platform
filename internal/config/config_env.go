@@ -29,6 +29,10 @@ func (c *Config) applyEnv() {
 	c.Providers.ExternalDir = filepath.Clean(filepath.Join(c.Paths.RegistriesDir, "providers"))
 	c.Models.ExternalDir = filepath.Clean(filepath.Join(c.Paths.RegistriesDir, "models"))
 
+	c.CoderACP.BaseURL = stringEnv("CODER_ACP_BASE_URL", c.CoderACP.BaseURL)
+	c.CoderACP.AuthToken = stringEnv("CODER_ACP_AUTH_TOKEN", c.CoderACP.AuthToken)
+	c.CoderACP.TimeoutMs = intEnv("CODER_ACP_TIMEOUT_MS", c.CoderACP.TimeoutMs)
+
 	c.Automation.ExternalDir = pathEnv("AUTOMATIONS_DIR", c.Paths.AutomationsDir)
 	c.Automation.Enabled = boolEnv("AGENT_AUTOMATION_ENABLED", c.Automation.Enabled)
 	c.Automation.DefaultZoneID = stringEnv("AGENT_AUTOMATION_DEFAULT_ZONE_ID", c.Automation.DefaultZoneID)

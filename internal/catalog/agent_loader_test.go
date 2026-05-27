@@ -407,6 +407,79 @@ func TestParseAgentFileSupportsCoderWorkspace(t *testing.T) {
 	}
 }
 
+func TestParseAgentFileSupportsACPCoderBackend(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "project")
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: coder\n" +
+		"mode: CODER\n" +
+		"runtimeConfig:\n" +
+		"  coderBackend: acp\n" +
+		"  workspaceRoot: " + filepath.ToSlash(workspace) + "\n" +
+		"projectConfig:\n" +
+		"  git:\n" +
+		"    expectedBranch: main\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	if def.Mode != AgentModeCoder || def.CoderBackend != AgentCoderBackendACP {
+		t.Fatalf("mode/backend = %q/%q, want CODER/acp", def.Mode, def.CoderBackend)
+	}
+	if !AgentUsesACPCoderBackend(def) {
+		t.Fatalf("expected ACP CODER backend")
+	}
+	if def.Project.Git.ExpectedBranch != "main" {
+		t.Fatalf("expected branch = %q, want main", def.Project.Git.ExpectedBranch)
+	}
+}
+
+func TestParseAgentFileRejectsACPCoderPromptFiles(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: coder\n" +
+		"mode: CODER\n" +
+		"runtimeConfig:\n" +
+		"  coderBackend: acp\n" +
+		"projectConfig:\n" +
+		"  promptFiles:\n" +
+		"    - AGENTS.md\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "projectConfig.promptFiles is not supported") {
+		t.Fatalf("expected ACP CODER promptFiles rejection, got %v", err)
+	}
+}
+
+func TestParseAgentFileRejectsACPCoderProxyConfig(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: coder\n" +
+		"mode: CODER\n" +
+		"runtimeConfig:\n" +
+		"  coderBackend: acp\n" +
+		"proxyConfig:\n" +
+		"  baseUrl: http://127.0.0.1:3211\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "proxyConfig is not supported") {
+		t.Fatalf("expected ACP CODER proxyConfig rejection, got %v", err)
+	}
+}
+
 func TestParseAgentFileAppliesCoderProfileDefaults(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "project")

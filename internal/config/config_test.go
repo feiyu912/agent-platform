@@ -55,6 +55,9 @@ func TestLoadDefaults(t *testing.T) {
 		if cfg.BashHITL.DefaultTimeoutMs != 120000 {
 			t.Fatalf("expected default bash HITL timeout 120000, got %d", cfg.BashHITL.DefaultTimeoutMs)
 		}
+		if cfg.CoderACP.BaseURL != "" || cfg.CoderACP.TimeoutMs != 300000 {
+			t.Fatalf("unexpected coder ACP defaults: %#v", cfg.CoderACP)
+		}
 		if cfg.Defaults.Budget.Hitl.TimeoutMs != 0 {
 			t.Fatalf("expected default HITL budget timeout 0, got %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
 		}
@@ -734,6 +737,9 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
 		"CONTAINER_HUB_BASE_URL":               "http://127.0.0.1:18000",
 		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS": "60000",
+		"CODER_ACP_BASE_URL":                   "http://127.0.0.1:3211",
+		"CODER_ACP_AUTH_TOKEN":                 "coder-token",
+		"CODER_ACP_TIMEOUT_MS":                 "420000",
 	}, func() {
 		content := "" +
 			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
@@ -754,6 +760,9 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 			}
 			if cfg.ContainerHub.BaseURL != "http://127.0.0.1:18000" {
 				t.Fatalf("unexpected base url: %q", cfg.ContainerHub.BaseURL)
+			}
+			if cfg.CoderACP.BaseURL != "http://127.0.0.1:3211" || cfg.CoderACP.AuthToken != "coder-token" || cfg.CoderACP.TimeoutMs != 420000 {
+				t.Fatalf("unexpected coder ACP config: %#v", cfg.CoderACP)
 			}
 			if !cfg.Bash.ShellFeaturesEnabled {
 				t.Fatalf("expected shell features enabled from yaml")

@@ -110,12 +110,13 @@ GET /ws -> request / response / stream / push / error frames
   "accessLevel": "auto_approve",
   "model": {
     "key": "qwen3-coder",
+    "modelId": "qwen3-coder",
     "reasoningEffort": "HIGH"
   }
 }
 ```
 
-`model.key` 必须存在于 model registry；`model.reasoningEffort` 可取 `LOW`、`MEDIUM`、`HIGH`，非空时开启本次 run 的 reasoning。该配置只影响当前 run，不写回 agent 配置。
+`model.key` 必须存在于 model registry；`model.modelId` 由后端转发给 ACP CODER 上游时补齐，优先来自 model registry 的 `modelId`，为空时回退到 key；`model.reasoningEffort` 可取 `LOW`、`MEDIUM`、`HIGH`，非空时开启本次 run 的 reasoning。该配置只影响当前 run，不写回 agent 配置。
 
 #### CODER model options
 

@@ -28,7 +28,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
 		return
 	}
-	if strings.EqualFold(prepared.agentDef.Mode, "PROXY") {
+	if isProxyRoutedAgent(prepared.agentDef) {
 		if proxyUpstreamTransport(prepared.agentDef.ProxyConfig) == "ws" {
 			s.handleProxyWebSocketQuery(w, r, prepared)
 			return

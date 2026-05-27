@@ -51,6 +51,7 @@ type QueryRequest struct {
 
 type QueryModelOptions struct {
 	Key             string `json:"key,omitempty"`
+	ModelID         string `json:"modelId,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 

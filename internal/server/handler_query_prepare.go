@@ -98,11 +98,20 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	if !ok {
 		return preparedQuery{}, &statusError{status: http.StatusBadRequest, message: "agent not found"}
 	}
-	if isProxyAgentMode(agentDef.Mode) && proxyRequestHasReservedCWD(req.Params) {
+	if isProxyRoutedAgent(agentDef) && proxyRequestHasReservedCWD(req.Params) {
 		return preparedQuery{}, &statusError{
 			status:  http.StatusBadRequest,
-			message: "params.cwd is reserved for PROXY agents; configure runtimeConfig.workspaceRoot in agent.yml",
+			message: "params.cwd is reserved for proxy-routed agents; configure runtimeConfig.workspaceRoot in agent.yml",
 		}
+	}
+	if catalog.AgentUsesACPCoderBackend(agentDef) && req.PlanningMode != nil && *req.PlanningMode {
+		return preparedQuery{}, &statusError{
+			status:  http.StatusBadRequest,
+			message: "planningMode is not supported for CODER agents using runtimeConfig.coderBackend: acp",
+		}
+	}
+	if statusErr := s.applyProxyRoutingConfig(&agentDef); statusErr != nil {
+		return preparedQuery{}, statusErr
 	}
 	if err := s.validateQueryModelOptions(req.Model); err != nil {
 		return preparedQuery{}, err
@@ -153,6 +162,9 @@ func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {
 	}
 	applyCoderConfigToSession(req.CoderConfig, &session)
 	applyQueryModelOptionsToSession(req.Model, &session)
+	if catalog.AgentUsesACPCoderBackend(agentDef) {
+		req.Model = s.acpCoderModelOptions(session, req.Model)
+	}
 	systemInitLines, err := s.prepareSystemInitCache(req, &session, created)
 	if err != nil {
 		return preparedQuery{}, err

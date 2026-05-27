@@ -36,6 +36,7 @@ type AgentDefinition struct {
 	Wonders           []string
 	ModelKey          string
 	Mode              string
+	CoderBackend      string
 	VisibilityScopes  []string
 	KanbanConcurrency int
 	Tools             []string
@@ -272,6 +273,9 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 				"tools":  append([]string(nil), def.Tools...),
 				"skills": append([]string(nil), def.Skills...),
 			},
+		}
+		if strings.EqualFold(strings.TrimSpace(def.Mode), AgentModeCoder) && strings.TrimSpace(def.CoderBackend) != "" {
+			summary.Meta["coderBackend"] = strings.ToLower(strings.TrimSpace(def.CoderBackend))
 		}
 		if strings.TrimSpace(def.Type) != "" {
 			summary.Meta["type"] = def.Type

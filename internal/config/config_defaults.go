@@ -42,6 +42,9 @@ func defaultConfig() Config {
 			Enabled:        false,
 			DefaultProfile: "general",
 		},
+		CoderACP: CoderACPConfig{
+			TimeoutMs: 300000,
+		},
 		Providers: CatalogConfig{ExternalDir: filepath.Join(paths.RegistriesDir, "providers")},
 		Models:    CatalogConfig{ExternalDir: filepath.Join(paths.RegistriesDir, "models")},
 		Automation: AutomationConfig{
