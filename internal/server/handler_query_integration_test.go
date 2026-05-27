@@ -1023,6 +1023,9 @@ Plan first, then check the current time before reporting.
 			t.Fatalf("expected %s before confirmation, got %s", eventType, streamBody.String())
 		}
 	}
+	if strings.Contains(streamBody.String(), `"toolName":"planning_write"`) || strings.Contains(streamBody.String(), `"toolId":"tool_plan"`) {
+		t.Fatalf("did not expect hidden planning_write tool events before confirmation, got %s", streamBody.String())
+	}
 	if got := strings.Count(streamBody.String(), `"type":"planning.delta"`); got <= 1 {
 		t.Fatalf("expected multiple planning.delta events before confirmation, got %d in %s", got, streamBody.String())
 	}
