@@ -295,8 +295,8 @@ func TestDispatcherIncludesTaskIDOnDebugEvents(t *testing.T) {
 	llmUsage, _ := usage["llmReturnUsage"].(map[string]any)
 	promptDetails, _ := llmUsage["promptTokensDetails"].(map[string]any)
 	completionDetails, _ := llmUsage["completionTokensDetails"].(map[string]any)
-	if promptDetails["cachedTokens"] != 64 || completionDetails["reasoningTokens"] != 12 ||
-		llmUsage["promptCacheHitTokens"] != 64 || llmUsage["promptCacheMissTokens"] != 36 ||
+	if promptDetails["cacheHitTokens"] != 64 || promptDetails["cacheMissTokens"] != 36 ||
+		completionDetails["reasoningTokens"] != 12 ||
 		llmUsage["llmChatCompletionCount"] != 1 {
 		t.Fatalf("expected detailed llm usage, got %#v", usage)
 	}
@@ -363,14 +363,15 @@ func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) 
 	run, _ := usage["run"].(map[string]any)
 	currentPromptDetails, _ := current["promptTokensDetails"].(map[string]any)
 	currentCompletionDetails, _ := current["completionTokensDetails"].(map[string]any)
-	if currentPromptDetails["cachedTokens"] != 64 || currentCompletionDetails["reasoningTokens"] != 12 ||
-		current["promptCacheHitTokens"] != 64 || current["promptCacheMissTokens"] != 36 {
+	if currentPromptDetails["cacheHitTokens"] != 64 || currentPromptDetails["cacheMissTokens"] != 36 ||
+		currentCompletionDetails["reasoningTokens"] != 12 {
 		t.Fatalf("expected detailed current usage, got %#v", usage)
 	}
 	if _, exists := current["llmChatCompletionCount"]; exists {
 		t.Fatalf("did not expect current llmChatCompletionCount, got %#v", usage)
 	}
-	if run["promptCacheHitTokens"] != 128 || run["promptCacheMissTokens"] != 172 || run["llmChatCompletionCount"] != 2 {
+	runPromptDetails, _ := run["promptTokensDetails"].(map[string]any)
+	if runPromptDetails["cacheHitTokens"] != 128 || runPromptDetails["cacheMissTokens"] != 172 || run["llmChatCompletionCount"] != 2 {
 		t.Fatalf("expected detailed run usage, got %#v", usage)
 	}
 	cw, _ := data.Value("contextWindow").(map[string]any)

@@ -554,8 +554,6 @@ type ChatUsageData struct {
 	TotalTokens             int                     `json:"totalTokens"`
 	PromptTokensDetails     *PromptTokenDetails     `json:"promptTokensDetails,omitempty"`
 	CompletionTokensDetails *CompletionTokenDetails `json:"completionTokensDetails,omitempty"`
-	PromptCacheHitTokens    int                     `json:"promptCacheHitTokens,omitempty"`
-	PromptCacheMissTokens   int                     `json:"promptCacheMissTokens,omitempty"`
 	LlmChatCompletionCount  int                     `json:"llmChatCompletionCount,omitempty"`
 }
 
@@ -565,7 +563,8 @@ type ChatUsageBreakdown struct {
 }
 
 type PromptTokenDetails struct {
-	CachedTokens int `json:"cachedTokens,omitempty"`
+	CacheHitTokens  int `json:"cacheHitTokens,omitempty"`
+	CacheMissTokens int `json:"cacheMissTokens,omitempty"`
 }
 
 type CompletionTokenDetails struct {

@@ -52,9 +52,9 @@ func TestHandleChatArchiveArchivesChatAndBroadcasts(t *testing.T) {
 		t.Fatalf("unexpected archives response: %#v", archives.Data)
 	}
 	usage := archives.Data.Items[0].Usage
-	if usage == nil || usage.PromptTokensDetails == nil || usage.PromptTokensDetails.CachedTokens != 2 ||
+	if usage == nil || usage.PromptTokensDetails == nil || usage.PromptTokensDetails.CacheHitTokens != 2 ||
+		usage.PromptTokensDetails.CacheMissTokens != 1 ||
 		usage.CompletionTokensDetails == nil || usage.CompletionTokensDetails.ReasoningTokens != 4 ||
-		usage.PromptCacheHitTokens != 2 || usage.PromptCacheMissTokens != 1 ||
 		usage.LlmChatCompletionCount != 1 {
 		t.Fatalf("expected detailed archive usage, got %#v", usage)
 	}

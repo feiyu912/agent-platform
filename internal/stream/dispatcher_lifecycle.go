@@ -94,17 +94,22 @@ func addDetailedUsage(out map[string]any, cachedTokens int, reasoningTokens int,
 	if out == nil {
 		return
 	}
-	if cachedTokens > 0 {
-		out["promptTokensDetails"] = map[string]any{"cachedTokens": cachedTokens}
+	cacheHitTokens := promptCacheHitTokens
+	if cacheHitTokens <= 0 {
+		cacheHitTokens = cachedTokens
+	}
+	promptDetails := map[string]any{}
+	if cacheHitTokens > 0 {
+		promptDetails["cacheHitTokens"] = cacheHitTokens
+	}
+	if promptCacheMissTokens > 0 {
+		promptDetails["cacheMissTokens"] = promptCacheMissTokens
+	}
+	if len(promptDetails) > 0 {
+		out["promptTokensDetails"] = promptDetails
 	}
 	if reasoningTokens > 0 {
 		out["completionTokensDetails"] = map[string]any{"reasoningTokens": reasoningTokens}
-	}
-	if promptCacheHitTokens > 0 {
-		out["promptCacheHitTokens"] = promptCacheHitTokens
-	}
-	if promptCacheMissTokens > 0 {
-		out["promptCacheMissTokens"] = promptCacheMissTokens
 	}
 }
 

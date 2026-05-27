@@ -1610,13 +1610,12 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 						"completionTokens": 50,
 						"totalTokens":      150,
 						"promptTokensDetails": map[string]any{
-							"cachedTokens": 64,
+							"cacheHitTokens":  64,
+							"cacheMissTokens": 36,
 						},
 						"completionTokensDetails": map[string]any{
 							"reasoningTokens": 12,
 						},
-						"promptCacheHitTokens":   64,
-						"promptCacheMissTokens":  36,
 						"llmChatCompletionCount": 1,
 					},
 				},
@@ -1639,8 +1638,8 @@ func TestStepWriterEmbedsUsageAtStepLevel(t *testing.T) {
 	}
 	promptDetails, _ := usage["promptTokensDetails"].(map[string]any)
 	completionDetails, _ := usage["completionTokensDetails"].(map[string]any)
-	if toIntValue(promptDetails["cachedTokens"]) != 64 || toIntValue(completionDetails["reasoningTokens"]) != 12 ||
-		toIntValue(usage["promptCacheHitTokens"]) != 64 || toIntValue(usage["promptCacheMissTokens"]) != 36 ||
+	if toIntValue(promptDetails["cacheHitTokens"]) != 64 || toIntValue(promptDetails["cacheMissTokens"]) != 36 ||
+		toIntValue(completionDetails["reasoningTokens"]) != 12 ||
 		toIntValue(usage["llmChatCompletionCount"]) != 1 {
 		t.Fatalf("expected detailed step-level usage, got %#v", lines[0])
 	}
@@ -1867,10 +1866,9 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 					"completionTokens": 50,
 					"totalTokens":      150,
 					"promptTokensDetails": map[string]any{
-						"cachedTokens": 64,
+						"cacheHitTokens":  64,
+						"cacheMissTokens": 36,
 					},
-					"promptCacheHitTokens":   64,
-					"promptCacheMissTokens":  36,
 					"llmChatCompletionCount": 1,
 				},
 			},
@@ -1889,8 +1887,9 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 		t.Fatalf("did not expect debug payload, got %#v", lines[0])
 	}
 	usage, _ := lines[0]["usage"].(map[string]any)
+	promptDetails, _ := usage["promptTokensDetails"].(map[string]any)
 	if toIntValue(usage["promptTokens"]) != 100 || toIntValue(usage["completionTokens"]) != 50 || toIntValue(usage["totalTokens"]) != 150 ||
-		toIntValue(usage["promptCacheHitTokens"]) != 64 || toIntValue(usage["promptCacheMissTokens"]) != 36 {
+		toIntValue(promptDetails["cacheHitTokens"]) != 64 || toIntValue(promptDetails["cacheMissTokens"]) != 36 {
 		t.Fatalf("expected usage snapshot to persist, got %#v", lines[0])
 	}
 	if _, exists := usage["llmChatCompletionCount"]; exists {
@@ -4816,7 +4815,8 @@ func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
 	}
 	usageSnapshotUsage, _ := detail.Events[4].Value("usage").(map[string]any)
 	usageSnapshotCurrent, _ := usageSnapshotUsage["current"].(map[string]any)
-	if detail.Events[4].Type != "usage.snapshot" || toIntValue(usageSnapshotCurrent["promptCacheHitTokens"]) != 32 || toIntValue(usageSnapshotCurrent["promptCacheMissTokens"]) != 68 {
+	usageSnapshotPromptDetails, _ := usageSnapshotCurrent["promptTokensDetails"].(map[string]any)
+	if detail.Events[4].Type != "usage.snapshot" || toIntValue(usageSnapshotPromptDetails["cacheHitTokens"]) != 32 || toIntValue(usageSnapshotPromptDetails["cacheMissTokens"]) != 68 {
 		t.Fatalf("expected usage.snapshot with DeepSeek cache fields, got %#v", detail.Events)
 	}
 	if _, exists := usageSnapshotCurrent["llmChatCompletionCount"]; exists {

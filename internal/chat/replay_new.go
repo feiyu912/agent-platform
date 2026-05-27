@@ -261,21 +261,23 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			}
 			rd.events = append(rd.events, awaitingReplay.leftoverEvents()...)
 			if hasProviderUsagePayload(stepUsage) {
+				stepCacheHitTokens := usageCacheHitTokensFromMap(stepUsage)
+				stepCacheMissTokens := usageCacheMissTokensFromMap(stepUsage)
 				rd.totalPromptTokens += toIntFromKeys(stepUsage, "promptTokens", "prompt_tokens")
 				rd.totalCompletionTokens += toIntFromKeys(stepUsage, "completionTokens", "completion_tokens")
 				rd.totalTotalTokens += toIntFromKeys(stepUsage, "totalTokens", "total_tokens")
-				rd.totalCachedTokens += toNestedIntFromKeys(stepUsage, "promptTokensDetails", "prompt_tokens_details", "cachedTokens", "cached_tokens")
+				rd.totalCachedTokens += stepCacheHitTokens
 				rd.totalReasoningTokens += toNestedIntFromKeys(stepUsage, "completionTokensDetails", "completion_tokens_details", "reasoningTokens", "reasoning_tokens")
-				rd.totalPromptCacheHitTokens += toIntFromKeys(stepUsage, "promptCacheHitTokens", "prompt_cache_hit_tokens")
-				rd.totalPromptCacheMissTokens += toIntFromKeys(stepUsage, "promptCacheMissTokens", "prompt_cache_miss_tokens")
+				rd.totalPromptCacheHitTokens += stepCacheHitTokens
+				rd.totalPromptCacheMissTokens += stepCacheMissTokens
 				rd.totalLlmChatCompletionCount += toIntFromKeys(stepUsage, "llmChatCompletionCount", "llm_chat_completion_count")
 				chatTotalPromptTokens += toIntFromKeys(stepUsage, "promptTokens", "prompt_tokens")
 				chatTotalCompletionTokens += toIntFromKeys(stepUsage, "completionTokens", "completion_tokens")
 				chatTotalTotalTokens += toIntFromKeys(stepUsage, "totalTokens", "total_tokens")
-				chatTotalCachedTokens += toNestedIntFromKeys(stepUsage, "promptTokensDetails", "prompt_tokens_details", "cachedTokens", "cached_tokens")
+				chatTotalCachedTokens += stepCacheHitTokens
 				chatTotalReasoningTokens += toNestedIntFromKeys(stepUsage, "completionTokensDetails", "completion_tokens_details", "reasoningTokens", "reasoning_tokens")
-				chatTotalPromptCacheHitTokens += toIntFromKeys(stepUsage, "promptCacheHitTokens", "prompt_cache_hit_tokens")
-				chatTotalPromptCacheMissTokens += toIntFromKeys(stepUsage, "promptCacheMissTokens", "prompt_cache_miss_tokens")
+				chatTotalPromptCacheHitTokens += stepCacheHitTokens
+				chatTotalPromptCacheMissTokens += stepCacheMissTokens
 				chatTotalLlmChatCompletionCount += toIntFromKeys(stepUsage, "llmChatCompletionCount", "llm_chat_completion_count")
 				rd.chatTotalPromptTokens = chatTotalPromptTokens
 				rd.chatTotalCompletionTokens = chatTotalCompletionTokens

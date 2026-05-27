@@ -173,10 +173,10 @@ func usagePayloadFromMap(usage map[string]any, includeLLMChatCompletionCount boo
 	}
 	addUsageDetailsToMap(
 		out,
-		toNestedIntFromKeys(usage, "promptTokensDetails", "prompt_tokens_details", "cachedTokens", "cached_tokens"),
+		usageCacheHitTokensFromMap(usage),
 		toNestedIntFromKeys(usage, "completionTokensDetails", "completion_tokens_details", "reasoningTokens", "reasoning_tokens"),
-		toIntFromKeys(usage, "promptCacheHitTokens", "prompt_cache_hit_tokens"),
-		toIntFromKeys(usage, "promptCacheMissTokens", "prompt_cache_miss_tokens"),
+		usageCacheHitTokensFromMap(usage),
+		usageCacheMissTokensFromMap(usage),
 	)
 	if includeLLMChatCompletionCount {
 		if count := toIntFromKeys(usage, "llmChatCompletionCount", "llm_chat_completion_count"); count > 0 {
@@ -193,24 +193,28 @@ func hasProviderUsagePayload(usage map[string]any) bool {
 	return toIntFromKeys(usage, "promptTokens", "prompt_tokens") > 0 ||
 		toIntFromKeys(usage, "completionTokens", "completion_tokens") > 0 ||
 		toIntFromKeys(usage, "totalTokens", "total_tokens") > 0 ||
-		toNestedIntFromKeys(usage, "promptTokensDetails", "prompt_tokens_details", "cachedTokens", "cached_tokens") > 0 ||
+		usageCacheHitTokensFromMap(usage) > 0 ||
 		toNestedIntFromKeys(usage, "completionTokensDetails", "completion_tokens_details", "reasoningTokens", "reasoning_tokens") > 0 ||
-		toIntFromKeys(usage, "promptCacheHitTokens", "prompt_cache_hit_tokens") > 0 ||
-		toIntFromKeys(usage, "promptCacheMissTokens", "prompt_cache_miss_tokens") > 0
+		usageCacheMissTokensFromMap(usage) > 0
 }
 
 func addUsageDetailsToMap(out map[string]any, cachedTokens int, reasoningTokens int, promptCacheHitTokens int, promptCacheMissTokens int) {
-	if cachedTokens > 0 {
-		out["promptTokensDetails"] = map[string]any{"cachedTokens": cachedTokens}
+	cacheHitTokens := promptCacheHitTokens
+	if cacheHitTokens <= 0 {
+		cacheHitTokens = cachedTokens
+	}
+	promptDetails := map[string]any{}
+	if cacheHitTokens > 0 {
+		promptDetails["cacheHitTokens"] = cacheHitTokens
+	}
+	if promptCacheMissTokens > 0 {
+		promptDetails["cacheMissTokens"] = promptCacheMissTokens
+	}
+	if len(promptDetails) > 0 {
+		out["promptTokensDetails"] = promptDetails
 	}
 	if reasoningTokens > 0 {
 		out["completionTokensDetails"] = map[string]any{"reasoningTokens": reasoningTokens}
-	}
-	if promptCacheHitTokens > 0 {
-		out["promptCacheHitTokens"] = promptCacheHitTokens
-	}
-	if promptCacheMissTokens > 0 {
-		out["promptCacheMissTokens"] = promptCacheMissTokens
 	}
 }
 
@@ -249,6 +253,29 @@ func toNestedIntFromKeys(values map[string]any, camelDetailKey string, snakeDeta
 		}
 	}
 	return 0
+}
+
+func usageCacheHitTokensFromMap(usage map[string]any) int {
+	if usage == nil {
+		return 0
+	}
+	if v := toNestedIntFromKeys(usage, "promptTokensDetails", "prompt_tokens_details", "cacheHitTokens", "cache_hit_tokens"); v > 0 {
+		return v
+	}
+	if v := toNestedIntFromKeys(usage, "promptTokensDetails", "prompt_tokens_details", "cachedTokens", "cached_tokens"); v > 0 {
+		return v
+	}
+	return toIntFromKeys(usage, "promptCacheHitTokens", "prompt_cache_hit_tokens")
+}
+
+func usageCacheMissTokensFromMap(usage map[string]any) int {
+	if usage == nil {
+		return 0
+	}
+	if v := toNestedIntFromKeys(usage, "promptTokensDetails", "prompt_tokens_details", "cacheMissTokens", "cache_miss_tokens"); v > 0 {
+		return v
+	}
+	return toIntFromKeys(usage, "promptCacheMissTokens", "prompt_cache_miss_tokens")
 }
 
 func int64FromAny(v any) int64 {
