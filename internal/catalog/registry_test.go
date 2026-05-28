@@ -3,6 +3,7 @@ package catalog
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -713,6 +714,9 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 				Description:       "hidden from json",
 				Role:              "Assistant role",
 				Mode:              "REACT",
+				ModelKey:          "agent-model",
+				Tools:             []string{"bash", "file_read"},
+				Skills:            []string{"browser"},
 				Workspace:         AgentWorkspaceConfig{Root: workspace},
 				VisibilityScopes:  []string{"nav", "copilot"},
 				KanbanConcurrency: 2,
@@ -749,13 +753,20 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 	}
 
 	items := registry.Agents("")
-	if len(items) != 1 || items[0].Key != "assistant" {
+	if len(items) != 3 {
 		t.Fatalf("default agents = %#v", items)
 	}
-	if items[0].Mode != "REACT" || items[0].WorkspaceDir != workspace {
-		t.Fatalf("summary mode/workspace = %#v", items[0])
+	navItems := registry.Agents("nav")
+	if len(navItems) != 1 || navItems[0].Key != "assistant" {
+		t.Fatalf("nav agents = %#v", navItems)
 	}
-	data, err := json.Marshal(items[0])
+	if navItems[0].Mode != "REACT" || navItems[0].WorkspaceDir != workspace {
+		t.Fatalf("summary mode/workspace = %#v", navItems[0])
+	}
+	if navItems[0].Meta["modelKey"] != "agent-model" || navItems[0].Meta["toolsCount"] != 2 || navItems[0].Meta["skillsCount"] != 1 {
+		t.Fatalf("summary meta should include modelKey and list counts, got %#v", navItems[0].Meta)
+	}
+	data, err := json.Marshal(navItems[0])
 	if err != nil {
 		t.Fatalf("marshal agent summary: %v", err)
 	}
@@ -767,6 +778,9 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 	}
 	if strings.Contains(string(data), "defaultModelKey") || strings.Contains(string(data), "defaultReasoningEffort") {
 		t.Fatalf("non-CODER summary should omit CODER defaults, got %s", data)
+	}
+	if _, err := NormalizeAgentSummaryScope("missing"); !errors.Is(err, ErrInvalidAgentSummaryScope) {
+		t.Fatalf("invalid scope error = %v, want ErrInvalidAgentSummaryScope", err)
 	}
 
 	invokeItems := registry.Agents("invoke")

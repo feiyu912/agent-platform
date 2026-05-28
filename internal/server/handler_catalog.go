@@ -41,7 +41,12 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := s.listAgentSummaries(includeChats, r.URL.Query().Get("scope"))
+	scope, err := catalog.NormalizeAgentSummaryScope(r.URL.Query().Get("scope"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
+		return
+	}
+	items, err := s.listAgentSummaries(includeChats, scope)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
 		return

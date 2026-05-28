@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	"agent-platform/internal/config"
 	"agent-platform/internal/contracts"
 )
+
+var ErrInvalidAgentSummaryScope = errors.New("invalid agent summary scope")
 
 type Registry interface {
 	Agents(tag string) []api.AgentSummary
@@ -252,7 +255,10 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 
 	keys := r.orderedAgentKeysLocked()
 	items := make([]api.AgentSummary, 0, len(keys))
-	scope = normalizeAgentSummaryScope(scope)
+	scope, err := NormalizeAgentSummaryScope(scope)
+	if err != nil {
+		return nil
+	}
 	for _, key := range keys {
 		def := r.agents[key]
 		if !AgentVisibleForScope(def, scope) {
@@ -269,10 +275,13 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 			Role:         def.Role,
 			Type:         def.Type,
 			Meta: map[string]any{
-				"model":  def.ModelKey,
-				"mode":   apiMode,
-				"tools":  append([]string(nil), def.Tools...),
-				"skills": append([]string(nil), def.Skills...),
+				"model":       def.ModelKey,
+				"modelKey":    def.ModelKey,
+				"mode":        apiMode,
+				"tools":       append([]string(nil), def.Tools...),
+				"toolsCount":  len(def.Tools),
+				"skills":      append([]string(nil), def.Skills...),
+				"skillsCount": len(def.Skills),
 			},
 		}
 		if strings.EqualFold(strings.TrimSpace(def.Mode), AgentModeCoder) && strings.TrimSpace(def.CoderBackend) != "" {
@@ -371,25 +380,29 @@ func firstNonBlankString(values ...string) string {
 	return ""
 }
 
-func normalizeAgentSummaryScope(scope string) string {
-	switch strings.ToLower(strings.TrimSpace(scope)) {
+func NormalizeAgentSummaryScope(scope string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(scope))
+	if normalized == "" {
+		return "all", nil
+	}
+	switch normalized {
 	case "nav", "copilot", "invoke", "internal", "all":
-		return strings.ToLower(strings.TrimSpace(scope))
+		return normalized, nil
 	default:
-		return ""
+		return "", fmt.Errorf("%w: %q (allowed: nav, copilot, invoke, internal, all)", ErrInvalidAgentSummaryScope, scope)
 	}
 }
 
 func AgentVisibleForScope(def AgentDefinition, scope string) bool {
-	scope = normalizeAgentSummaryScope(scope)
+	scope, err := NormalizeAgentSummaryScope(scope)
+	if err != nil {
+		return false
+	}
 	if scope == "all" {
 		return true
 	}
 	scopes := EffectiveAgentVisibilityScopes(def)
-	if scope != "" {
-		return containsString(scopes, scope)
-	}
-	return containsString(scopes, "nav")
+	return containsString(scopes, scope)
 }
 
 func AgentInvocable(def AgentDefinition) bool {

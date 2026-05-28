@@ -125,6 +125,24 @@ func TestWebSocketChannelsAndAgentsIgnoreChannelFilter(t *testing.T) {
 	if invalidFrame.Code != http.StatusBadRequest {
 		t.Fatalf("expected invalid includeChats to fail, got %#v", invalidFrame)
 	}
+
+	if err := conn.WriteJSON(ws.RequestFrame{
+		Frame: ws.FrameRequest,
+		Type:  "/api/agents",
+		ID:    "req_agents_invalid_scope",
+		Payload: ws.MarshalPayload(map[string]any{
+			"scope": "missing",
+		}),
+	}); err != nil {
+		t.Fatalf("write invalid scope agents request: %v", err)
+	}
+	var invalidScopeFrame ws.ResponseFrame
+	if err := conn.ReadJSON(&invalidScopeFrame); err != nil {
+		t.Fatalf("read invalid scope agents frame: %v", err)
+	}
+	if invalidScopeFrame.Code != http.StatusBadRequest || invalidScopeFrame.Type != "invalid_request" {
+		t.Fatalf("expected invalid scope to fail, got %#v", invalidScopeFrame)
+	}
 }
 
 func readConnectedPush(t *testing.T, conn *gws.Conn) {

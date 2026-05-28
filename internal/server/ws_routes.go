@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agent-platform/internal/api"
+	"agent-platform/internal/catalog"
 	"agent-platform/internal/chat"
 	"agent-platform/internal/contracts"
 	"agent-platform/internal/observability"
@@ -145,7 +146,13 @@ func (s *Server) wsAgents(_ context.Context, conn *ws.Conn, req ws.RequestFrame)
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	items, listErr := s.listAgentSummaries(payload.IncludeChats, payload.Scope)
+	scope, err := catalog.NormalizeAgentSummaryScope(payload.Scope)
+	if err != nil {
+		conn.SendError(req.ID, "invalid_request", 400, err.Error(), nil)
+		conn.CompleteRequest(req.ID)
+		return
+	}
+	items, listErr := s.listAgentSummaries(payload.IncludeChats, scope)
 	if listErr != nil {
 		conn.SendError(req.ID, "internal_error", 500, listErr.Error(), nil)
 		conn.CompleteRequest(req.ID)

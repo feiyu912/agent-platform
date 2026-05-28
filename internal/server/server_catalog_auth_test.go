@@ -285,7 +285,7 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 			coder = item
 		}
 	}
-	if containsString(keys, "internal-agent") || containsString(keys, "invoke-agent") || !containsString(keys, "coder-agent") {
+	if !containsString(keys, "internal-agent") || !containsString(keys, "invoke-agent") || !containsString(keys, "coder-agent") {
 		t.Fatalf("default scope keys = %#v", keys)
 	}
 	if coder.Mode != catalog.AgentModeCoder || coder.WorkspaceDir == "" {
@@ -308,6 +308,22 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agents?scope=nav", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for nav scope, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode nav agents response: %v", err)
+	}
+	keys = keys[:0]
+	for _, item := range response.Data {
+		keys = append(keys, item.Key)
+	}
+	if containsString(keys, "internal-agent") || containsString(keys, "invoke-agent") || !containsString(keys, "coder-agent") {
+		t.Fatalf("nav scope keys = %#v", keys)
+	}
+
+	rec = httptest.NewRecorder()
 	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agents?scope=invoke", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for invoke scope, got %d: %s", rec.Code, rec.Body.String())
@@ -321,6 +337,12 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 	}
 	if !containsString(keys, "invoke-agent") || !containsString(keys, "mock-agent") || containsString(keys, "internal-agent") {
 		t.Fatalf("invoke scope keys = %#v", keys)
+	}
+
+	rec = httptest.NewRecorder()
+	fixture.server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agents?scope=missing", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid scope, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
