@@ -7,7 +7,7 @@ import (
 	"agent-platform/internal/contracts"
 )
 
-func TestResolveMaxStepsPrefersSessionReactMaxSteps(t *testing.T) {
+func TestResolveMaxStepsUsesBudgetAndLegacyReactFallback(t *testing.T) {
 	engine := &LLMAgentEngine{
 		cfg: config.Config{
 			Defaults: config.DefaultsConfig{
@@ -16,10 +16,19 @@ func TestResolveMaxStepsPrefersSessionReactMaxSteps(t *testing.T) {
 		},
 	}
 
-	if got := engine.resolveMaxSteps(contracts.QuerySession{ReactMaxSteps: 160}); got != 160 {
-		t.Fatalf("resolveMaxSteps() = %d, want session override 160", got)
+	if got := engine.resolveMaxSteps(contracts.QuerySession{ReactMaxSteps: 160}, "react"); got != 160 {
+		t.Fatalf("resolveMaxSteps() = %d, want legacy react override 160", got)
 	}
-	if got := engine.resolveMaxSteps(contracts.QuerySession{}); got != 6 {
-		t.Fatalf("resolveMaxSteps() = %d, want config default 6", got)
+	if got := engine.resolveMaxSteps(contracts.QuerySession{
+		Budget:        map[string]any{"maxSteps": 24},
+		ReactMaxSteps: 160,
+		ResolvedBudget: contracts.Budget{
+			MaxSteps: 24,
+		},
+	}, "react"); got != 24 {
+		t.Fatalf("resolveMaxSteps() = %d, want budget max steps 24", got)
+	}
+	if got := engine.resolveMaxSteps(contracts.QuerySession{}, "react"); got != 100 {
+		t.Fatalf("resolveMaxSteps() = %d, want budget default 100", got)
 	}
 }

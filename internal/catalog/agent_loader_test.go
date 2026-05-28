@@ -587,17 +587,17 @@ func TestParseAgentFileAppliesCoderProfileDefaults(t *testing.T) {
 	if !reflect.DeepEqual(def.ContextTags, wantTags) {
 		t.Fatalf("context tags = %#v, want %#v", def.ContextTags, wantTags)
 	}
-	if got := intNode(def.Budget["runTimeoutMs"]); got != 3600000 {
-		t.Fatalf("runTimeoutMs = %d, want 3600000", got)
+	if got := intNode(def.Budget["runTimeoutMs"]); got != 600000 {
+		t.Fatalf("runTimeoutMs = %d, want 600000", got)
 	}
-	if got := intNode(mapNode(def.Budget["model"])["maxCalls"]); got != 240 {
-		t.Fatalf("model.maxCalls = %d, want 240", got)
+	if got := intNode(def.Budget["maxSteps"]); got != 240 {
+		t.Fatalf("maxSteps = %d, want 240", got)
 	}
-	if got := intNode(mapNode(def.Budget["tool"])["maxCalls"]); got != 300 {
-		t.Fatalf("tool.maxCalls = %d, want 300", got)
+	if got := intNode(mapNode(def.Budget["tool"])["maxCalls"]); got != 200 {
+		t.Fatalf("tool.maxCalls = %d, want 200", got)
 	}
-	if def.ReactMaxSteps != 160 {
-		t.Fatalf("react max steps = %d, want 160", def.ReactMaxSteps)
+	if def.ReactMaxSteps != 0 {
+		t.Fatalf("react max steps = %d, want 0 after budget migration", def.ReactMaxSteps)
 	}
 	if def.Name != "coder" || def.Role != "coder" || def.Description != "coder" {
 		t.Fatalf("identity defaults = name:%q role:%q description:%q, want key fallback", def.Name, def.Role, def.Description)

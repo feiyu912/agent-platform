@@ -25,15 +25,13 @@ var coderAgentProfile = agentModeProfile{
 	},
 	ContextTags: []string{"system", "session"},
 	Budget: map[string]any{
-		"runTimeoutMs": 3600000,
-		"model": map[string]any{
-			"maxCalls": 240,
-		},
+		"runTimeoutMs": 600000,
+		"maxSteps":     240,
 		"tool": map[string]any{
-			"maxCalls": 300,
+			"maxCalls": 200,
 		},
 	},
-	ReactMaxSteps: 160,
+	ReactMaxSteps: 0,
 }
 
 type agentModeProfile struct {

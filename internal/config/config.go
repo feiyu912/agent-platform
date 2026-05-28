@@ -178,6 +178,7 @@ type DefaultsConfig struct {
 
 type BudgetDefaultsConfig struct {
 	RunTimeoutMs int
+	MaxSteps     int
 	Model        RetryBudgetConfig
 	Tool         RetryBudgetConfig
 	Hitl         HitlBudgetConfig

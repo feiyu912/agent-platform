@@ -70,13 +70,14 @@ func defaultConfig() Config {
 			MaxTokens: 4096,
 			Budget: BudgetDefaultsConfig{
 				RunTimeoutMs: 300000,
+				MaxSteps:     100,
 				Model: RetryBudgetConfig{
-					MaxCalls:   30,
+					MaxCalls:   100,
 					TimeoutMs:  120000,
 					RetryCount: 0,
 				},
 				Tool: RetryBudgetConfig{
-					MaxCalls:   20,
+					MaxCalls:   60,
 					TimeoutMs:  120000,
 					RetryCount: 0,
 				},

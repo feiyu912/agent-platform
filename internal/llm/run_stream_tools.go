@@ -228,7 +228,12 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 	}
 	if !invocation.toolCallCounted {
 		s.execCtx.ToolCalls++
+		s.stageToolCalls++
 		invocation.toolCallCounted = true
+	}
+	if result := s.checkBudgetBeforeToolCall(invocation.toolName); result != nil {
+		s.appendOriginalToolResult(invocation, *result)
+		return nil
 	}
 	keepActive := false
 	defer func() {
@@ -393,6 +398,57 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 	}
 	appendPublishedArtifactDelta(&s.pending, s.session, result.Structured["publishedArtifacts"])
 	return nil
+}
+
+func (s *llmRunStream) checkBudgetBeforeToolCall(toolName string) *ToolExecutionResult {
+	if s == nil || s.execCtx == nil {
+		return nil
+	}
+	budget := NormalizeBudget(s.execCtx.Budget)
+	if budget.Tool.MaxCalls > 0 && s.execCtx.ToolCalls > budget.Tool.MaxCalls {
+		payload := NewErrorPayload(
+			"tool_calls_exceeded",
+			"tool call budget exceeded",
+			ErrorScopeTool,
+			ErrorCategoryTool,
+			map[string]any{
+				"toolCalls":  s.execCtx.ToolCalls,
+				"limitValue": budget.Tool.MaxCalls,
+				"limitName":  "budget.tool.maxCalls",
+				"toolName":   toolName,
+			},
+		)
+		return &ToolExecutionResult{Output: MarshalJSON(payload), Structured: payload, Error: "tool_calls_exceeded", ExitCode: -1}
+	}
+	if limit := s.stageToolCallLimit(budget); limit > 0 && s.stageToolCalls > limit {
+		limitName := "budget.stages." + s.budgetStage + ".tool.maxCalls"
+		payload := NewErrorPayload(
+			"tool_calls_exceeded",
+			"stage tool call budget exceeded",
+			ErrorScopeTool,
+			ErrorCategoryTool,
+			map[string]any{
+				"toolCalls":  s.stageToolCalls,
+				"limitValue": limit,
+				"limitName":  limitName,
+				"stage":      s.budgetStage,
+				"toolName":   toolName,
+			},
+		)
+		return &ToolExecutionResult{Output: MarshalJSON(payload), Structured: payload, Error: "tool_calls_exceeded", ExitCode: -1}
+	}
+	return nil
+}
+
+func (s *llmRunStream) stageToolCallLimit(budget Budget) int {
+	stage := normalizeBudgetStageName(s.budgetStage)
+	if stageBudget, ok := budget.Stages[stage]; ok && stageBudget.Tool.MaxCalls > 0 {
+		return stageBudget.Tool.MaxCalls
+	}
+	if s.maxSteps > 0 {
+		return s.maxSteps * 2
+	}
+	return 0
 }
 
 func appendPublishedArtifactDelta(pending *[]AgentDelta, session QuerySession, raw any) {

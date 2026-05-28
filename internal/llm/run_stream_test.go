@@ -524,6 +524,66 @@ func TestResolveHITLTimeoutUsesHitlBudgetGlobalAndFallback(t *testing.T) {
 	}
 }
 
+func TestRunStreamToolBudgetChecksStageExplicitLimit(t *testing.T) {
+	stream := &llmRunStream{
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{
+				MaxSteps: 10,
+				Tool:     contracts.RetryPolicy{MaxCalls: 100},
+				Stages: map[string]contracts.StageBudget{
+					"execute": {
+						MaxSteps: 2,
+						Tool:     contracts.RetryPolicy{MaxCalls: 3},
+					},
+				},
+			},
+			ToolCalls: 4,
+		},
+		budgetStage:    "execute",
+		maxSteps:       2,
+		stageToolCalls: 4,
+	}
+
+	result := stream.checkBudgetBeforeToolCall("bash")
+	if result == nil || result.Error != "tool_calls_exceeded" {
+		t.Fatalf("expected stage tool budget error, got %#v", result)
+	}
+	diagnostics, _ := result.Structured["diagnostics"].(map[string]any)
+	if diagnostics["limitName"] != "budget.stages.execute.tool.maxCalls" {
+		t.Fatalf("limitName = %#v, want stage tool limit", diagnostics["limitName"])
+	}
+	if diagnostics["limitValue"] != 3 {
+		t.Fatalf("limitValue = %#v, want 3", diagnostics["limitValue"])
+	}
+}
+
+func TestRunStreamToolBudgetDerivesStageLimitFromMaxSteps(t *testing.T) {
+	stream := &llmRunStream{
+		execCtx: &contracts.ExecutionContext{
+			Budget: contracts.Budget{
+				MaxSteps: 10,
+				Tool:     contracts.RetryPolicy{MaxCalls: 100},
+			},
+			ToolCalls: 5,
+		},
+		budgetStage:    "react",
+		maxSteps:       2,
+		stageToolCalls: 5,
+	}
+
+	result := stream.checkBudgetBeforeToolCall("datetime")
+	if result == nil || result.Error != "tool_calls_exceeded" {
+		t.Fatalf("expected derived stage tool budget error, got %#v", result)
+	}
+	diagnostics, _ := result.Structured["diagnostics"].(map[string]any)
+	if diagnostics["limitName"] != "budget.stages.react.tool.maxCalls" {
+		t.Fatalf("limitName = %#v, want derived stage tool limit", diagnostics["limitName"])
+	}
+	if diagnostics["limitValue"] != 4 {
+		t.Fatalf("limitValue = %#v, want derived maxSteps*2 limit", diagnostics["limitValue"])
+	}
+}
+
 func TestResolveHITLTimeoutWithRuleUsesRuleOverride(t *testing.T) {
 	stream := &llmRunStream{
 		engine: &LLMAgentEngine{cfg: config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 300000}}},

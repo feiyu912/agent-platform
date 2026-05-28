@@ -47,10 +47,20 @@ func (c *Config) applyEnv() {
 
 	c.Defaults.MaxTokens = intEnv("AGENT_DEFAULT_MAX_TOKENS", c.Defaults.MaxTokens)
 	c.Defaults.Budget.RunTimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_RUN_TIMEOUT_MS", c.Defaults.Budget.RunTimeoutMs)
+	_, defaultBudgetMaxStepsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_MAX_STEPS")
+	_, legacyModelMaxCallsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_MODEL_MAX_CALLS")
+	_, defaultToolMaxCallsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS")
+	c.Defaults.Budget.MaxSteps = intEnv("AGENT_DEFAULT_BUDGET_MAX_STEPS", c.Defaults.Budget.MaxSteps)
 	c.Defaults.Budget.Model.MaxCalls = intEnv("AGENT_DEFAULT_BUDGET_MODEL_MAX_CALLS", c.Defaults.Budget.Model.MaxCalls)
+	if !defaultBudgetMaxStepsEnv && legacyModelMaxCallsEnv && c.Defaults.Budget.Model.MaxCalls > 0 {
+		c.Defaults.Budget.MaxSteps = c.Defaults.Budget.Model.MaxCalls
+	}
 	c.Defaults.Budget.Model.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_MODEL_TIMEOUT_MS", c.Defaults.Budget.Model.TimeoutMs)
 	c.Defaults.Budget.Model.RetryCount = intEnv("AGENT_DEFAULT_BUDGET_MODEL_RETRY_COUNT", c.Defaults.Budget.Model.RetryCount)
 	c.Defaults.Budget.Tool.MaxCalls = intEnv("AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS", c.Defaults.Budget.Tool.MaxCalls)
+	if (defaultBudgetMaxStepsEnv || legacyModelMaxCallsEnv) && !defaultToolMaxCallsEnv && c.Defaults.Budget.MaxSteps > 0 {
+		c.Defaults.Budget.Tool.MaxCalls = c.Defaults.Budget.MaxSteps * 2
+	}
 	c.Defaults.Budget.Tool.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS", c.Defaults.Budget.Tool.TimeoutMs)
 	c.Defaults.Budget.Tool.RetryCount = intEnv("AGENT_DEFAULT_BUDGET_TOOL_RETRY_COUNT", c.Defaults.Budget.Tool.RetryCount)
 	c.Defaults.Budget.Hitl.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS", c.Defaults.Budget.Hitl.TimeoutMs)

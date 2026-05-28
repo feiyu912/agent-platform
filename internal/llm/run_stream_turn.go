@@ -440,16 +440,16 @@ func (s *llmRunStream) checkBudgetBeforeModelCall() map[string]any {
 			},
 		)
 	}
-	if budget.Model.MaxCalls > 0 && s.execCtx.ModelCalls > budget.Model.MaxCalls {
+	if budget.MaxSteps > 0 && s.execCtx.ModelCalls >= budget.MaxSteps {
 		return NewErrorPayload(
 			"model_calls_exceeded",
-			"model call budget exceeded",
+			"model step budget exceeded",
 			ErrorScopeModel,
 			ErrorCategoryModel,
 			map[string]any{
 				"modelCalls": s.execCtx.ModelCalls,
-				"limitValue": budget.Model.MaxCalls,
-				"limitName":  "model.maxCalls",
+				"limitValue": budget.MaxSteps,
+				"limitName":  "budget.maxSteps",
 			},
 		)
 	}
@@ -462,7 +462,7 @@ func (s *llmRunStream) checkBudgetBeforeModelCall() map[string]any {
 			map[string]any{
 				"toolCalls":  s.execCtx.ToolCalls,
 				"limitValue": budget.Tool.MaxCalls,
-				"limitName":  "tool.maxCalls",
+				"limitName":  "budget.tool.maxCalls",
 			},
 		)
 	}

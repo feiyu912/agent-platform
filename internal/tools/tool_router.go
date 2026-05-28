@@ -266,7 +266,7 @@ func (r *ToolRouter) invokeWithPolicy(ctx context.Context, toolName string, exec
 					map[string]any{
 						"toolCalls":  execCtx.ToolCalls,
 						"limitValue": budget.Tool.MaxCalls,
-						"limitName":  "tool.maxCalls",
+						"limitName":  "budget.tool.maxCalls",
 						"toolName":   toolName,
 					},
 				)),
@@ -278,7 +278,7 @@ func (r *ToolRouter) invokeWithPolicy(ctx context.Context, toolName string, exec
 					map[string]any{
 						"toolCalls":  execCtx.ToolCalls,
 						"limitValue": budget.Tool.MaxCalls,
-						"limitName":  "tool.maxCalls",
+						"limitName":  "budget.tool.maxCalls",
 						"toolName":   toolName,
 					},
 				),

@@ -61,6 +61,15 @@ func TestLoadDefaults(t *testing.T) {
 		if cfg.Defaults.Budget.Hitl.TimeoutMs != 0 {
 			t.Fatalf("expected default HITL budget timeout 0, got %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
 		}
+		if cfg.Defaults.Budget.Model.MaxCalls != 100 {
+			t.Fatalf("expected default model max calls 100, got %d", cfg.Defaults.Budget.Model.MaxCalls)
+		}
+		if cfg.Defaults.Budget.MaxSteps != 100 {
+			t.Fatalf("expected default budget max steps 100, got %d", cfg.Defaults.Budget.MaxSteps)
+		}
+		if cfg.Defaults.Budget.Tool.MaxCalls != 60 {
+			t.Fatalf("expected default tool max calls 60, got %d", cfg.Defaults.Budget.Tool.MaxCalls)
+		}
 		if !cfg.Memory.Enabled {
 			t.Fatalf("expected memory runtime enabled by default")
 		}
@@ -69,6 +78,23 @@ func TestLoadDefaults(t *testing.T) {
 		}
 		if cfg.Desktop.CDP.BridgeURL != "http://127.0.0.1:11788/cdp/call" {
 			t.Fatalf("unexpected default desktop cdp bridge url: %q", cfg.Desktop.CDP.BridgeURL)
+		}
+	})
+}
+
+func TestLoadEnvBudgetMaxStepsDerivesToolMaxCalls(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"AGENT_DEFAULT_BUDGET_MAX_STEPS": "17",
+	}, func() {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if cfg.Defaults.Budget.MaxSteps != 17 {
+			t.Fatalf("expected env max steps 17, got %d", cfg.Defaults.Budget.MaxSteps)
+		}
+		if cfg.Defaults.Budget.Tool.MaxCalls != 34 {
+			t.Fatalf("expected derived tool max calls 34, got %d", cfg.Defaults.Budget.Tool.MaxCalls)
 		}
 	})
 }
@@ -1868,6 +1894,7 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_MEMORY_DUAL_WRITE_MARKDOWN",
 		"AGENT_DEFAULT_MAX_TOKENS",
 		"AGENT_DEFAULT_BUDGET_RUN_TIMEOUT_MS",
+		"AGENT_DEFAULT_BUDGET_MAX_STEPS",
 		"AGENT_DEFAULT_BUDGET_MODEL_MAX_CALLS",
 		"AGENT_DEFAULT_BUDGET_MODEL_TIMEOUT_MS",
 		"AGENT_DEFAULT_BUDGET_MODEL_RETRY_COUNT",

@@ -32,11 +32,13 @@ type llmRunStream struct {
 	stageSettings      StageSettings
 	execCtx            *ExecutionContext
 	maxSteps           int
+	budgetStage        string
 	toolChoice         string
 	postToolHook       func(string, string) PostToolHookResult
 	checker            hitl.Checker
 
 	step               int
+	stageToolCalls     int
 	pending            []AgentDelta
 	currentTurn        *providerTurnStream
 	lastTrace          *llmChatTrace

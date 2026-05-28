@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"strings"
 	"time"
 
 	"agent-platform/internal/config"
@@ -16,16 +17,24 @@ type HitlPolicy struct {
 	TimeoutMs int `json:"timeoutMs,omitempty"`
 }
 
+type StageBudget struct {
+	MaxSteps int         `json:"maxSteps,omitempty"`
+	Tool     RetryPolicy `json:"tool,omitempty"`
+}
+
 type Budget struct {
-	RunTimeoutMs int         `json:"runTimeoutMs,omitempty"`
-	Model        RetryPolicy `json:"model,omitempty"`
-	Tool         RetryPolicy `json:"tool,omitempty"`
-	Hitl         HitlPolicy  `json:"hitl,omitempty"`
+	RunTimeoutMs int                    `json:"runTimeoutMs,omitempty"`
+	MaxSteps     int                    `json:"maxSteps,omitempty"`
+	Model        RetryPolicy            `json:"model,omitempty"`
+	Tool         RetryPolicy            `json:"tool,omitempty"`
+	Hitl         HitlPolicy             `json:"hitl,omitempty"`
+	Stages       map[string]StageBudget `json:"stages,omitempty"`
 }
 
 func DefaultBudget(cfg config.Config) Budget {
 	return Budget{
 		RunTimeoutMs: cfg.Defaults.Budget.RunTimeoutMs,
+		MaxSteps:     cfg.Defaults.Budget.MaxSteps,
 		Model: RetryPolicy{
 			MaxCalls:   cfg.Defaults.Budget.Model.MaxCalls,
 			TimeoutMs:  cfg.Defaults.Budget.Model.TimeoutMs,
@@ -47,13 +56,26 @@ func ResolveBudget(cfg config.Config, overrides map[string]any) Budget {
 	if len(overrides) == 0 {
 		return budget
 	}
+	rootStepsOverridden := false
+	rootToolExplicit := false
 	if value := anyIntNode(overrides["runTimeoutMs"]); value > 0 {
 		budget.RunTimeoutMs = value
 	}
+	if value := anyIntNode(overrides["maxSteps"]); value > 0 {
+		budget.MaxSteps = value
+		rootStepsOverridden = true
+	}
 	if model := anyMapNode(overrides["model"]); len(model) > 0 {
+		if value := anyIntNode(model["maxCalls"]); value > 0 && !rootStepsOverridden {
+			budget.MaxSteps = value
+			rootStepsOverridden = true
+		}
 		budget.Model = mergeRetryPolicy(budget.Model, model)
 	}
 	if tool := anyMapNode(overrides["tool"]); len(tool) > 0 {
+		if anyIntNode(tool["maxCalls"]) > 0 {
+			rootToolExplicit = true
+		}
 		budget.Tool = mergeRetryPolicy(budget.Tool, tool)
 	}
 	if hitl := anyMapNode(overrides["hitl"]); len(hitl) > 0 {
@@ -61,16 +83,57 @@ func ResolveBudget(cfg config.Config, overrides map[string]any) Budget {
 			budget.Hitl.TimeoutMs = value
 		}
 	}
+	if stages := anyMapNode(overrides["stages"]); len(stages) > 0 {
+		budget.Stages = mergeStageBudgets(budget.Stages, stages)
+	}
+	if rootStepsOverridden && !rootToolExplicit && budget.MaxSteps > 0 {
+		budget.Tool.MaxCalls = budget.MaxSteps * 2
+	}
 	return NormalizeBudget(budget)
 }
 
 func normalizeBudget(b Budget) Budget {
+	hadStepOverride := b.MaxSteps > 0 || b.Model.MaxCalls > 0
 	if b.RunTimeoutMs <= 0 {
 		b.RunTimeoutMs = 300000
 	}
-	b.Model = normalizeRetryPolicy(b.Model, RetryPolicy{MaxCalls: 30, TimeoutMs: 120000, RetryCount: 0})
-	b.Tool = normalizeRetryPolicy(b.Tool, RetryPolicy{MaxCalls: 50, TimeoutMs: 300000, RetryCount: 0})
+	if b.MaxSteps <= 0 {
+		b.MaxSteps = b.Model.MaxCalls
+	}
+	if b.MaxSteps <= 0 {
+		b.MaxSteps = 100
+	}
+	b.Model = normalizeRetryPolicy(b.Model, RetryPolicy{MaxCalls: b.MaxSteps, TimeoutMs: 120000, RetryCount: 0})
+	b.Model.MaxCalls = b.MaxSteps
+	toolFallbackMaxCalls := 60
+	if hadStepOverride {
+		toolFallbackMaxCalls = b.MaxSteps * 2
+	}
+	b.Tool = normalizeRetryPolicy(b.Tool, RetryPolicy{MaxCalls: toolFallbackMaxCalls, TimeoutMs: 300000, RetryCount: 0})
+	if b.Stages != nil {
+		normalizedStages := map[string]StageBudget{}
+		for key, stage := range b.Stages {
+			stage = normalizeStageBudget(stage)
+			if stage.MaxSteps > 0 || stage.Tool.MaxCalls > 0 || stage.Tool.TimeoutMs > 0 || stage.Tool.RetryCount > 0 {
+				normalizedStages[normalizeStageBudgetKey(key)] = stage
+			}
+		}
+		b.Stages = normalizedStages
+		if len(normalizedStages) == 0 {
+			b.Stages = nil
+		}
+	}
 	return b
+}
+
+func normalizeStageBudget(stage StageBudget) StageBudget {
+	if stage.MaxSteps > 0 && stage.Tool.MaxCalls <= 0 {
+		stage.Tool.MaxCalls = stage.MaxSteps * 2
+	}
+	if stage.Tool.RetryCount < 0 {
+		stage.Tool.RetryCount = 0
+	}
+	return stage
 }
 
 func normalizeRetryPolicy(policy RetryPolicy, fallback RetryPolicy) RetryPolicy {
@@ -98,6 +161,47 @@ func mergeRetryPolicy(base RetryPolicy, overrides map[string]any) RetryPolicy {
 		policy.RetryCount = maxInt(value, 0)
 	}
 	return policy
+}
+
+func mergeStageBudgets(base map[string]StageBudget, overrides map[string]any) map[string]StageBudget {
+	out := cloneStageBudgets(base)
+	if out == nil {
+		out = map[string]StageBudget{}
+	}
+	for rawKey, rawValue := range overrides {
+		key := normalizeStageBudgetKey(rawKey)
+		if key == "" {
+			continue
+		}
+		raw := anyMapNode(rawValue)
+		if len(raw) == 0 {
+			continue
+		}
+		stage := out[key]
+		if value := anyIntNode(raw["maxSteps"]); value > 0 {
+			stage.MaxSteps = value
+		}
+		if tool := anyMapNode(raw["tool"]); len(tool) > 0 {
+			stage.Tool = mergeRetryPolicy(stage.Tool, tool)
+		}
+		out[key] = stage
+	}
+	return out
+}
+
+func cloneStageBudgets(values map[string]StageBudget) map[string]StageBudget {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]StageBudget, len(values))
+	for key, value := range values {
+		out[normalizeStageBudgetKey(key)] = value
+	}
+	return out
+}
+
+func normalizeStageBudgetKey(key string) string {
+	return strings.ToLower(strings.TrimSpace(key))
 }
 
 func readOptionalInt(value any) (int, bool) {

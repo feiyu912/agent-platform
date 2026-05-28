@@ -78,6 +78,7 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	}
 	protocolConfig := resolveProtocolRuntimeConfig(provider, model)
 	stageSettings := stageSettingsForName(session.ResolvedStageSettings, options.Stage)
+	budgetStage := budgetStageForName(session, options.Stage)
 	allowedTools := session.ToolNames
 	if options.ToolNames != nil {
 		allowedTools = options.ToolNames
@@ -113,7 +114,7 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	if execCtx.RunControl == nil {
 		execCtx.RunControl = RunControlFromContext(ctx)
 	}
-	if execCtx.Budget.RunTimeoutMs <= 0 {
+	if execCtx.Budget.RunTimeoutMs <= 0 || execCtx.Budget.MaxSteps <= 0 {
 		execCtx.Budget = NormalizeBudget(session.ResolvedBudget)
 	}
 	if execCtx.StartedAt.IsZero() {
@@ -156,8 +157,10 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 		messages = replaceSystemMessage(messages, cachedSystem)
 	}
 	maxSteps := options.MaxSteps
-	if maxSteps <= 0 {
-		maxSteps = e.resolveMaxSteps(session)
+	if stageMaxSteps := budgetStageMaxSteps(session.ResolvedBudget, budgetStage); stageMaxSteps > 0 {
+		maxSteps = stageMaxSteps
+	} else if maxSteps <= 0 {
+		maxSteps = e.resolveMaxSteps(session, budgetStage)
 	}
 
 	toolChoice := strings.TrimSpace(strings.ToLower(options.ToolChoice))
@@ -187,6 +190,7 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 		stageSettings:      stageSettings,
 		execCtx:            execCtx,
 		maxSteps:           maxSteps,
+		budgetStage:        budgetStage,
 		toolChoice:         toolChoice,
 		postToolHook:       options.PostToolHook,
 		allowToolUse:       allowToolUse,
@@ -222,23 +226,76 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	return stream, nil
 }
 
-func (e *LLMAgentEngine) resolveMaxSteps(session QuerySession) int {
-	if session.ReactMaxSteps > 0 {
+func (e *LLMAgentEngine) resolveMaxSteps(session QuerySession, budgetStage string) int {
+	if budgetStageMaxSteps(session.ResolvedBudget, budgetStage) > 0 {
+		return budgetStageMaxSteps(session.ResolvedBudget, budgetStage)
+	}
+	if !sessionHasRootStepBudget(session) && session.ReactMaxSteps > 0 {
 		return session.ReactMaxSteps
 	}
-	maxSteps := e.cfg.Defaults.React.MaxSteps
+	maxSteps := NormalizeBudget(session.ResolvedBudget).MaxSteps
 	if maxSteps <= 0 {
-		return 60
+		maxSteps = e.cfg.Defaults.React.MaxSteps
+	}
+	if maxSteps <= 0 {
+		return 100
 	}
 	return maxSteps
 }
 
+func budgetStageMaxSteps(budget Budget, stage string) int {
+	budget = NormalizeBudget(budget)
+	if stageBudget, ok := budget.Stages[normalizeBudgetStageName(stage)]; ok && stageBudget.MaxSteps > 0 {
+		return stageBudget.MaxSteps
+	}
+	return 0
+}
+
+func budgetStageForName(session QuerySession, stage string) string {
+	normalized := normalizeBudgetStageName(stage)
+	if strings.Contains(normalized, "summary") {
+		return "summary"
+	}
+	if strings.Contains(normalized, "plan") {
+		return "plan"
+	}
+	if strings.Contains(normalized, "execute") || normalized == "coder" {
+		return "execute"
+	}
+	if normalized == "" {
+		normalized = strings.ToLower(strings.TrimSpace(session.Mode))
+	}
+	switch normalized {
+	case "coder":
+		return "execute"
+	case "react", "oneshot", "":
+		return "react"
+	default:
+		return normalized
+	}
+}
+
+func normalizeBudgetStageName(stage string) string {
+	return strings.ToLower(strings.TrimSpace(stage))
+}
+
+func sessionHasRootStepBudget(session QuerySession) bool {
+	if AnyIntNode(session.Budget["maxSteps"]) > 0 {
+		return true
+	}
+	if model := AnyMapNode(session.Budget["model"]); AnyIntNode(model["maxCalls"]) > 0 {
+		return true
+	}
+	return false
+}
+
 func stageSettingsForName(settings PlanExecuteSettings, stage string) StageSettings {
-	switch strings.ToLower(strings.TrimSpace(stage)) {
-	case "plan":
-		return settings.Plan
-	case "summary":
+	normalized := strings.ToLower(strings.TrimSpace(stage))
+	switch {
+	case strings.Contains(normalized, "summary"):
 		return settings.Summary
+	case strings.Contains(normalized, "plan"):
+		return settings.Plan
 	default:
 		return settings.Execute
 	}
