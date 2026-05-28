@@ -235,6 +235,27 @@ write_program_manifest() {
       "required": false
     },
     {
+      "key": "channels",
+      "label": "configs/channels.yml",
+      "relativePath": "configs/channels.yml",
+      "templateRelativePath": "configs/channels.example.yml",
+      "required": false
+    },
+    {
+      "key": "coder-settings",
+      "label": "configs/coder-settings.yml",
+      "relativePath": "configs/coder-settings.yml",
+      "templateRelativePath": "configs/coder-settings.example.yml",
+      "required": false
+    },
+    {
+      "key": "local-public-key",
+      "label": "configs/local-public-key.pem",
+      "relativePath": "configs/local-public-key.pem",
+      "templateRelativePath": "configs/local-public-key.example.pem",
+      "required": false
+    },
+    {
       "key": "prompts",
       "label": "configs/prompts.yml",
       "relativePath": "configs/prompts.yml",
