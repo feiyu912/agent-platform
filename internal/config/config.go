@@ -20,6 +20,7 @@ type Config struct {
 	Providers       CatalogConfig
 	Models          CatalogConfig
 	Automation      AutomationConfig
+	Billing         BillingConfig
 	Memory          MemoryConfig
 	Defaults        DefaultsConfig
 	Stream          StreamConfig
@@ -150,6 +151,10 @@ type AutomationConfig struct {
 	Enabled       bool
 	DefaultZoneID string
 	PoolSize      int
+}
+
+type BillingConfig struct {
+	Currency string
 }
 
 type MemoryConfig struct {

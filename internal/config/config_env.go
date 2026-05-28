@@ -34,6 +34,8 @@ func (c *Config) applyEnv() {
 	c.Automation.DefaultZoneID = stringEnv("AGENT_AUTOMATION_DEFAULT_ZONE_ID", c.Automation.DefaultZoneID)
 	c.Automation.PoolSize = intEnv("AGENT_AUTOMATION_POOL_SIZE", c.Automation.PoolSize)
 
+	c.Billing.Currency = strings.ToUpper(stringEnv("BILLING_CURRENCY", c.Billing.Currency))
+
 	c.Memory.DBFileName = stringEnv("AGENT_MEMORY_DB_FILE_NAME", c.Memory.DBFileName)
 	c.Memory.ContextTopN = intEnv("AGENT_MEMORY_CONTEXT_TOP_N", c.Memory.ContextTopN)
 	c.Memory.ContextMaxChars = intEnv("AGENT_MEMORY_CONTEXT_MAX_CHARS", c.Memory.ContextMaxChars)

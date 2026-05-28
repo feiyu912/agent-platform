@@ -1,6 +1,8 @@
 package server
 
 import (
+	"strings"
+
 	"agent-platform/internal/api"
 	"agent-platform/internal/chat"
 	"agent-platform/internal/contracts"
@@ -30,6 +32,15 @@ func mapUsageData(usage chat.UsageData) api.ChatUsageData {
 	}
 	if usage.ReasoningTokens > 0 {
 		out.CompletionTokensDetails = &api.CompletionTokenDetails{ReasoningTokens: usage.ReasoningTokens}
+	}
+	if strings.TrimSpace(usage.EstimatedCostCurrency) != "" {
+		out.EstimatedCost = &api.EstimatedCost{
+			Currency:       usage.EstimatedCostCurrency,
+			InputCacheHit:  usage.EstimatedCostInputHit,
+			InputCacheMiss: usage.EstimatedCostInputMiss,
+			Output:         usage.EstimatedCostOutput,
+			Total:          usage.EstimatedCostTotal,
+		}
 	}
 	return out
 }
@@ -101,10 +112,31 @@ func mapUsageDataFromPayload(usage map[string]any) *api.ChatUsageData {
 			out.CompletionTokensDetails = &api.CompletionTokenDetails{ReasoningTokens: reasoningTokens}
 		}
 	}
+	if estimatedCost := apiEstimatedCostFromMap(usage); estimatedCost != nil {
+		out.EstimatedCost = estimatedCost
+	}
 	if out.TotalTokens == 0 && out.LlmChatCompletionCount == 0 {
 		return nil
 	}
 	return &out
+}
+
+func apiEstimatedCostFromMap(usage map[string]any) *api.EstimatedCost {
+	estimatedCost, _ := usage["estimatedCost"].(map[string]any)
+	if estimatedCost == nil {
+		return nil
+	}
+	currency := strings.TrimSpace(contracts.AnyStringNode(estimatedCost["currency"]))
+	if currency == "" {
+		return nil
+	}
+	return &api.EstimatedCost{
+		Currency:       currency,
+		InputCacheHit:  floatValue(estimatedCost["inputCacheHit"]),
+		InputCacheMiss: floatValue(estimatedCost["inputCacheMiss"]),
+		Output:         floatValue(estimatedCost["output"]),
+		Total:          floatValue(estimatedCost["total"]),
+	}
 }
 
 func usageCacheTokens(usage chat.UsageData) (int, int) {

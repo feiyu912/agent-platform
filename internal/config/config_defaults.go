@@ -52,6 +52,9 @@ func defaultConfig() Config {
 			Enabled:     true,
 			PoolSize:    4,
 		},
+		Billing: BillingConfig{
+			Currency: "CNY",
+		},
 		Memory: MemoryConfig{
 			Enabled:            true,
 			DBFileName:         "memory.db",

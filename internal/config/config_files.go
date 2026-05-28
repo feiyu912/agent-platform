@@ -115,6 +115,13 @@ func (c *Config) applyRuntimeFile(path string) {
 	if cors, ok := values["cors"].(map[string]any); ok && len(cors) > 0 {
 		c.applyCORSValues(cors)
 	}
+	if billing, ok := values["billing"].(map[string]any); ok && len(billing) > 0 {
+		c.applyBillingValues(billing)
+	}
+}
+
+func (c *Config) applyBillingValues(values map[string]any) {
+	c.Billing.Currency = strings.ToUpper(stringValue(anyValue(values["currency"], c.Billing.Currency), c.Billing.Currency))
 }
 
 func (c *Config) applyAccessPolicyFile(path string) error {

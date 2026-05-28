@@ -573,6 +573,7 @@ type ChatUsageData struct {
 	TotalTokens             int                     `json:"totalTokens"`
 	PromptTokensDetails     *PromptTokenDetails     `json:"promptTokensDetails,omitempty"`
 	CompletionTokensDetails *CompletionTokenDetails `json:"completionTokensDetails,omitempty"`
+	EstimatedCost           *EstimatedCost          `json:"estimatedCost,omitempty"`
 	LlmChatCompletionCount  int                     `json:"llmChatCompletionCount,omitempty"`
 }
 
@@ -588,6 +589,14 @@ type PromptTokenDetails struct {
 
 type CompletionTokenDetails struct {
 	ReasoningTokens int `json:"reasoningTokens,omitempty"`
+}
+
+type EstimatedCost struct {
+	Currency       string  `json:"currency"`
+	InputCacheHit  float64 `json:"inputCacheHit"`
+	InputCacheMiss float64 `json:"inputCacheMiss"`
+	Output         float64 `json:"output"`
+	Total          float64 `json:"total"`
 }
 
 type MarkChatReadRequest struct {

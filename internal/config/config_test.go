@@ -31,6 +31,9 @@ func TestLoadDefaults(t *testing.T) {
 		if cfg.ResourceTicket.Enabled() {
 			t.Fatalf("expected resource ticket disabled by default")
 		}
+		if cfg.Billing.Currency != "CNY" {
+			t.Fatalf("expected default billing currency CNY, got %q", cfg.Billing.Currency)
+		}
 		if !cfg.Stream.IncludeToolPayloadEvents {
 			t.Fatalf("expected stream tool payload events enabled by default")
 		}
@@ -156,7 +159,9 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 			"  allowed-headers: [X-Runtime]\n" +
 			"  exposed-headers: [X-Expose]\n" +
 			"  allow-credentials: true\n" +
-			"  max-age-seconds: 99\n"
+			"  max-age-seconds: 99\n" +
+			"billing:\n" +
+			"  currency: USD\n"
 		withProjectFileContents(t, filepath.Join("configs", "container-hub.yml"), nil, func() {
 			withProjectFileContents(t, filepath.Join("configs", "desktop.yml"), nil, func() {
 				withProjectFileContents(t, filepath.Join("configs", "cors.yml"), nil, func() {
@@ -182,6 +187,9 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 						}
 						if strings.Join(cfg.CORS.AllowedOriginPatterns, ",") != "http://runtime.local" || strings.Join(cfg.CORS.AllowedMethods, ",") != "GET,POST" || strings.Join(cfg.CORS.AllowedHeaders, ",") != "X-Runtime" || strings.Join(cfg.CORS.ExposedHeaders, ",") != "X-Expose" {
 							t.Fatalf("unexpected cors list config: %#v", cfg.CORS)
+						}
+						if cfg.Billing.Currency != "USD" {
+							t.Fatalf("unexpected billing currency: %#v", cfg.Billing)
 						}
 					})
 				})

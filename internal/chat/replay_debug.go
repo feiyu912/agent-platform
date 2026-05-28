@@ -183,6 +183,9 @@ func usagePayloadFromMap(usage map[string]any, includeLLMChatCompletionCount boo
 			out["llmChatCompletionCount"] = count
 		}
 	}
+	if estimatedCost, ok := usage["estimatedCost"].(map[string]any); ok && len(estimatedCost) > 0 {
+		out["estimatedCost"] = cloneStringAnyMap(estimatedCost)
+	}
 	return out
 }
 

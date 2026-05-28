@@ -1,10 +1,15 @@
 package server
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
 	. "agent-platform/internal/contracts"
+	"agent-platform/internal/models"
 	"agent-platform/internal/stream"
 )
 
@@ -203,4 +208,93 @@ func TestRunEventProcessorDecoratesUsageSnapshotWithChatUsage(t *testing.T) {
 	if AnyIntNode(chatUsage["llmChatCompletionCount"]) != 5 {
 		t.Fatalf("unexpected chat llm completion count %#v", usage)
 	}
+}
+
+func TestRunEventProcessorDecoratesUsageSnapshotWithEstimatedCost(t *testing.T) {
+	runUsage := chat.UsageData{}
+	processor := &runEventProcessor{
+		billing:  config.BillingConfig{Currency: "CNY"},
+		models:   writeUsageCostRegistry(t),
+		runUsage: &runUsage,
+	}
+	data := &stream.EventData{
+		Type: "usage.snapshot",
+		Payload: map[string]any{
+			"model": map[string]any{"key": "mock-model"},
+			"usage": map[string]any{
+				"current": map[string]any{
+					"promptTokens":     1_000_000,
+					"completionTokens": 1_000_000,
+					"totalTokens":      2_000_000,
+					"promptTokensDetails": map[string]any{
+						"cacheHitTokens":  200_000,
+						"cacheMissTokens": 800_000,
+					},
+				},
+				"run": map[string]any{
+					"promptTokens":     1_000_000,
+					"completionTokens": 1_000_000,
+					"totalTokens":      2_000_000,
+				},
+			},
+		},
+	}
+
+	processor.decorate(data)
+
+	usage, _ := data.Payload["usage"].(map[string]any)
+	current, _ := usage["current"].(map[string]any)
+	currentCost, _ := current["estimatedCost"].(map[string]any)
+	if currentCost["currency"] != "CNY" || floatValue(currentCost["inputCacheHit"]) != 0.005 ||
+		floatValue(currentCost["inputCacheMiss"]) != 2.4 || floatValue(currentCost["output"]) != 6 ||
+		floatValue(currentCost["total"]) != 8.405 {
+		t.Fatalf("unexpected current estimated cost %#v", currentCost)
+	}
+	run, _ := usage["run"].(map[string]any)
+	runCost, _ := run["estimatedCost"].(map[string]any)
+	if runCost["currency"] != "CNY" || floatValue(runCost["inputCacheHit"]) != 0 ||
+		floatValue(runCost["inputCacheMiss"]) != 3 || floatValue(runCost["output"]) != 6 ||
+		floatValue(runCost["total"]) != 9 {
+		t.Fatalf("expected run prompt tokens without cache fields to bill as miss, got %#v", runCost)
+	}
+	if runUsage.EstimatedCostCurrency != "CNY" || runUsage.EstimatedCostTotal != 9 {
+		t.Fatalf("expected run usage cost to be captured, got %#v", runUsage)
+	}
+}
+
+func writeUsageCostRegistry(t *testing.T) *models.ModelRegistry {
+	t.Helper()
+	root := t.TempDir()
+	for _, dir := range []string{filepath.Join(root, "providers"), filepath.Join(root, "models")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir registry dir: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "providers", "mock.yml"), []byte(strings.Join([]string{
+		"key: mock",
+		"baseUrl: https://example.com",
+		"apiKey: test",
+		"defaultModel: mock-model",
+	}, "\n")), 0o644); err != nil {
+		t.Fatalf("write provider: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "models", "mock.yml"), []byte(strings.Join([]string{
+		"key: mock-model",
+		"provider: mock",
+		"protocol: OPENAI",
+		"modelId: mock-model-id",
+		"pricing:",
+		"  currency: CNY",
+		"  unit: per_1m_tokens",
+		"  inputCacheHit: 0.025",
+		"  inputCacheMiss: 3.00",
+		"  output: 6.00",
+	}, "\n")), 0o644); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	registry, err := models.LoadModelRegistry(root)
+	if err != nil {
+		t.Fatalf("load registry: %v", err)
+	}
+	return registry
 }

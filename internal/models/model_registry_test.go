@@ -145,6 +145,34 @@ func TestLoadModelRegistryParsesModelVisionFalse(t *testing.T) {
 	}
 }
 
+func TestLoadModelRegistryParsesModelPricing(t *testing.T) {
+	root := t.TempDir()
+	writeTestProviderAndModel(t, root, "apiKey: plain-text",
+		"pricing:",
+		"  currency: CNY",
+		"  unit: per_1m_tokens",
+		"  inputCacheHit: 0.025",
+		"  inputCacheMiss: 3.00",
+		"  output: 6.00",
+	)
+
+	registry, err := LoadModelRegistry(root)
+	if err != nil {
+		t.Fatalf("LoadModelRegistry returned error: %v", err)
+	}
+
+	model, _, err := registry.Get("mock-model")
+	if err != nil {
+		t.Fatalf("registry.Get returned error: %v", err)
+	}
+	if model.Pricing.Currency != "CNY" || model.Pricing.Unit != "per_1m_tokens" {
+		t.Fatalf("unexpected model pricing metadata: %#v", model.Pricing)
+	}
+	if model.Pricing.InputCacheHit != 0.025 || model.Pricing.InputCacheMiss != 3 || model.Pricing.Output != 6 {
+		t.Fatalf("unexpected model pricing values: %#v", model.Pricing)
+	}
+}
+
 func TestProviderlessModelCanBeListedAndReadWithoutProvider(t *testing.T) {
 	root := t.TempDir()
 	writeTestProviderAndModel(t, root, "apiKey: plain-text")

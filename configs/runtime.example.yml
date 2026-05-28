@@ -56,3 +56,6 @@ cors:
     - Content-Type
   allow-credentials: false
   max-age-seconds: 3600
+
+billing:
+  currency: CNY

@@ -50,8 +50,17 @@ type ModelDefinition struct {
 	IsReasoner    bool
 	IsVision      bool
 	ContextWindow int
+	Pricing       ModelPricing
 	Headers       map[string]string
 	Compat        map[string]any
+}
+
+type ModelPricing struct {
+	Currency       string
+	Unit           string
+	InputCacheHit  float64
+	InputCacheMiss float64
+	Output         float64
 }
 
 type ModelRegistry struct {
@@ -467,11 +476,26 @@ func loadModels(dir string) (map[string]ModelDefinition, error) {
 			IsReasoner:    parseTruthy(stringNode(values["isReasoner"])),
 			IsVision:      parseTruthyDefault(values["isVision"], false),
 			ContextWindow: contracts.AnyIntNode(values["contextWindow"]),
+			Pricing:       loadModelPricing(values["pricing"]),
 			Headers:       stringMapNode(values["headers"]),
 			Compat:        contracts.CloneAnyMap(contracts.AnyMapNode(values["compat"])),
 		}
 	}
 	return result, nil
+}
+
+func loadModelPricing(raw any) ModelPricing {
+	values := contracts.AnyMapNode(raw)
+	if len(values) == 0 {
+		return ModelPricing{}
+	}
+	return ModelPricing{
+		Currency:       strings.ToUpper(strings.TrimSpace(stringNode(values["currency"]))),
+		Unit:           strings.TrimSpace(stringNode(values["unit"])),
+		InputCacheHit:  floatNode(values["inputCacheHit"]),
+		InputCacheMiss: floatNode(values["inputCacheMiss"]),
+		Output:         floatNode(values["output"]),
+	}
 }
 
 func stringMapNode(value any) map[string]string {
@@ -519,6 +543,22 @@ func intNode(value any) int {
 		return int(v)
 	case string:
 		n, _ := strconv.Atoi(strings.TrimSpace(v))
+		return n
+	default:
+		return 0
+	}
+}
+
+func floatNode(value any) float64 {
+	switch v := value.(type) {
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case float64:
+		return v
+	case string:
+		n, _ := strconv.ParseFloat(strings.TrimSpace(v), 64)
 		return n
 	default:
 		return 0

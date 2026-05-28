@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"agent-platform/internal/chat"
 	"agent-platform/internal/config"
 	"agent-platform/internal/contracts"
+	"agent-platform/internal/models"
 	"agent-platform/internal/stream"
 )
 
@@ -24,9 +27,11 @@ type RunExecutorParams struct {
 	Assembler          *stream.StreamEventAssembler
 	Mapper             contracts.StreamDeltaMapper
 	Stream             config.StreamConfig
+	Billing            config.BillingConfig
 	StepWriter         *chat.StepWriter
 	EventBus           *stream.RunEventBus
 	Chats              chat.Store
+	Models             *models.ModelRegistry
 	RunControl         *contracts.RunControl
 	ResourceBaseURL    string
 	ResourceTickets    *ResourceTicketService
@@ -43,6 +48,8 @@ type runEventProcessor struct {
 	assistantText *strings.Builder
 	stepWriter    *chat.StepWriter
 	stream        config.StreamConfig
+	billing       config.BillingConfig
+	models        *models.ModelRegistry
 	chatUsage     chat.UsageData
 	runUsage      *chat.UsageData
 }
@@ -100,6 +107,7 @@ func (p *runEventProcessor) decorate(data *stream.EventData) {
 		if !ok {
 			return
 		}
+		p.decorateUsageCost(data)
 		if p.runUsage != nil {
 			if run, ok := usage["run"].(map[string]any); ok {
 				applyUsageMapToData(p.runUsage, run)
@@ -122,6 +130,44 @@ func (p *runEventProcessor) decorate(data *stream.EventData) {
 	}
 }
 
+func (p *runEventProcessor) decorateUsageCost(data *stream.EventData) {
+	if p == nil || data == nil || p.models == nil {
+		return
+	}
+	usage, _ := data.Payload["usage"].(map[string]any)
+	if usage == nil {
+		return
+	}
+	pricing, ok := p.modelPricingFromEvent(data)
+	if !ok {
+		return
+	}
+	for _, key := range []string{"current", "run"} {
+		node, _ := usage[key].(map[string]any)
+		if node == nil {
+			continue
+		}
+		usageData := usageDataFromMap(node)
+		usageData = estimateUsageCost(usageData, pricing, p.billing)
+		if estimated := usageEstimatedCostFromData(usageData); estimated != nil {
+			node["estimatedCost"] = estimated
+		}
+	}
+}
+
+func (p *runEventProcessor) modelPricingFromEvent(data *stream.EventData) (models.ModelPricing, bool) {
+	modelNode, _ := data.Payload["model"].(map[string]any)
+	modelKey := strings.TrimSpace(contracts.AnyStringNode(modelNode["key"]))
+	if modelKey == "" {
+		return models.ModelPricing{}, false
+	}
+	model, err := p.models.GetModel(modelKey)
+	if err != nil || !modelPricingEnabled(model.Pricing) {
+		return models.ModelPricing{}, false
+	}
+	return model.Pricing, true
+}
+
 func (p *runEventProcessor) decorateTerminalUsage(data *stream.EventData) {
 	if data == nil || data.Payload == nil {
 		return
@@ -141,15 +187,55 @@ func applyUsageMapToData(target *chat.UsageData, usage map[string]any) {
 	if target == nil || usage == nil {
 		return
 	}
-	target.PromptTokens = contracts.AnyIntNode(usage["promptTokens"])
-	target.CompletionTokens = contracts.AnyIntNode(usage["completionTokens"])
-	target.TotalTokens = contracts.AnyIntNode(usage["totalTokens"])
+	*target = usageDataFromMap(usage)
+}
+
+func usageDataFromMap(usage map[string]any) chat.UsageData {
+	out := chat.UsageData{
+		PromptTokens:           contracts.AnyIntNode(usage["promptTokens"]),
+		CompletionTokens:       contracts.AnyIntNode(usage["completionTokens"]),
+		TotalTokens:            contracts.AnyIntNode(usage["totalTokens"]),
+		ReasoningTokens:        usageDetailInt(usage, "completionTokensDetails", "reasoningTokens"),
+		LlmChatCompletionCount: contracts.AnyIntNode(usage["llmChatCompletionCount"]),
+	}
 	cacheHitTokens, cacheMissTokens := usageCacheTokensFromMap(usage)
-	target.CachedTokens = cacheHitTokens
-	target.ReasoningTokens = usageDetailInt(usage, "completionTokensDetails", "reasoningTokens")
-	target.PromptCacheHitTokens = cacheHitTokens
-	target.PromptCacheMissTokens = cacheMissTokens
-	target.LlmChatCompletionCount = contracts.AnyIntNode(usage["llmChatCompletionCount"])
+	out.CachedTokens = cacheHitTokens
+	out.PromptCacheHitTokens = cacheHitTokens
+	out.PromptCacheMissTokens = cacheMissTokens
+	if estimatedCost := estimatedCostFromMap(usage); estimatedCost != nil {
+		out.EstimatedCostCurrency = strings.ToUpper(strings.TrimSpace(contracts.AnyStringNode(estimatedCost["currency"])))
+		out.EstimatedCostInputHit = floatValue(estimatedCost["inputCacheHit"])
+		out.EstimatedCostInputMiss = floatValue(estimatedCost["inputCacheMiss"])
+		out.EstimatedCostOutput = floatValue(estimatedCost["output"])
+		out.EstimatedCostTotal = floatValue(estimatedCost["total"])
+	}
+	return out
+}
+
+func estimatedCostFromMap(usage map[string]any) map[string]any {
+	estimatedCost, _ := usage["estimatedCost"].(map[string]any)
+	return estimatedCost
+}
+
+func floatValue(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		n, _ := v.Float64()
+		return n
+	case string:
+		n, _ := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		return n
+	default:
+		return 0
+	}
 }
 
 func applyTerminalEventUsage(target *chat.UsageData, event stream.EventData) {
@@ -181,6 +267,11 @@ func addUsageData(base chat.UsageData, delta chat.UsageData) chat.UsageData {
 		ReasoningTokens:        base.ReasoningTokens + delta.ReasoningTokens,
 		PromptCacheHitTokens:   base.PromptCacheHitTokens + delta.PromptCacheHitTokens,
 		PromptCacheMissTokens:  base.PromptCacheMissTokens + delta.PromptCacheMissTokens,
+		EstimatedCostCurrency:  firstNonBlank(base.EstimatedCostCurrency, delta.EstimatedCostCurrency),
+		EstimatedCostInputHit:  base.EstimatedCostInputHit + delta.EstimatedCostInputHit,
+		EstimatedCostInputMiss: base.EstimatedCostInputMiss + delta.EstimatedCostInputMiss,
+		EstimatedCostOutput:    base.EstimatedCostOutput + delta.EstimatedCostOutput,
+		EstimatedCostTotal:     base.EstimatedCostTotal + delta.EstimatedCostTotal,
 		LlmChatCompletionCount: base.LlmChatCompletionCount + delta.LlmChatCompletionCount,
 	}
 }
@@ -213,6 +304,9 @@ func usageDataMap(usage chat.UsageData) map[string]any {
 	}
 	if usage.LlmChatCompletionCount > 0 {
 		out["llmChatCompletionCount"] = usage.LlmChatCompletionCount
+	}
+	if estimated := usageEstimatedCostFromData(usage); estimated != nil {
+		out["estimatedCost"] = estimated
 	}
 	return out
 }
@@ -271,6 +365,8 @@ func runExecutor(params RunExecutorParams) {
 		assistantText: &assistantText,
 		stepWriter:    params.StepWriter,
 		stream:        params.Stream,
+		billing:       params.Billing,
+		models:        params.Models,
 		chatUsage:     chatUsage,
 		runUsage:      &runUsage,
 	}
