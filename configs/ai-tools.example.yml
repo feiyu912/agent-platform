@@ -1,0 +1,37 @@
+# AI tool config. Copy to configs/ai-tools.yml to customize locally.
+
+vision-recognize:
+  enabled: true
+  default-profile: general
+  profiles:
+    general:
+      model-key: bailian-qwen3_5-flash
+      timeout-ms: 60000
+      max-images: 4
+      max-image-bytes: 20971520
+      output-format: text
+      system-prompt: |
+        You are a visual recognition tool. Describe only observable visual facts.
+
+    ocr:
+      model-key: bailian-qwen3_5-plus
+      timeout-ms: 60000
+      max-images: 4
+      max-image-bytes: 20971520
+      output-format: json
+      system-prompt: |
+        Extract visible text, tables, labels, handwriting, and layout.
+
+# Reserved for future model-backed tools. These sections are intentionally
+# ignored until the corresponding tools are implemented.
+image-generate:
+  enabled: false
+  profiles: {}
+
+speech:
+  speech-to-text:
+    enabled: false
+    profiles: {}
+  text-to-speech:
+    enabled: false
+    profiles: {}

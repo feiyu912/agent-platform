@@ -228,24 +228,24 @@ write_program_manifest() {
       "required": false
     },
     {
-      "key": "access-policy",
-      "label": "configs/access-policy.yml",
-      "relativePath": "configs/access-policy.yml",
-      "templateRelativePath": "configs/access-policy.example.yml",
+      "key": "host-tools",
+      "label": "configs/host-tools.yml",
+      "relativePath": "configs/host-tools.yml",
+      "templateRelativePath": "configs/host-tools.example.yml",
       "required": false
     },
     {
-      "key": "bash",
-      "label": "configs/bash.yml",
-      "relativePath": "configs/bash.yml",
-      "templateRelativePath": "configs/bash.example.yml",
+      "key": "ai-tools",
+      "label": "configs/ai-tools.yml",
+      "relativePath": "configs/ai-tools.yml",
+      "templateRelativePath": "configs/ai-tools.example.yml",
       "required": false
     },
     {
-      "key": "file-tools",
-      "label": "configs/file-tools.yml",
-      "relativePath": "configs/file-tools.yml",
-      "templateRelativePath": "configs/file-tools.example.yml",
+      "key": "prompts",
+      "label": "configs/prompts.yml",
+      "relativePath": "configs/prompts.yml",
+      "templateRelativePath": "configs/prompts.example.yml",
       "required": false
     },
     {

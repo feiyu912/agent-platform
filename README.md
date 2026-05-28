@@ -134,7 +134,7 @@ RUN_SOCKET_TESTS=1 make test-integration
 
 ## 3. 配置说明
 
-所有本地环境配置从 `.env.example` 复制到 `.env`。`.env` 不提交；`.env.example` 只保留推荐给普通部署者的最终用户环境变量入口。Bash 与文件工具权限使用 `configs/bash.yml` / `configs/file-tools.yml`，默认值的单一事实源仍以代码和 `configs/*.example.yml` 模板为准。更完整的高级、排障和兼容性配置参考见 [配置化说明](./docs/配置化说明.md)。
+所有本地环境配置从 `.env.example` 复制到 `.env`。`.env` 不提交；`.env.example` 只保留推荐给普通部署者的最终用户环境变量入口。Host 工具配置使用 `configs/host-tools.yml`，AI 工具配置使用 `configs/ai-tools.yml`，默认值的单一事实源仍以代码和 `configs/*.example.yml` 模板为准。更完整的高级、排障和兼容性配置参考见 [配置化说明](./docs/配置化说明.md)。
 
 ### 根 `.env.example`
 
@@ -176,21 +176,23 @@ Provider `apiKey` 支持两种写法：
 
 本仓库保留与参考仓库一致的结构化配置入口：
 
-- `configs/bash.example.yml`
+- `configs/ai-tools.example.yml`
 - `configs/container-hub.example.yml`
 - `configs/cors.example.yml`
-- `configs/file-tools.example.yml`
+- `configs/host-tools.example.yml`
 - `configs/local-public-key.example.pem`
 - `configs/channels.example.yml`
+- `configs/prompts.example.yml`
 
 当前 Go runtime 实际会读取：
 
-- `configs/bash.yml`
+- `configs/ai-tools.yml`
 - `configs/channels.yml`
 - `configs/container-hub.yml`
 - `configs/cors.yml`
-- `configs/file-tools.yml`
+- `configs/host-tools.yml`
 - `configs/local-public-key.pem`
+- `configs/prompts.yml`
 
 `configs/` 不是可配置目录，固定使用 runtime 根目录下的 `./configs`；容器内固定挂载到 `/opt/configs`。
 
@@ -205,7 +207,7 @@ Provider `apiKey` 支持两种写法：
 
 配置优先级：
 
-- Bash / FileTools: 代码默认值 `<` `configs/bash.yml` / `configs/file-tools.yml`
+- Host / AI tools / prompts: 代码默认值 `<` 旧拆分 yml `<` 新合并 yml
 - 其它配置: 代码默认值 `<` yml `<` 仍受支持的环境变量
 
 详细配置见 [配置化说明](./docs/配置化说明.md)。

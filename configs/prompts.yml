@@ -1,4 +1,4 @@
-# Prompt configuration. Copy to configs/prompts.yml to customize locally.
+# Prompt configuration. Runtime config is loaded from configs/prompts.yml at startup.
 
 skill:
   instructions-prompt: |

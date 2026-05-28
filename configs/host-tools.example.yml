@@ -1,0 +1,91 @@
+# Host tool config. Copy to configs/host-tools.yml to customize locally.
+
+access-policy:
+  version: 1
+  working-directory: "@workspace"
+  levels:
+    default:
+      read-roots:
+        - "@workspace"
+        - "@agent"
+        - "@skills"
+      write-roots:
+        - "@workspace"
+      readonly-roots:
+        - "@agent"
+        - "@skills"
+        - "@skills-market"
+      approvals:
+        read-outside-roots: hitl
+        write-outside-roots: hitl
+        bash-complex-filesystem: hitl
+        bash-opaque-command: hitl
+        bash-write-in-write-roots: allow
+
+    auto_approve:
+      inherit: default
+      approvals:
+        read-outside-roots: auto
+        write-outside-roots: hitl
+        bash-complex-filesystem: auto
+        bash-opaque-command: auto
+
+    full_access:
+      read-roots:
+        - /
+      write-roots:
+        - /
+      readonly-roots: []
+      approvals:
+        read-outside-roots: allow
+        write-outside-roots: allow
+        bash-complex-filesystem: allow
+        bash-opaque-command: allow
+        bash-write-in-write-roots: allow
+
+bash:
+  working-directory: .
+  allowed-commands: ls,pwd,cat,head,tail,top,free,df,git,rg,find,echo,printf,sed,awk,grep,wc,sort,uniq,tr,cut,xargs,cd,stat,file,du,test,which,mkdir,touch,cp,mv,rm,ln,chmod,env,date,bash,sh,make,go,npm,yarn,pnpm,node,python,python3,pip,curl,wget
+  shell-features-enabled: true
+  shell-timeout-ms: 30000
+  max-command-chars: 16000
+
+  # Command-open preset: only opens the command allowlist.
+  # allowed-commands: '*'
+  # max-command-chars: 32000
+
+  # Unix/macOS shell override example.
+  # shell-executable: bash
+  # shell-args:
+  #   - -lc
+  #   - "{{command}}"
+
+file-tools:
+  working-directory: .
+  max-read-bytes: 1048576
+  max-write-bytes: 1048576
+  max-batch-ops: 20
+  require-write-approval: true
+  require-read-before-write: true
+  hooks:
+    after-file-change:
+      lsp-diagnostics:
+        enabled: true
+        timeout-ms: 3000
+        languages: ["go", "typescript", "javascript", "python", "rust"]
+        servers:
+          go:
+            command: gopls
+            args: []
+          typescript:
+            command: typescript-language-server
+            args: ["--stdio"]
+          javascript:
+            command: typescript-language-server
+            args: ["--stdio"]
+          python:
+            command: pyright-langserver
+            args: ["--stdio"]
+          rust:
+            command: rust-analyzer
+            args: []

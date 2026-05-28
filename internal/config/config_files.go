@@ -17,14 +17,20 @@ func (c *Config) applyStructuredConfig() error {
 	if err := c.applyFileToolsFile(ConfigFile("configs/file-tools.yml")); err != nil {
 		return err
 	}
+	if err := c.applyHostToolsFile(ConfigFile("configs/host-tools.yml")); err != nil {
+		return err
+	}
 	c.applyCORSFile(ConfigFile("configs/cors.yml"))
-	c.applyPromptsFile(ConfigFile("configs/prompts.yml"))
 	c.applyCoderPromptsFile(ConfigFile("configs/coder-prompts.yml"))
 	c.applyMemoryPromptsFile(ConfigFile("configs/memory-prompts.yml"))
+	c.applyPromptsFile(ConfigFile("configs/prompts.yml"))
 	if err := c.applyCoderSettingsFile(ConfigFile("configs/coder-settings.yml")); err != nil {
 		return err
 	}
 	if err := c.applyVisionRecognizeFile(ConfigFile("configs/vision-recognize.yml")); err != nil {
+		return err
+	}
+	if err := c.applyAIToolsFile(ConfigFile("configs/ai-tools.yml")); err != nil {
 		return err
 	}
 	if err := c.applyChannelsFile(ConfigFile("configs/channels.yml")); err != nil {
@@ -33,12 +39,20 @@ func (c *Config) applyStructuredConfig() error {
 	return nil
 }
 
-func (c *Config) applyDesktopFile(path string) {
+func loadYAMLMap(path string) (map[string]any, error) {
 	tree, err := LoadYAMLTree(path)
+	if err != nil {
+		return nil, err
+	}
+	values, _ := tree.(map[string]any)
+	return values, nil
+}
+
+func (c *Config) applyDesktopFile(path string) {
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return
 	}
@@ -59,11 +73,10 @@ func parseDesktopBridgeConfig(raw any, fallback DesktopBridgeConfig) DesktopBrid
 }
 
 func (c *Config) applyContainerHubFile(path string) {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return
 	}
@@ -77,14 +90,18 @@ func (c *Config) applyContainerHubFile(path string) {
 }
 
 func (c *Config) applyAccessPolicyFile(path string) error {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return err
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return nil
 	}
+	c.applyAccessPolicyValues(values)
+	return nil
+}
+
+func (c *Config) applyAccessPolicyValues(values map[string]any) {
 	c.AccessPolicy.Version = intValue(anyValue(values["version"], c.AccessPolicy.Version), c.AccessPolicy.Version)
 	c.AccessPolicy.WorkingDirectory = stringValue(anyValue(values["working-directory"], c.AccessPolicy.WorkingDirectory), c.AccessPolicy.WorkingDirectory)
 	if levels, ok := values["levels"].(map[string]any); ok && len(levels) > 0 {
@@ -107,7 +124,6 @@ func (c *Config) applyAccessPolicyFile(path string) error {
 		}
 		c.AccessPolicy.Levels = parsed
 	}
-	return nil
 }
 
 func parseAccessPolicyLevelConfig(raw any, fallback AccessPolicyLevelConfig) AccessPolicyLevelConfig {
@@ -137,17 +153,21 @@ func parseAccessPolicyApprovals(raw any, fallback AccessPolicyApprovalConfig) Ac
 }
 
 func (c *Config) applyBashFile(path string) error {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return err
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return nil
 	}
-	if err := rejectDeprecatedYAMLKeys(path, values, "allowed-paths", "path-checked-commands", "path-check-bypass-commands"); err != nil {
+	if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", values, "allowed-paths", "path-checked-commands", "path-check-bypass-commands"); err != nil {
 		return err
 	}
+	c.applyBashValues(values)
+	return nil
+}
+
+func (c *Config) applyBashValues(values map[string]any) {
 	c.Bash.WorkingDirectory = stringValue(anyValue(values["working-directory"], c.Bash.WorkingDirectory), c.Bash.WorkingDirectory)
 	c.Bash.AllowedCommands = csvOrList(anyValue(values["allowed-commands"], c.Bash.AllowedCommands), c.Bash.AllowedCommands)
 	c.Bash.ShellFeaturesEnabled = boolValue(anyValue(values["shell-features-enabled"], c.Bash.ShellFeaturesEnabled), c.Bash.ShellFeaturesEnabled)
@@ -156,21 +176,24 @@ func (c *Config) applyBashFile(path string) error {
 	c.Bash.ShellTimeoutMs = intValue(anyValue(values["shell-timeout-ms"], c.Bash.ShellTimeoutMs), c.Bash.ShellTimeoutMs)
 	c.Bash.MaxCommandChars = intValue(anyValue(values["max-command-chars"], c.Bash.MaxCommandChars), c.Bash.MaxCommandChars)
 	c.BashHITL.DefaultTimeoutMs = intValue(anyValue(values["hitl-default-timeout-ms"], c.BashHITL.DefaultTimeoutMs), c.BashHITL.DefaultTimeoutMs)
-	return nil
 }
 
 func (c *Config) applyFileToolsFile(path string) error {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return err
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return nil
 	}
-	if err := rejectDeprecatedYAMLKeys(path, values, "allowed-read-paths", "allowed-write-paths"); err != nil {
+	if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", values, "allowed-read-paths", "allowed-write-paths"); err != nil {
 		return err
 	}
+	c.applyFileToolsValues(values)
+	return nil
+}
+
+func (c *Config) applyFileToolsValues(values map[string]any) {
 	c.FileTools.WorkingDirectory = stringValue(anyValue(values["working-directory"], c.FileTools.WorkingDirectory), c.FileTools.WorkingDirectory)
 	c.FileTools.MaxReadBytes = intValue(anyValue(values["max-read-bytes"], c.FileTools.MaxReadBytes), c.FileTools.MaxReadBytes)
 	c.FileTools.MaxWriteBytes = intValue(anyValue(values["max-write-bytes"], c.FileTools.MaxWriteBytes), c.FileTools.MaxWriteBytes)
@@ -178,14 +201,39 @@ func (c *Config) applyFileToolsFile(path string) error {
 	c.FileTools.RequireWriteApproval = boolValue(anyValue(values["require-write-approval"], c.FileTools.RequireWriteApproval), c.FileTools.RequireWriteApproval)
 	c.FileTools.RequireReadBeforeWrite = boolValue(anyValue(values["require-read-before-write"], c.FileTools.RequireReadBeforeWrite), c.FileTools.RequireReadBeforeWrite)
 	c.FileTools.Hooks = parseFileToolsHooksConfig(values["hooks"], c.FileTools.Hooks)
+}
+
+func rejectDeprecatedYAMLKeys(path string, target string, values map[string]any, keys ...string) error {
+	for _, key := range keys {
+		if _, ok := values[key]; ok {
+			return fmt.Errorf("%s: %q has moved to %s", path, key, target)
+		}
+	}
 	return nil
 }
 
-func rejectDeprecatedYAMLKeys(path string, values map[string]any, keys ...string) error {
-	for _, key := range keys {
-		if _, ok := values[key]; ok {
-			return fmt.Errorf("%s: %q has moved to configs/access-policy.yml", path, key)
+func (c *Config) applyHostToolsFile(path string) error {
+	values, err := loadYAMLMap(path)
+	if err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	if accessPolicy, ok := values["access-policy"].(map[string]any); ok && len(accessPolicy) > 0 {
+		c.applyAccessPolicyValues(accessPolicy)
+	}
+	if bash, ok := values["bash"].(map[string]any); ok && len(bash) > 0 {
+		if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", bash, "allowed-paths", "path-checked-commands", "path-check-bypass-commands"); err != nil {
+			return err
 		}
+		c.applyBashValues(bash)
+	}
+	if fileTools, ok := values["file-tools"].(map[string]any); ok && len(fileTools) > 0 {
+		if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", fileTools, "allowed-read-paths", "allowed-write-paths"); err != nil {
+			return err
+		}
+		c.applyFileToolsValues(fileTools)
 	}
 	return nil
 }
@@ -282,11 +330,10 @@ func normalizeLanguageIDs(values []string) []string {
 }
 
 func (c *Config) applyCORSFile(path string) {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return
 	}
@@ -301,14 +348,23 @@ func (c *Config) applyCORSFile(path string) {
 }
 
 func (c *Config) applyPromptsFile(path string) {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return
 	}
+	c.applyPromptsValues(values)
+	if coder, ok := values["coder"].(map[string]any); ok && len(coder) > 0 {
+		c.applyCoderPromptsValues(coder)
+	}
+	if memory, ok := values["memory"].(map[string]any); ok && len(memory) > 0 {
+		c.applyMemoryPromptsValues(memory)
+	}
+}
+
+func (c *Config) applyPromptsValues(values map[string]any) {
 	skill, _ := values["skill"].(map[string]any)
 	if len(skill) > 0 {
 		c.Prompts.Skill.InstructionsPrompt = stringValue(anyValue(skill["instructions-prompt"], c.Prompts.Skill.InstructionsPrompt), c.Prompts.Skill.InstructionsPrompt)
@@ -331,38 +387,43 @@ func (c *Config) applyPromptsFile(path string) {
 }
 
 func (c *Config) applyCoderPromptsFile(path string) {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return
 	}
+	c.applyCoderPromptsValues(values)
+}
+
+func (c *Config) applyCoderPromptsValues(values map[string]any) {
 	c.CoderPrompts.PlanningPrompt = stringValue(anyValue(values["planning-prompt"], c.CoderPrompts.PlanningPrompt), c.CoderPrompts.PlanningPrompt)
 	c.CoderPrompts.SummarySystemPrompt = stringValue(anyValue(values["summary-system-prompt"], c.CoderPrompts.SummarySystemPrompt), c.CoderPrompts.SummarySystemPrompt)
 	c.CoderPrompts.SummaryUserPromptTemplate = stringValue(anyValue(values["summary-user-prompt-template"], c.CoderPrompts.SummaryUserPromptTemplate), c.CoderPrompts.SummaryUserPromptTemplate)
 }
 
 func (c *Config) applyMemoryPromptsFile(path string) {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return
 	}
+	c.applyMemoryPromptsValues(values)
+}
+
+func (c *Config) applyMemoryPromptsValues(values map[string]any) {
 	c.MemoryPrompts.SystemPromptTemplate = stringValue(anyValue(values["system-prompt-template"], c.MemoryPrompts.SystemPromptTemplate), c.MemoryPrompts.SystemPromptTemplate)
 	c.MemoryPrompts.UserPromptTemplate = stringValue(anyValue(values["user-prompt-template"], c.MemoryPrompts.UserPromptTemplate), c.MemoryPrompts.UserPromptTemplate)
 }
 
 func (c *Config) applyCoderSettingsFile(path string) error {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return err
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return nil
 	}
@@ -422,19 +483,23 @@ func parseCoderACPProxies(raw any, fallback map[string]CoderACPProxyConfig) (map
 }
 
 func (c *Config) applyVisionRecognizeFile(path string) error {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return err
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return nil
 	}
+	c.applyVisionRecognizeValues(values)
+	return nil
+}
+
+func (c *Config) applyVisionRecognizeValues(values map[string]any) {
 	c.VisionRecognize.Enabled = boolValue(anyValue(values["enabled"], c.VisionRecognize.Enabled), c.VisionRecognize.Enabled)
 	c.VisionRecognize.DefaultProfile = stringValue(anyValue(values["default-profile"], c.VisionRecognize.DefaultProfile), c.VisionRecognize.DefaultProfile)
 	profiles, _ := values["profiles"].(map[string]any)
 	if len(profiles) == 0 {
-		return nil
+		return
 	}
 	parsed := make(map[string]VisionRecognizeProfileConfig, len(profiles))
 	for key, raw := range profiles {
@@ -449,6 +514,19 @@ func (c *Config) applyVisionRecognizeFile(path string) error {
 		parsed[profileKey] = parseVisionRecognizeProfileConfig(raw, base)
 	}
 	c.VisionRecognize.Profiles = parsed
+}
+
+func (c *Config) applyAIToolsFile(path string) error {
+	values, err := loadYAMLMap(path)
+	if err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	if visionRecognize, ok := values["vision-recognize"].(map[string]any); ok && len(visionRecognize) > 0 {
+		c.applyVisionRecognizeValues(visionRecognize)
+	}
 	return nil
 }
 
@@ -467,11 +545,10 @@ func parseVisionRecognizeProfileConfig(raw any, fallback VisionRecognizeProfileC
 }
 
 func (c *Config) applyChannelsFile(path string) error {
-	tree, err := LoadYAMLTree(path)
+	values, err := loadYAMLMap(path)
 	if err != nil {
 		return err
 	}
-	values, _ := tree.(map[string]any)
 	if len(values) == 0 {
 		return nil
 	}

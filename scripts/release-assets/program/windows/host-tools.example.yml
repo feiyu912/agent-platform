@@ -1,0 +1,73 @@
+# Windows host tool config. Copy to configs/host-tools.yml to customize locally.
+
+access-policy:
+  working-directory: "@workspace"
+  levels:
+    default:
+      read-roots:
+        - "@workspace"
+        - "@agent"
+        - "@skills"
+      write-roots:
+        - "@workspace"
+      readonly-roots:
+        - "@agent"
+        - "@skills"
+        - "@skills-market"
+      approvals:
+        read-outside-roots: hitl
+        write-outside-roots: hitl
+        bash-complex-filesystem: hitl
+        bash-opaque-command: hitl
+        bash-write-in-write-roots: allow
+
+    auto_approve:
+      inherit: default
+      approvals:
+        read-outside-roots: auto
+        write-outside-roots: auto
+        bash-complex-filesystem: auto
+        bash-opaque-command: auto
+
+    full_access:
+      read-roots:
+        - C:\
+      write-roots:
+        - C:\
+      readonly-roots: []
+      approvals:
+        read-outside-roots: allow
+        write-outside-roots: allow
+        bash-complex-filesystem: allow
+        bash-opaque-command: allow
+        bash-write-in-write-roots: allow
+
+bash:
+  working-directory: .
+  allowed-commands: '*'
+  shell-features-enabled: true
+  shell-executable: powershell.exe
+  shell-args:
+    - -NoProfile
+    - -ExecutionPolicy
+    - Bypass
+    - -Command
+    - "{{command}}"
+  shell-timeout-ms: 30000
+  max-command-chars: 16000
+
+  # To force cmd.exe instead, use:
+  # shell-executable: cmd.exe
+  # shell-args:
+  #   - /d
+  #   - /s
+  #   - /c
+  #   - "{{command}}"
+
+file-tools:
+  working-directory: .
+  max-read-bytes: 1048576
+  max-write-bytes: 1048576
+  max-batch-ops: 20
+  require-write-approval: true
+  require-read-before-write: true
