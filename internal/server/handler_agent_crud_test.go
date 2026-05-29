@@ -25,6 +25,7 @@ func TestAgentHTTPCRUDAndEditableDetail(t *testing.T) {
 		"definition": map[string]any{
 			"key":         "editable-agent",
 			"name":        "Editable Agent",
+			"icon":        "bot",
 			"role":        "Editor",
 			"description": "editable test agent",
 			"mode":        "REACT",
@@ -47,6 +48,9 @@ func TestAgentHTTPCRUDAndEditableDetail(t *testing.T) {
 	}
 	if created.Definition["key"] != "editable-agent" {
 		t.Fatalf("expected editable definition, got %#v", created.Definition)
+	}
+	if created.Definition["name"] != "Editable Agent" || created.Definition["icon"] != "bot" {
+		t.Fatalf("expected non-CODER name and icon to be preserved, got %#v", created.Definition)
 	}
 	runtimeConfig, _ := created.Definition["runtimeConfig"].(map[string]any)
 	env, _ := runtimeConfig["env"].(map[string]any)
@@ -153,6 +157,7 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 		"definition": map[string]any{
 			"key":  "coder-project",
 			"name": "coder-project",
+			"icon": "bot",
 			"mode": "CODER",
 			"workspace": map[string]any{
 				"root": workspaceDir,
@@ -171,6 +176,12 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	if _, ok := created.Definition["workspace"]; ok {
 		t.Fatalf("coder definition should not persist legacy workspace root, got %#v", created.Definition)
 	}
+	if _, ok := created.Definition["name"]; ok {
+		t.Fatalf("coder definition should not persist name, got %#v", created.Definition)
+	}
+	if created.Definition["icon"] != "folder" {
+		t.Fatalf("coder definition icon = %#v, want folder", created.Definition["icon"])
+	}
 	visibility, _ := created.Definition["visibility"].(map[string]any)
 	scopes, _ := visibility["scopes"].([]any)
 	if len(scopes) != 1 || scopes[0] != "nav" {
@@ -187,14 +198,38 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 		t.Fatalf("read created agent file: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) < 3 || lines[0] != "key: coder-project" || lines[1] != "name: coder-project" || lines[2] != "mode: CODER" {
+	if len(lines) < 2 || lines[0] != "key: coder-project" || lines[1] != "mode: CODER" {
 		t.Fatalf("unexpected YAML header order:\n%s", data)
 	}
-	if strings.Contains(string(data), "\nworkspace:") || strings.Contains(string(data), "- copilot") {
-		t.Fatalf("created coder file should omit workspace and copilot scope:\n%s", data)
+	if strings.Contains(string(data), "\nname:") || strings.Contains(string(data), "\nworkspace:") || strings.Contains(string(data), "- copilot") {
+		t.Fatalf("created coder file should omit name, workspace, and copilot scope:\n%s", data)
 	}
 	if !strings.Contains(string(data), "\nconcurrency: 1\n") {
 		t.Fatalf("created coder file should persist default concurrency:\n%s", data)
+	}
+	if !strings.Contains(string(data), "\nicon: folder\n") {
+		t.Fatalf("created coder file should persist folder icon:\n%s", data)
+	}
+
+	updatedDefinition := created.Definition
+	updatedDefinition["name"] = "Renamed Coder"
+	updatedDefinition["icon"] = "sparkles"
+	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/update", map[string]any{
+		"key":        "coder-project",
+		"definition": updatedDefinition,
+	})
+	if _, ok := updated.Definition["name"]; ok {
+		t.Fatalf("updated coder definition should not persist name, got %#v", updated.Definition)
+	}
+	if updated.Definition["icon"] != "folder" {
+		t.Fatalf("updated coder definition icon = %#v, want folder", updated.Definition["icon"])
+	}
+	updatedData, err := os.ReadFile(created.Source.Path)
+	if err != nil {
+		t.Fatalf("read updated agent file: %v", err)
+	}
+	if strings.Contains(string(updatedData), "\nname:") || !strings.Contains(string(updatedData), "\nicon: folder\n") {
+		t.Fatalf("updated coder file should omit name and persist folder icon:\n%s", updatedData)
 	}
 
 	var openedPath string
