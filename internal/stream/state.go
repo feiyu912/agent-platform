@@ -35,6 +35,7 @@ type runUsageState struct {
 	PromptCacheHitTokens   int
 	PromptCacheMissTokens  int
 	LLMChatCompletionCount int
+	ToolCallCount          int
 }
 
 type reasoningBlockState struct {

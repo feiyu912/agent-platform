@@ -327,6 +327,7 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 			RunPromptCacheHitTokens:   value.RunPromptCacheHitTokens,
 			RunPromptCacheMissTokens:  value.RunPromptCacheMissTokens,
 			RunLLMChatCompletionCount: value.RunLLMChatCompletionCount,
+			RunToolCallCount:          value.RunToolCallCount,
 		}}
 	case DeltaDebugPostCall:
 		m.lastKind = ""
@@ -344,6 +345,7 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 			LLMReturnPromptCacheHitTokens:   value.LLMReturnPromptCacheHitTokens,
 			LLMReturnPromptCacheMissTokens:  value.LLMReturnPromptCacheMissTokens,
 			LLMReturnLLMChatCompletionCount: value.LLMReturnLLMChatCompletionCount,
+			LLMReturnToolCallCount:          value.LLMReturnToolCallCount,
 			RunPromptTokens:                 value.RunPromptTokens,
 			RunCompletionTokens:             value.RunCompletionTokens,
 			RunTotalTokens:                  value.RunTotalTokens,
@@ -352,6 +354,7 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 			RunPromptCacheHitTokens:         value.RunPromptCacheHitTokens,
 			RunPromptCacheMissTokens:        value.RunPromptCacheMissTokens,
 			RunLLMChatCompletionCount:       value.RunLLMChatCompletionCount,
+			RunToolCallCount:                value.RunToolCallCount,
 		}}
 	case DeltaUsageSnapshot:
 		m.lastKind = ""
@@ -369,6 +372,7 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 			LLMReturnPromptCacheHitTokens:   value.LLMReturnPromptCacheHitTokens,
 			LLMReturnPromptCacheMissTokens:  value.LLMReturnPromptCacheMissTokens,
 			LLMReturnLLMChatCompletionCount: value.LLMReturnLLMChatCompletionCount,
+			LLMReturnToolCallCount:          value.LLMReturnToolCallCount,
 			RunPromptTokens:                 value.RunPromptTokens,
 			RunCompletionTokens:             value.RunCompletionTokens,
 			RunTotalTokens:                  value.RunTotalTokens,
@@ -377,6 +381,7 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 			RunPromptCacheHitTokens:         value.RunPromptCacheHitTokens,
 			RunPromptCacheMissTokens:        value.RunPromptCacheMissTokens,
 			RunLLMChatCompletionCount:       value.RunLLMChatCompletionCount,
+			RunToolCallCount:                value.RunToolCallCount,
 		}}
 	case DeltaRunCancel:
 		return []stream.StreamInput{stream.RunCancel{RunID: value.RunID}}

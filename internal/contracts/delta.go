@@ -223,6 +223,7 @@ type DeltaDebugPreCall struct {
 	RunPromptCacheHitTokens   int
 	RunPromptCacheMissTokens  int
 	RunLLMChatCompletionCount int
+	RunToolCallCount          int
 }
 
 func (DeltaDebugPreCall) agentDeltaTag() {}
@@ -241,6 +242,7 @@ type DeltaDebugPostCall struct {
 	LLMReturnPromptCacheHitTokens   int
 	LLMReturnPromptCacheMissTokens  int
 	LLMReturnLLMChatCompletionCount int
+	LLMReturnToolCallCount          int
 	RunPromptTokens                 int
 	RunCompletionTokens             int
 	RunTotalTokens                  int
@@ -249,6 +251,7 @@ type DeltaDebugPostCall struct {
 	RunPromptCacheHitTokens         int
 	RunPromptCacheMissTokens        int
 	RunLLMChatCompletionCount       int
+	RunToolCallCount                int
 }
 
 func (DeltaDebugPostCall) agentDeltaTag() {}
@@ -267,6 +270,7 @@ type DeltaUsageSnapshot struct {
 	LLMReturnPromptCacheHitTokens   int
 	LLMReturnPromptCacheMissTokens  int
 	LLMReturnLLMChatCompletionCount int
+	LLMReturnToolCallCount          int
 	RunPromptTokens                 int
 	RunCompletionTokens             int
 	RunTotalTokens                  int
@@ -275,6 +279,7 @@ type DeltaUsageSnapshot struct {
 	RunPromptCacheHitTokens         int
 	RunPromptCacheMissTokens        int
 	RunLLMChatCompletionCount       int
+	RunToolCallCount                int
 }
 
 func (DeltaUsageSnapshot) agentDeltaTag() {}

@@ -71,6 +71,49 @@ func TestAccumulateUsageCommitsLatestValidProviderUsageOnce(t *testing.T) {
 	}
 }
 
+func TestUsageSnapshotIncludesToolCallCountSincePreviousSnapshot(t *testing.T) {
+	stream := &llmRunStream{
+		session: contracts.QuerySession{RunID: "run-tool-usage", ChatID: "chat-tool-usage"},
+		model:   models.ModelDefinition{Key: "mock-model", ContextWindow: 128000},
+		execCtx: &contracts.ExecutionContext{},
+	}
+
+	for _, toolID := range []string{"tool_1", "tool_2"} {
+		stream.activeToolCall = &preparedToolInvocation{
+			toolID:              toolID,
+			toolName:            "ask_user_question",
+			awaitExternalResult: true,
+		}
+		if err := stream.invokeActiveToolCall(); err != nil {
+			t.Fatalf("invokeActiveToolCall returned error: %v", err)
+		}
+	}
+	stream.commitUsage(&openAIUsage{
+		PromptTokens:     10,
+		CompletionTokens: 2,
+		TotalTokens:      12,
+	})
+	stream.emitPendingUsageDelta()
+
+	if stream.runToolCallCount != 2 || stream.lastSnapshotToolCallCount != 2 {
+		t.Fatalf("expected two counted tool calls, got run=%d snapshot=%d", stream.runToolCallCount, stream.lastSnapshotToolCallCount)
+	}
+	snapshot, ok := stream.pending[0].(contracts.DeltaUsageSnapshot)
+	if !ok {
+		t.Fatalf("expected first delta to be DeltaUsageSnapshot, got %#v", stream.pending[0])
+	}
+	if snapshot.LLMReturnToolCallCount != 2 || snapshot.RunToolCallCount != 2 {
+		t.Fatalf("expected tool counts in snapshot, got %#v", snapshot)
+	}
+	postCall, ok := stream.pending[1].(contracts.DeltaDebugPostCall)
+	if !ok {
+		t.Fatalf("expected second delta to be DeltaDebugPostCall, got %#v", stream.pending[1])
+	}
+	if postCall.LLMReturnToolCallCount != 2 || postCall.RunToolCallCount != 2 {
+		t.Fatalf("expected tool counts in debug.postCall, got %#v", postCall)
+	}
+}
+
 func TestNormalizeOpenAIUsageMapsCachedTokensAsPromptCacheHitTokens(t *testing.T) {
 	normalized := normalizeOpenAIUsage(&openAIUsage{
 		PromptTokens: 100,

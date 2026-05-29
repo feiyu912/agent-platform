@@ -27,6 +27,7 @@ func TestLatestChatUsageFromEventsReadsHistoricalUsageSnapshot(t *testing.T) {
 							"reasoningTokens": 70,
 						},
 						"llmChatCompletionCount": 1,
+						"toolCallCount":          3,
 					},
 				},
 			},
@@ -39,13 +40,16 @@ func TestLatestChatUsageFromEventsReadsHistoricalUsageSnapshot(t *testing.T) {
 		usage.LlmChatCompletionCount != 1 {
 		t.Fatalf("expected detailed chat cumulative usage, got %#v", usage)
 	}
+	if usage.ToolCallCount != 3 {
+		t.Fatalf("expected chat tool call count, got %#v", usage)
+	}
 }
 
 func TestChatUsageBreakdownPrefersLatestRunAndHistoricalChatUsage(t *testing.T) {
 	breakdown := chatUsageBreakdown(
-		&chat.UsageData{PromptTokens: 111, CompletionTokens: 22, TotalTokens: 133, LlmChatCompletionCount: 2},
+		&chat.UsageData{PromptTokens: 111, CompletionTokens: 22, TotalTokens: 133, LlmChatCompletionCount: 2, ToolCallCount: 4},
 		[]chat.RunSummary{
-			{RunID: "run-2", Usage: chat.UsageData{PromptTokens: 11, CompletionTokens: 5, TotalTokens: 16, ReasoningTokens: 3, LlmChatCompletionCount: 1}},
+			{RunID: "run-2", Usage: chat.UsageData{PromptTokens: 11, CompletionTokens: 5, TotalTokens: 16, ReasoningTokens: 3, LlmChatCompletionCount: 1, ToolCallCount: 2}},
 			{RunID: "run-1", Usage: chat.UsageData{PromptTokens: 100, CompletionTokens: 17, TotalTokens: 117, LlmChatCompletionCount: 1}},
 		},
 		[]stream.EventData{
@@ -79,8 +83,11 @@ func TestChatUsageBreakdownPrefersLatestRunAndHistoricalChatUsage(t *testing.T) 
 	if breakdown.LastRun.CompletionTokensDetails == nil || breakdown.LastRun.CompletionTokensDetails.ReasoningTokens != 3 {
 		t.Fatalf("expected latest run usage from run summary, got %#v", breakdown.LastRun)
 	}
+	if breakdown.LastRun.ToolCallCount != 2 {
+		t.Fatalf("expected latest run tool call count, got %#v", breakdown.LastRun)
+	}
 	if breakdown.Chat.PromptTokens != 111 || breakdown.Chat.CompletionTokens != 22 || breakdown.Chat.TotalTokens != 133 ||
-		breakdown.Chat.LlmChatCompletionCount != 2 {
+		breakdown.Chat.LlmChatCompletionCount != 2 || breakdown.Chat.ToolCallCount != 4 {
 		t.Fatalf("expected chat cumulative usage, got %#v", breakdown.Chat)
 	}
 }

@@ -22,7 +22,8 @@ func usageHasLLMCall(usage map[string]any) bool {
 	if len(usage) == 0 {
 		return false
 	}
-	return toIntFromKeys(usage, "llmChatCompletionCount", "llm_chat_completion_count") > 0
+	return toIntFromKeys(usage, "llmChatCompletionCount", "llm_chat_completion_count") > 0 ||
+		toIntFromKeys(usage, "toolCallCount", "tool_call_count") > 0
 }
 
 func debugHasPreCall(debug map[string]any) bool {

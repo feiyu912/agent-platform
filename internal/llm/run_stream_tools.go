@@ -229,6 +229,7 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 	if !invocation.toolCallCounted {
 		s.execCtx.ToolCalls++
 		s.stageToolCalls++
+		s.runToolCallCount++
 		invocation.toolCallCounted = true
 	}
 	if result := s.checkBudgetBeforeToolCall(invocation.toolName); result != nil {

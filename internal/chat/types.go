@@ -268,6 +268,7 @@ type UsageData struct {
 	EstimatedCostOutput    float64 `json:"-"`
 	EstimatedCostTotal     float64 `json:"-"`
 	LlmChatCompletionCount int     `json:"-"`
+	ToolCallCount          int     `json:"-"`
 }
 
 type RunCompletion struct {

@@ -286,6 +286,7 @@ type InputDebugPreCall struct {
 	RunPromptCacheHitTokens   int
 	RunPromptCacheMissTokens  int
 	RunLLMChatCompletionCount int
+	RunToolCallCount          int
 }
 
 func (InputDebugPreCall) streamInputTag() {}
@@ -305,6 +306,7 @@ type InputDebugPostCall struct {
 	LLMReturnPromptCacheHitTokens   int
 	LLMReturnPromptCacheMissTokens  int
 	LLMReturnLLMChatCompletionCount int
+	LLMReturnToolCallCount          int
 	RunPromptTokens                 int
 	RunCompletionTokens             int
 	RunTotalTokens                  int
@@ -313,6 +315,7 @@ type InputDebugPostCall struct {
 	RunPromptCacheHitTokens         int
 	RunPromptCacheMissTokens        int
 	RunLLMChatCompletionCount       int
+	RunToolCallCount                int
 }
 
 func (InputDebugPostCall) streamInputTag() {}
@@ -332,6 +335,7 @@ type InputUsageSnapshot struct {
 	LLMReturnPromptCacheHitTokens   int
 	LLMReturnPromptCacheMissTokens  int
 	LLMReturnLLMChatCompletionCount int
+	LLMReturnToolCallCount          int
 	RunPromptTokens                 int
 	RunCompletionTokens             int
 	RunTotalTokens                  int
@@ -340,6 +344,7 @@ type InputUsageSnapshot struct {
 	RunPromptCacheHitTokens         int
 	RunPromptCacheMissTokens        int
 	RunLLMChatCompletionCount       int
+	RunToolCallCount                int
 }
 
 func (InputUsageSnapshot) streamInputTag() {}

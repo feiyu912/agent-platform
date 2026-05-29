@@ -183,6 +183,7 @@ func (s *llmRunStream) prepareNextTurn() error {
 		RunPromptCacheHitTokens:   s.runPromptCacheHitTokens,
 		RunPromptCacheMissTokens:  s.runPromptCacheMissTokens,
 		RunLLMChatCompletionCount: s.runLLMChatCompletionCount,
+		RunToolCallCount:          s.runToolCallCount,
 	})
 	if trace != nil {
 		trace.markSent(time.Now())

@@ -83,6 +83,9 @@ func (s *llmRunStream) emitPendingUsageDelta() {
 	if !s.pendingUsageEmit {
 		return
 	}
+	currentToolCallCount := s.currentToolCallCountSinceSnapshot()
+	s.lastCallToolCallCount = currentToolCallCount
+	s.lastSnapshotToolCallCount = s.runToolCallCount
 	s.pendingUsageEmit = false
 	s.pending = append(s.pending, DeltaDebugPostCall{
 		ChatID:                          s.session.ChatID,
@@ -98,6 +101,7 @@ func (s *llmRunStream) emitPendingUsageDelta() {
 		LLMReturnPromptCacheHitTokens:   s.lastCallPromptCacheHitTokens,
 		LLMReturnPromptCacheMissTokens:  s.lastCallPromptCacheMissTokens,
 		LLMReturnLLMChatCompletionCount: s.lastCallLLMChatCompletionCount,
+		LLMReturnToolCallCount:          s.lastCallToolCallCount,
 		RunPromptTokens:                 s.runPromptTokens,
 		RunCompletionTokens:             s.runCompletionTokens,
 		RunTotalTokens:                  s.runTotalTokens,
@@ -106,6 +110,7 @@ func (s *llmRunStream) emitPendingUsageDelta() {
 		RunPromptCacheHitTokens:         s.runPromptCacheHitTokens,
 		RunPromptCacheMissTokens:        s.runPromptCacheMissTokens,
 		RunLLMChatCompletionCount:       s.runLLMChatCompletionCount,
+		RunToolCallCount:                s.runToolCallCount,
 	})
 }
 
@@ -159,6 +164,7 @@ func (s *llmRunStream) commitUsage(usage *openAIUsage) {
 		LLMReturnPromptCacheHitTokens:   s.lastCallPromptCacheHitTokens,
 		LLMReturnPromptCacheMissTokens:  s.lastCallPromptCacheMissTokens,
 		LLMReturnLLMChatCompletionCount: s.lastCallLLMChatCompletionCount,
+		LLMReturnToolCallCount:          s.currentToolCallCountSinceSnapshot(),
 		RunPromptTokens:                 s.runPromptTokens,
 		RunCompletionTokens:             s.runCompletionTokens,
 		RunTotalTokens:                  s.runTotalTokens,
@@ -167,9 +173,21 @@ func (s *llmRunStream) commitUsage(usage *openAIUsage) {
 		RunPromptCacheHitTokens:         s.runPromptCacheHitTokens,
 		RunPromptCacheMissTokens:        s.runPromptCacheMissTokens,
 		RunLLMChatCompletionCount:       s.runLLMChatCompletionCount,
+		RunToolCallCount:                s.runToolCallCount,
 	})
 	log.Printf("[llm][run:%s][usage] last-call: prompt=%d completion=%d total=%d | run-cumulative: prompt=%d completion=%d total=%d",
 		s.session.RunID, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, s.runPromptTokens, s.runCompletionTokens, s.runTotalTokens)
+}
+
+func (s *llmRunStream) currentToolCallCountSinceSnapshot() int {
+	if s == nil {
+		return 0
+	}
+	current := s.runToolCallCount - s.lastSnapshotToolCallCount
+	if current < 0 {
+		return 0
+	}
+	return current
 }
 
 type normalizedOpenAIUsageDetails struct {

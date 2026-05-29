@@ -10,7 +10,7 @@ import (
 )
 
 func mapUsageDataPtr(usage *chat.UsageData) *api.ChatUsageData {
-	if usage == nil || (usage.TotalTokens == 0 && usage.LlmChatCompletionCount == 0) {
+	if usage == nil || (usage.TotalTokens == 0 && usage.LlmChatCompletionCount == 0 && usage.ToolCallCount == 0) {
 		return nil
 	}
 	mapped := mapUsageData(*usage)
@@ -23,6 +23,7 @@ func mapUsageData(usage chat.UsageData) api.ChatUsageData {
 		CompletionTokens:       usage.CompletionTokens,
 		TotalTokens:            usage.TotalTokens,
 		LlmChatCompletionCount: usage.LlmChatCompletionCount,
+		ToolCallCount:          usage.ToolCallCount,
 	}
 	if cacheHitTokens, cacheMissTokens := usageCacheTokens(usage); cacheHitTokens > 0 || cacheMissTokens > 0 {
 		out.PromptTokensDetails = &api.PromptTokenDetails{
@@ -100,6 +101,7 @@ func mapUsageDataFromPayload(usage map[string]any) *api.ChatUsageData {
 		CompletionTokens:       contracts.AnyIntNode(usage["completionTokens"]),
 		TotalTokens:            contracts.AnyIntNode(usage["totalTokens"]),
 		LlmChatCompletionCount: contracts.AnyIntNode(usage["llmChatCompletionCount"]),
+		ToolCallCount:          contracts.AnyIntNode(usage["toolCallCount"]),
 	}
 	if cacheHitTokens, cacheMissTokens := usageCacheTokensFromMap(usage); cacheHitTokens > 0 || cacheMissTokens > 0 {
 		out.PromptTokensDetails = &api.PromptTokenDetails{
@@ -115,7 +117,7 @@ func mapUsageDataFromPayload(usage map[string]any) *api.ChatUsageData {
 	if estimatedCost := apiEstimatedCostFromMap(usage); estimatedCost != nil {
 		out.EstimatedCost = estimatedCost
 	}
-	if out.TotalTokens == 0 && out.LlmChatCompletionCount == 0 {
+	if out.TotalTokens == 0 && out.LlmChatCompletionCount == 0 && out.ToolCallCount == 0 {
 		return nil
 	}
 	return &out

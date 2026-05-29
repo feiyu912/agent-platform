@@ -110,6 +110,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 	var chatTotalPromptTokens, chatTotalCompletionTokens, chatTotalTotalTokens int
 	var chatTotalCachedTokens, chatTotalReasoningTokens, chatTotalPromptCacheHitTokens, chatTotalPromptCacheMissTokens int
 	var chatTotalLlmChatCompletionCount int
+	var chatTotalToolCallCount int
 	taskQueries := map[string]replayedSubTaskQuery{}
 	planningReplayEvents := collectPlanningReplayEvents(lines)
 	legacyConfirmIDs := map[string]bool{}
@@ -233,6 +234,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"promptCacheHitTokens":   rd.totalPromptCacheHitTokens,
 					"promptCacheMissTokens":  rd.totalPromptCacheMissTokens,
 					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
+					"toolCallCount":          rd.totalToolCallCount,
 				}
 				chatCumulativePre := map[string]int{
 					"promptTokens":           chatTotalPromptTokens,
@@ -243,6 +245,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"promptCacheHitTokens":   chatTotalPromptCacheHitTokens,
 					"promptCacheMissTokens":  chatTotalPromptCacheMissTokens,
 					"llmChatCompletionCount": chatTotalLlmChatCompletionCount,
+					"toolCallCount":          chatTotalToolCallCount,
 				}
 				if ev := synthesizePreCallEvent(runID, chatID, taskID, runCumulativePre, chatCumulativePre, stepContextWindow, stepPreCallData, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)
@@ -272,6 +275,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.totalPromptCacheHitTokens += stepCacheHitTokens
 				rd.totalPromptCacheMissTokens += stepCacheMissTokens
 				rd.totalLlmChatCompletionCount += toIntFromKeys(stepUsage, "llmChatCompletionCount", "llm_chat_completion_count")
+				rd.totalToolCallCount += toIntFromKeys(stepUsage, "toolCallCount", "tool_call_count")
 				chatTotalPromptTokens += toIntFromKeys(stepUsage, "promptTokens", "prompt_tokens")
 				chatTotalCompletionTokens += toIntFromKeys(stepUsage, "completionTokens", "completion_tokens")
 				chatTotalTotalTokens += toIntFromKeys(stepUsage, "totalTokens", "total_tokens")
@@ -280,6 +284,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				chatTotalPromptCacheHitTokens += stepCacheHitTokens
 				chatTotalPromptCacheMissTokens += stepCacheMissTokens
 				chatTotalLlmChatCompletionCount += toIntFromKeys(stepUsage, "llmChatCompletionCount", "llm_chat_completion_count")
+				chatTotalToolCallCount += toIntFromKeys(stepUsage, "toolCallCount", "tool_call_count")
 				rd.chatTotalPromptTokens = chatTotalPromptTokens
 				rd.chatTotalCompletionTokens = chatTotalCompletionTokens
 				rd.chatTotalTotalTokens = chatTotalTotalTokens
@@ -288,6 +293,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.chatTotalPromptCacheHitTokens = chatTotalPromptCacheHitTokens
 				rd.chatTotalPromptCacheMissTokens = chatTotalPromptCacheMissTokens
 				rd.chatTotalLlmChatCompletionCount = chatTotalLlmChatCompletionCount
+				rd.chatTotalToolCallCount = chatTotalToolCallCount
 			}
 			if hasProviderUsagePayload(stepUsage) {
 				runCumulativePost := map[string]int{
@@ -299,6 +305,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"promptCacheHitTokens":   rd.totalPromptCacheHitTokens,
 					"promptCacheMissTokens":  rd.totalPromptCacheMissTokens,
 					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
+					"toolCallCount":          rd.totalToolCallCount,
 				}
 				chatCumulativePost := map[string]int{
 					"promptTokens":           chatTotalPromptTokens,
@@ -309,6 +316,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"promptCacheHitTokens":   chatTotalPromptCacheHitTokens,
 					"promptCacheMissTokens":  chatTotalPromptCacheMissTokens,
 					"llmChatCompletionCount": chatTotalLlmChatCompletionCount,
+					"toolCallCount":          chatTotalToolCallCount,
 				}
 				if ev := synthesizeUsageSnapshotEvent(runID, chatID, taskID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)
@@ -324,6 +332,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"promptCacheHitTokens":   rd.totalPromptCacheHitTokens,
 					"promptCacheMissTokens":  rd.totalPromptCacheMissTokens,
 					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
+					"toolCallCount":          rd.totalToolCallCount,
 				}
 				chatCumulativePost := map[string]int{
 					"promptTokens":           chatTotalPromptTokens,
@@ -334,6 +343,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 					"promptCacheHitTokens":   chatTotalPromptCacheHitTokens,
 					"promptCacheMissTokens":  chatTotalPromptCacheMissTokens,
 					"llmChatCompletionCount": chatTotalLlmChatCompletionCount,
+					"toolCallCount":          chatTotalToolCallCount,
 				}
 				if ev := synthesizePostCallEvent(runID, chatID, taskID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
 					rd.events = append(rd.events, *ev)

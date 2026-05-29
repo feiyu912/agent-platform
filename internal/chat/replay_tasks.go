@@ -18,6 +18,7 @@ type chatRunData struct {
 	totalPromptCacheHitTokens       int
 	totalPromptCacheMissTokens      int
 	totalLlmChatCompletionCount     int
+	totalToolCallCount              int
 	chatTotalPromptTokens           int
 	chatTotalCompletionTokens       int
 	chatTotalTotalTokens            int
@@ -26,6 +27,7 @@ type chatRunData struct {
 	chatTotalPromptCacheHitTokens   int
 	chatTotalPromptCacheMissTokens  int
 	chatTotalLlmChatCompletionCount int
+	chatTotalToolCallCount          int
 	activeSubTasks                  map[string]*replayedSubTask
 }
 

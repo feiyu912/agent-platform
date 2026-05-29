@@ -173,7 +173,7 @@ func (p *runEventProcessor) decorateTerminalUsage(data *stream.EventData) {
 		return
 	}
 	delete(data.Payload, "chatUsage")
-	if p.runUsage == nil || (p.runUsage.TotalTokens == 0 && p.runUsage.LlmChatCompletionCount == 0) {
+	if p.runUsage == nil || (p.runUsage.TotalTokens == 0 && p.runUsage.LlmChatCompletionCount == 0 && p.runUsage.ToolCallCount == 0) {
 		delete(data.Payload, "usage")
 		return
 	}
@@ -197,6 +197,7 @@ func usageDataFromMap(usage map[string]any) chat.UsageData {
 		TotalTokens:            contracts.AnyIntNode(usage["totalTokens"]),
 		ReasoningTokens:        usageDetailInt(usage, "completionTokensDetails", "reasoningTokens"),
 		LlmChatCompletionCount: contracts.AnyIntNode(usage["llmChatCompletionCount"]),
+		ToolCallCount:          contracts.AnyIntNode(usage["toolCallCount"]),
 	}
 	cacheHitTokens, cacheMissTokens := usageCacheTokensFromMap(usage)
 	out.CachedTokens = cacheHitTokens
@@ -273,6 +274,7 @@ func addUsageData(base chat.UsageData, delta chat.UsageData) chat.UsageData {
 		EstimatedCostOutput:    base.EstimatedCostOutput + delta.EstimatedCostOutput,
 		EstimatedCostTotal:     base.EstimatedCostTotal + delta.EstimatedCostTotal,
 		LlmChatCompletionCount: base.LlmChatCompletionCount + delta.LlmChatCompletionCount,
+		ToolCallCount:          base.ToolCallCount + delta.ToolCallCount,
 	}
 }
 
@@ -304,6 +306,9 @@ func usageDataMap(usage chat.UsageData) map[string]any {
 	}
 	if usage.LlmChatCompletionCount > 0 {
 		out["llmChatCompletionCount"] = usage.LlmChatCompletionCount
+	}
+	if usage.ToolCallCount > 0 {
+		out["toolCallCount"] = usage.ToolCallCount
 	}
 	if estimated := usageEstimatedCostFromData(usage); estimated != nil {
 		out["estimatedCost"] = estimated

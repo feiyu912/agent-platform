@@ -284,7 +284,9 @@ func TestDispatcherIncludesTaskIDOnDebugEvents(t *testing.T) {
 		RunPromptCacheHitTokens:         64,
 		RunPromptCacheMissTokens:        36,
 		LLMReturnLLMChatCompletionCount: 1,
+		LLMReturnToolCallCount:          2,
 		RunLLMChatCompletionCount:       1,
+		RunToolCallCount:                2,
 	})
 	assertEventTypes(t, postEvents, "debug.postCall")
 	if got := postEvents[0].Data().String("taskId"); got != "task_sub_1" {
@@ -297,8 +299,13 @@ func TestDispatcherIncludesTaskIDOnDebugEvents(t *testing.T) {
 	completionDetails, _ := llmUsage["completionTokensDetails"].(map[string]any)
 	if promptDetails["cacheHitTokens"] != 64 || promptDetails["cacheMissTokens"] != 36 ||
 		completionDetails["reasoningTokens"] != 12 ||
-		llmUsage["llmChatCompletionCount"] != 1 {
+		llmUsage["llmChatCompletionCount"] != 1 ||
+		llmUsage["toolCallCount"] != 2 {
 		t.Fatalf("expected detailed llm usage, got %#v", usage)
+	}
+	runUsage, _ := usage["runUsage"].(map[string]any)
+	if runUsage["toolCallCount"] != 2 {
+		t.Fatalf("expected run tool call usage, got %#v", usage)
 	}
 }
 
@@ -312,13 +319,14 @@ func TestDispatcherTerminalUsageIncludesLLMChatCompletionCountWithoutTokens(t *t
 		ChatID:                    "chat_1",
 		ModelKey:                  "mock",
 		RunLLMChatCompletionCount: 1,
+		RunToolCallCount:          3,
 	})
 	dispatcher.Dispatch(InputRunComplete{FinishReason: "stop"})
 	events := dispatcher.Complete()
 	assertEventTypes(t, events, "run.complete")
 
 	usage, _ := events[0].Data().Value("usage").(map[string]any)
-	if usage == nil || usage["llmChatCompletionCount"] != 1 {
+	if usage == nil || usage["llmChatCompletionCount"] != 1 || usage["toolCallCount"] != 3 {
 		t.Fatalf("expected terminal usage with llmChatCompletionCount, got %#v", events[0].ToData())
 	}
 }
@@ -344,6 +352,7 @@ func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) 
 		LLMReturnPromptCacheHitTokens:   64,
 		LLMReturnPromptCacheMissTokens:  36,
 		LLMReturnLLMChatCompletionCount: 1,
+		LLMReturnToolCallCount:          2,
 		RunPromptTokens:                 300,
 		RunCompletionTokens:             75,
 		RunTotalTokens:                  375,
@@ -352,6 +361,7 @@ func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) 
 		RunPromptCacheHitTokens:         128,
 		RunPromptCacheMissTokens:        172,
 		RunLLMChatCompletionCount:       2,
+		RunToolCallCount:                5,
 	})
 	assertEventTypes(t, events, "usage.snapshot")
 	data := events[0].Data()
@@ -370,8 +380,11 @@ func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) 
 	if _, exists := current["llmChatCompletionCount"]; exists {
 		t.Fatalf("did not expect current llmChatCompletionCount, got %#v", usage)
 	}
+	if current["toolCallCount"] != 2 {
+		t.Fatalf("expected current toolCallCount, got %#v", usage)
+	}
 	runPromptDetails, _ := run["promptTokensDetails"].(map[string]any)
-	if runPromptDetails["cacheHitTokens"] != 128 || runPromptDetails["cacheMissTokens"] != 172 || run["llmChatCompletionCount"] != 2 {
+	if runPromptDetails["cacheHitTokens"] != 128 || runPromptDetails["cacheMissTokens"] != 172 || run["llmChatCompletionCount"] != 2 || run["toolCallCount"] != 5 {
 		t.Fatalf("expected detailed run usage, got %#v", usage)
 	}
 	cw, _ := data.Value("contextWindow").(map[string]any)

@@ -1870,6 +1870,7 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 						"cacheMissTokens": 36,
 					},
 					"llmChatCompletionCount": 1,
+					"toolCallCount":          2,
 				},
 			},
 		},
@@ -1894,6 +1895,9 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 	}
 	if _, exists := usage["llmChatCompletionCount"]; exists {
 		t.Fatalf("did not expect persisted usage snapshot llmChatCompletionCount, got %#v", lines[0])
+	}
+	if toIntValue(usage["toolCallCount"]) != 2 {
+		t.Fatalf("expected persisted usage snapshot toolCallCount, got %#v", lines[0])
 	}
 	contextWindow, _ := lines[0]["contextWindow"].(map[string]any)
 	if toIntValue(contextWindow["maxSize"]) != 128000 || toIntValue(contextWindow["actualSize"]) != 100 || toIntValue(contextWindow["estimatedSize"]) != 200 {
@@ -4578,6 +4582,7 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 			"completionTokens":       50,
 			"totalTokens":            150,
 			"llmChatCompletionCount": 1,
+			"toolCallCount":          2,
 		},
 		Debug: map[string]any{
 			"preCall": map[string]any{
@@ -4662,6 +4667,9 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 	if _, exists := usageSnapshotCurrent["llmChatCompletionCount"]; exists {
 		t.Fatalf("did not expect usage.snapshot current llmChatCompletionCount %#v", detail.Events[5])
 	}
+	if toIntValue(usageSnapshotCurrent["toolCallCount"]) != 2 {
+		t.Fatalf("expected usage.snapshot current toolCallCount %#v", detail.Events[5])
+	}
 	if _, exists := usageSnapshotUsage["run"]; exists {
 		t.Fatalf("did not expect usage.snapshot run usage %#v", detail.Events[5])
 	}
@@ -4678,6 +4686,9 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 	llmUsage, _ := postCallUsage["llmReturnUsage"].(map[string]any)
 	if toIntValue(llmUsage["promptTokens"]) != 100 || toIntValue(llmUsage["completionTokens"]) != 50 || toIntValue(llmUsage["totalTokens"]) != 150 {
 		t.Fatalf("unexpected debug.postCall usage %#v", detail.Events[6])
+	}
+	if toIntValue(llmUsage["toolCallCount"]) != 2 {
+		t.Fatalf("unexpected debug.postCall toolCallCount %#v", detail.Events[6])
 	}
 	if _, exists := postCallUsage["runUsage"]; exists {
 		t.Fatalf("did not expect debug.postCall run usage %#v", detail.Events[6])

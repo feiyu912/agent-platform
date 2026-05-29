@@ -59,6 +59,7 @@ func (s *ArchiveStore) initDB() error {
 			USAGE_PROMPT_CACHE_HIT_TOKENS_  INTEGER NOT NULL DEFAULT 0,
 			USAGE_PROMPT_CACHE_MISS_TOKENS_ INTEGER NOT NULL DEFAULT 0,
 			USAGE_LLM_CHAT_COMPLETION_COUNT_ INTEGER NOT NULL DEFAULT 0,
+			USAGE_TOOL_CALL_COUNT_ INTEGER NOT NULL DEFAULT 0,
 			JSONL_CONTENT_           TEXT NOT NULL DEFAULT '',
 			EVENTS_CONTENT_          TEXT NOT NULL DEFAULT '',
 			RAW_MESSAGES_CONTENT_    TEXT NOT NULL DEFAULT '',
@@ -83,6 +84,7 @@ func (s *ArchiveStore) initDB() error {
 			USAGE_PROMPT_CACHE_HIT_TOKENS_  INTEGER NOT NULL DEFAULT 0,
 			USAGE_PROMPT_CACHE_MISS_TOKENS_ INTEGER NOT NULL DEFAULT 0,
 			USAGE_LLM_CHAT_COMPLETION_COUNT_ INTEGER NOT NULL DEFAULT 0,
+			USAGE_TOOL_CALL_COUNT_ INTEGER NOT NULL DEFAULT 0,
 			FEEDBACK_TYPE_     TEXT NOT NULL DEFAULT '',
 			FEEDBACK_COMMENT_  TEXT NOT NULL DEFAULT '',
 			FEEDBACK_AT_       INTEGER NOT NULL DEFAULT 0
@@ -113,6 +115,7 @@ func (s *ArchiveStore) initDB() error {
 			"USAGE_PROMPT_CACHE_HIT_TOKENS_",
 			"USAGE_PROMPT_CACHE_MISS_TOKENS_",
 			"USAGE_LLM_CHAT_COMPLETION_COUNT_",
+			"USAGE_TOOL_CALL_COUNT_",
 		} {
 			_, _ = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s INTEGER NOT NULL DEFAULT 0", table, col))
 		}
@@ -161,14 +164,14 @@ func (s *ArchiveStore) ArchiveChat(chat ArchivedChat) error {
 			CHAT_ID_, CHAT_NAME_, AGENT_KEY_, TEAM_ID_, CREATED_AT_, UPDATED_AT_, ARCHIVED_AT_,
 			LAST_RUN_ID_, LAST_RUN_CONTENT_,
 			USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, USAGE_CACHED_TOKENS_, USAGE_REASONING_TOKENS_,
-			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_,
+			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_, USAGE_TOOL_CALL_COUNT_,
 			JSONL_CONTENT_, EVENTS_CONTENT_, RAW_MESSAGES_CONTENT_, HAS_ATTACHMENTS_
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		chat.Summary.ChatID, chat.Summary.ChatName, chat.Summary.AgentKey, nilIfEmpty(chat.Summary.TeamID),
 		chat.Summary.CreatedAt, chat.Summary.UpdatedAt, chat.Summary.ArchivedAt,
 		chat.Summary.LastRunID, chat.Summary.LastRunContent,
 		usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, usage.CachedTokens, usage.ReasoningTokens,
-		usage.PromptCacheHitTokens, usage.PromptCacheMissTokens, usage.LlmChatCompletionCount,
+		usage.PromptCacheHitTokens, usage.PromptCacheMissTokens, usage.LlmChatCompletionCount, usage.ToolCallCount,
 		chat.JSONLContent, chat.EventsContent, chat.RawMessagesContent, hasAttachments)
 	if err != nil {
 		return err
@@ -178,13 +181,13 @@ func (s *ArchiveStore) ArchiveChat(chat ArchivedChat) error {
 				RUN_ID_, CHAT_ID_, AGENT_KEY_, INITIAL_MESSAGE_, ASSISTANT_TEXT_, FINISH_REASON_,
 				STARTED_AT_, COMPLETED_AT_,
 				USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, USAGE_CACHED_TOKENS_, USAGE_REASONING_TOKENS_,
-				USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_,
+				USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_, USAGE_TOOL_CALL_COUNT_,
 				FEEDBACK_TYPE_, FEEDBACK_COMMENT_, FEEDBACK_AT_
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			run.RunID, run.ChatID, run.AgentKey, run.InitialMessage, run.AssistantText, run.FinishReason,
 			run.StartedAt, run.CompletedAt,
 			run.Usage.PromptTokens, run.Usage.CompletionTokens, run.Usage.TotalTokens, run.Usage.CachedTokens, run.Usage.ReasoningTokens,
-			run.Usage.PromptCacheHitTokens, run.Usage.PromptCacheMissTokens, run.Usage.LlmChatCompletionCount,
+			run.Usage.PromptCacheHitTokens, run.Usage.PromptCacheMissTokens, run.Usage.LlmChatCompletionCount, run.Usage.ToolCallCount,
 			run.FeedbackType, run.FeedbackComment, run.FeedbackAt)
 		if err != nil {
 			return err
@@ -223,7 +226,7 @@ func (s *ArchiveStore) ListArchived(agentKey string, limit, offset int) ([]Archi
 	rows, err := s.db.Query(`SELECT CHAT_ID_, CHAT_NAME_, AGENT_KEY_, COALESCE(TEAM_ID_,''), CREATED_AT_, UPDATED_AT_, ARCHIVED_AT_,
 			LAST_RUN_ID_, LAST_RUN_CONTENT_,
 			USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, USAGE_CACHED_TOKENS_, USAGE_REASONING_TOKENS_,
-			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_, HAS_ATTACHMENTS_
+			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_, USAGE_TOOL_CALL_COUNT_, HAS_ATTACHMENTS_
 		FROM ARCHIVED_CHATS `+where+`
 		ORDER BY ARCHIVED_AT_ DESC, UPDATED_AT_ DESC, CHAT_ID_ DESC
 		LIMIT ? OFFSET ?`, queryArgs...)
@@ -250,7 +253,7 @@ func (s *ArchiveStore) LoadArchived(chatID string) (*ArchivedChat, error) {
 	row := s.db.QueryRow(`SELECT CHAT_ID_, CHAT_NAME_, AGENT_KEY_, COALESCE(TEAM_ID_,''), CREATED_AT_, UPDATED_AT_, ARCHIVED_AT_,
 			LAST_RUN_ID_, LAST_RUN_CONTENT_,
 			USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, USAGE_CACHED_TOKENS_, USAGE_REASONING_TOKENS_,
-			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_,
+			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_, USAGE_TOOL_CALL_COUNT_,
 			JSONL_CONTENT_, EVENTS_CONTENT_, RAW_MESSAGES_CONTENT_, HAS_ATTACHMENTS_
 		FROM ARCHIVED_CHATS WHERE CHAT_ID_=?`, chatID)
 	archived, err := scanArchivedChatRow(row)
@@ -378,7 +381,7 @@ func (s *ArchiveStore) listRunsLocked(chatID string) ([]RunSummary, error) {
 	rows, err := s.db.Query(`SELECT RUN_ID_, CHAT_ID_, AGENT_KEY_, INITIAL_MESSAGE_, ASSISTANT_TEXT_, FINISH_REASON_,
 		STARTED_AT_, COMPLETED_AT_,
 		USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, USAGE_CACHED_TOKENS_, USAGE_REASONING_TOKENS_,
-		USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_,
+		USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_, USAGE_LLM_CHAT_COMPLETION_COUNT_, USAGE_TOOL_CALL_COUNT_,
 		FEEDBACK_TYPE_, FEEDBACK_COMMENT_, FEEDBACK_AT_
 		FROM ARCHIVED_RUNS WHERE CHAT_ID_=? ORDER BY COMPLETED_AT_ DESC, RUN_ID_ DESC`, chatID)
 	if err != nil {
@@ -393,7 +396,7 @@ func (s *ArchiveStore) listRunsLocked(chatID string) ([]RunSummary, error) {
 			&item.StartedAt, &item.CompletedAt,
 			&item.Usage.PromptTokens, &item.Usage.CompletionTokens, &item.Usage.TotalTokens,
 			&item.Usage.CachedTokens, &item.Usage.ReasoningTokens,
-			&item.Usage.PromptCacheHitTokens, &item.Usage.PromptCacheMissTokens, &item.Usage.LlmChatCompletionCount,
+			&item.Usage.PromptCacheHitTokens, &item.Usage.PromptCacheMissTokens, &item.Usage.LlmChatCompletionCount, &item.Usage.ToolCallCount,
 			&item.FeedbackType, &item.FeedbackComment, &item.FeedbackAt,
 		); err != nil {
 			return nil, err
@@ -495,7 +498,7 @@ func scanArchivedChatRow(row archivedSummaryScanner) (*ArchivedChat, error) {
 		&item.Summary.LastRunID, &item.Summary.LastRunContent,
 		&usage.PromptTokens, &usage.CompletionTokens, &usage.TotalTokens,
 		&usage.CachedTokens, &usage.ReasoningTokens,
-		&usage.PromptCacheHitTokens, &usage.PromptCacheMissTokens, &usage.LlmChatCompletionCount,
+		&usage.PromptCacheHitTokens, &usage.PromptCacheMissTokens, &usage.LlmChatCompletionCount, &usage.ToolCallCount,
 		&item.JSONLContent, &item.EventsContent, &item.RawMessagesContent, &hasAttachments,
 	); err != nil {
 		return nil, err
@@ -519,7 +522,7 @@ func scanArchivedSummaries(rows *sql.Rows) ([]ArchivedSummary, error) {
 			&item.LastRunID, &item.LastRunContent,
 			&usage.PromptTokens, &usage.CompletionTokens, &usage.TotalTokens,
 			&usage.CachedTokens, &usage.ReasoningTokens,
-			&usage.PromptCacheHitTokens, &usage.PromptCacheMissTokens, &usage.LlmChatCompletionCount, &hasAttachments,
+			&usage.PromptCacheHitTokens, &usage.PromptCacheMissTokens, &usage.LlmChatCompletionCount, &usage.ToolCallCount, &hasAttachments,
 		); err != nil {
 			return nil, err
 		}

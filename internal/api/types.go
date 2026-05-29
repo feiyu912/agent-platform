@@ -576,6 +576,7 @@ type ChatUsageData struct {
 	CompletionTokensDetails *CompletionTokenDetails `json:"completionTokensDetails,omitempty"`
 	EstimatedCost           *EstimatedCost          `json:"estimatedCost,omitempty"`
 	LlmChatCompletionCount  int                     `json:"llmChatCompletionCount,omitempty"`
+	ToolCallCount           int                     `json:"toolCallCount,omitempty"`
 }
 
 type ChatUsageBreakdown struct {

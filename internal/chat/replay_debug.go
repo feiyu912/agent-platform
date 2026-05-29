@@ -183,6 +183,9 @@ func usagePayloadFromMap(usage map[string]any, includeLLMChatCompletionCount boo
 			out["llmChatCompletionCount"] = count
 		}
 	}
+	if count := toIntFromKeys(usage, "toolCallCount", "tool_call_count"); count > 0 {
+		out["toolCallCount"] = count
+	}
 	if estimatedCost, ok := usage["estimatedCost"].(map[string]any); ok && len(estimatedCost) > 0 {
 		out["estimatedCost"] = cloneStringAnyMap(estimatedCost)
 	}
@@ -198,7 +201,8 @@ func hasProviderUsagePayload(usage map[string]any) bool {
 		toIntFromKeys(usage, "totalTokens", "total_tokens") > 0 ||
 		usageCacheHitTokensFromMap(usage) > 0 ||
 		toNestedIntFromKeys(usage, "completionTokensDetails", "completion_tokens_details", "reasoningTokens", "reasoning_tokens") > 0 ||
-		usageCacheMissTokensFromMap(usage) > 0
+		usageCacheMissTokensFromMap(usage) > 0 ||
+		toIntFromKeys(usage, "toolCallCount", "tool_call_count") > 0
 }
 
 func addUsageDetailsToMap(out map[string]any, cachedTokens int, reasoningTokens int, promptCacheHitTokens int, promptCacheMissTokens int) {

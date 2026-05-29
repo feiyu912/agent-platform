@@ -68,7 +68,7 @@ func (d *StreamEventDispatcher) closeForSwitch(next string) []StreamEvent {
 }
 
 func (d *StreamEventDispatcher) usagePayload() map[string]any {
-	if d.state.runUsage == nil || (d.state.runUsage.TotalTokens == 0 && d.state.runUsage.LLMChatCompletionCount == 0) {
+	if d.state.runUsage == nil || (d.state.runUsage.TotalTokens == 0 && d.state.runUsage.LLMChatCompletionCount == 0 && d.state.runUsage.ToolCallCount == 0) {
 		return nil
 	}
 	return usageMap(d.state.runUsage)
@@ -86,6 +86,9 @@ func usageMap(usage *runUsageState) map[string]any {
 	addDetailedUsage(out, usage.CachedTokens, usage.ReasoningTokens, usage.PromptCacheHitTokens, usage.PromptCacheMissTokens)
 	if usage.LLMChatCompletionCount > 0 {
 		out["llmChatCompletionCount"] = usage.LLMChatCompletionCount
+	}
+	if usage.ToolCallCount > 0 {
+		out["toolCallCount"] = usage.ToolCallCount
 	}
 	return out
 }

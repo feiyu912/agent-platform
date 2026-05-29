@@ -74,6 +74,7 @@ type llmRunStream struct {
 	lastCallPromptCacheHitTokens   int
 	lastCallPromptCacheMissTokens  int
 	lastCallLLMChatCompletionCount int
+	lastCallToolCallCount          int
 	runPromptTokens                int
 	runCompletionTokens            int
 	runTotalTokens                 int
@@ -82,6 +83,8 @@ type llmRunStream struct {
 	runPromptCacheHitTokens        int
 	runPromptCacheMissTokens       int
 	runLLMChatCompletionCount      int
+	runToolCallCount               int
+	lastSnapshotToolCallCount      int
 	pendingUsageEmit               bool
 }
 
