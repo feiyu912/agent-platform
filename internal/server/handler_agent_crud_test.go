@@ -481,6 +481,13 @@ func TestAgentEditorOptionsHTTP(t *testing.T) {
 	if len(response.Data.ContextTags) != 4 || response.Data.ContextTags[0].Key != "system" || response.Data.ContextTags[3].Key != "all-agents" {
 		t.Fatalf("unexpected context tags %#v", response.Data.ContextTags)
 	}
+	if got := response.Data.VisibilityScopes; len(got) != 4 ||
+		got[0].Key != "nav" || got[0].Label != "nav" ||
+		got[1].Key != "copilot" || got[1].Label != "copilot" ||
+		got[2].Key != "invoke" || got[2].Label != "invoke" ||
+		got[3].Key != "internal" || got[3].Label != "internal" {
+		t.Fatalf("unexpected visibility scopes %#v", got)
+	}
 	if response.Data.ProxyConfigSchema.DefaultTimeoutMs != 300000 || len(response.Data.ProxyConfigSchema.Fields) != 6 || !response.Data.ProxyConfigSchema.Fields[0].Required {
 		t.Fatalf("unexpected proxy schema %#v", response.Data.ProxyConfigSchema)
 	}

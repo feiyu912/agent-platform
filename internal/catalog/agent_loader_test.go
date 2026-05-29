@@ -107,7 +107,7 @@ func TestParseAgentFileKeepsExplicitProxySSETransport(t *testing.T) {
 	}
 }
 
-func TestParseAgentFileDefaultsModeVisibilityAndKanban(t *testing.T) {
+func TestParseAgentFileDefaultsModeVisibilityAndConcurrency(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")
 	content := "" +
@@ -129,8 +129,8 @@ func TestParseAgentFileDefaultsModeVisibilityAndKanban(t *testing.T) {
 	if !reflect.DeepEqual(def.VisibilityScopes, []string{"nav"}) {
 		t.Fatalf("visibility scopes = %#v", def.VisibilityScopes)
 	}
-	if def.KanbanConcurrency != 1 {
-		t.Fatalf("kanban concurrency = %d, want 1", def.KanbanConcurrency)
+	if def.Concurrency != 1 {
+		t.Fatalf("concurrency = %d, want 1", def.Concurrency)
 	}
 }
 
@@ -192,7 +192,7 @@ func TestParseAgentFileAcceptsPlanExecuteModeAliases(t *testing.T) {
 	}
 }
 
-func TestParseAgentFileReadsVisibilityAndKanban(t *testing.T) {
+func TestParseAgentFileReadsVisibilityAndConcurrency(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")
 	content := "" +
@@ -209,8 +209,7 @@ func TestParseAgentFileReadsVisibilityAndKanban(t *testing.T) {
 		"    - invoke\n" +
 		"    - bad-scope\n" +
 		"    - invoke\n" +
-		"kanban:\n" +
-		"  concurrency: 3\n"
+		"concurrency: 3\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write agent file: %v", err)
 	}
@@ -225,26 +224,68 @@ func TestParseAgentFileReadsVisibilityAndKanban(t *testing.T) {
 	if !reflect.DeepEqual(def.VisibilityScopes, []string{"internal", "invoke"}) {
 		t.Fatalf("visibility scopes = %#v", def.VisibilityScopes)
 	}
-	if def.KanbanConcurrency != 3 {
-		t.Fatalf("kanban concurrency = %d, want 3", def.KanbanConcurrency)
+	if def.Concurrency != 3 {
+		t.Fatalf("concurrency = %d, want 3", def.Concurrency)
 	}
 }
 
-func TestParseAgentFileRejectsInvalidKanbanConcurrency(t *testing.T) {
+func TestParseAgentFileRejectsInvalidConcurrency(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: demo\n" +
+		"name: Demo\n" +
+		"concurrency: 0\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "concurrency") {
+		t.Fatalf("expected concurrency error, got %v", err)
+	}
+}
+
+func TestParseAgentFileReadsLegacyKanbanConcurrency(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")
 	content := "" +
 		"key: demo\n" +
 		"name: Demo\n" +
 		"kanban:\n" +
-		"  concurrency: 0\n"
+		"  concurrency: 2\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write agent file: %v", err)
 	}
 
-	_, err := parseAgentFile(path)
-	if err == nil || !strings.Contains(err.Error(), "kanban.concurrency") {
-		t.Fatalf("expected kanban concurrency error, got %v", err)
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	if def.Concurrency != 2 {
+		t.Fatalf("concurrency = %d, want 2", def.Concurrency)
+	}
+}
+
+func TestParseAgentFileConcurrencyOverridesLegacyKanbanConcurrency(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: demo\n" +
+		"name: Demo\n" +
+		"concurrency: 4\n" +
+		"kanban:\n" +
+		"  concurrency: 2\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	if def.Concurrency != 4 {
+		t.Fatalf("concurrency = %d, want 4", def.Concurrency)
 	}
 }
 

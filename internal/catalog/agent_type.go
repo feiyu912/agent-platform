@@ -121,14 +121,22 @@ func normalizeAgentVisibilityScope(raw string) string {
 	}
 }
 
-func parseAgentKanbanConcurrency(value any) (int, error) {
-	node := mapNode(value)
+func parseAgentConcurrency(root map[string]any) (int, error) {
+	if _, ok := root["concurrency"]; ok {
+		concurrency := intNode(root["concurrency"])
+		if concurrency <= 0 {
+			return 0, fmt.Errorf("concurrency must be greater than or equal to 1")
+		}
+		return concurrency, nil
+	}
+
+	node := mapNode(root["kanban"])
 	if len(node) == 0 {
 		return 1, nil
 	}
 	concurrency := intNode(node["concurrency"])
 	if concurrency <= 0 {
-		return 0, fmt.Errorf("kanban.concurrency must be greater than or equal to 1")
+		return 0, fmt.Errorf("concurrency must be greater than or equal to 1")
 	}
 	return concurrency, nil
 }

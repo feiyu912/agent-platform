@@ -30,32 +30,32 @@ type Registry interface {
 }
 
 type AgentDefinition struct {
-	Key               string
-	Name              string
-	Icon              any
-	Description       string
-	Role              string
-	Type              string
-	Wonders           []string
-	ModelKey          string
-	Mode              string
-	CoderBackend      string
-	ACPProxyID        string
-	VisibilityScopes  []string
-	KanbanConcurrency int
-	Tools             []string
-	Skills            []string
-	Controls          []map[string]any
-	Runtime           map[string]any
-	Workspace         AgentWorkspaceConfig
-	Project           AgentProjectConfig
-	ReactMaxSteps     int
-	ContextTags       []string
-	Budget            map[string]any
-	StageSettings     map[string]any
-	ToolOverrides     map[string]api.ToolDetailResponse
-	RuntimePrompts    AgentRuntimePrompts
-	AgentDir          string
+	Key              string
+	Name             string
+	Icon             any
+	Description      string
+	Role             string
+	Type             string
+	Wonders          []string
+	ModelKey         string
+	Mode             string
+	CoderBackend     string
+	ACPProxyID       string
+	VisibilityScopes []string
+	Concurrency      int
+	Tools            []string
+	Skills           []string
+	Controls         []map[string]any
+	Runtime          map[string]any
+	Workspace        AgentWorkspaceConfig
+	Project          AgentProjectConfig
+	ReactMaxSteps    int
+	ContextTags      []string
+	Budget           map[string]any
+	StageSettings    map[string]any
+	ToolOverrides    map[string]api.ToolDetailResponse
+	RuntimePrompts   AgentRuntimePrompts
+	AgentDir         string
 
 	// PROXY mode: forward /api/query to a remote AGW-compatible service.
 	ProxyConfig *ProxyConfig
@@ -420,11 +420,11 @@ func EffectiveAgentVisibilityScopes(def AgentDefinition) []string {
 	return append([]string(nil), def.VisibilityScopes...)
 }
 
-func EffectiveAgentKanbanConcurrency(def AgentDefinition) int {
-	if def.KanbanConcurrency <= 0 {
+func EffectiveAgentConcurrency(def AgentDefinition) int {
+	if def.Concurrency <= 0 {
 		return 1
 	}
-	return def.KanbanConcurrency
+	return def.Concurrency
 }
 
 func projectPromptFilesMeta(files []AgentProjectPromptFile) []map[string]any {

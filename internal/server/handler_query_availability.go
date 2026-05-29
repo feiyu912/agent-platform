@@ -23,7 +23,7 @@ func (s *Server) handleQueryAvailability(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) queryAvailability(admission queryAdmission) api.QueryAvailabilityResponse {
-	limit := catalog.EffectiveAgentKanbanConcurrency(admission.agentDef)
+	limit := catalog.EffectiveAgentConcurrency(admission.agentDef)
 	if s.queryLimiter == nil {
 		return availabilityOK(admission.req.AgentKey, admission.req.ChatID, admission.req.TeamID, limit, nil)
 	}
@@ -31,7 +31,7 @@ func (s *Server) queryAvailability(admission queryAdmission) api.QueryAvailabili
 }
 
 func (s *Server) tryAcquireQuery(admission queryAdmission) (queryReleaseFunc, api.QueryAvailabilityResponse) {
-	limit := catalog.EffectiveAgentKanbanConcurrency(admission.agentDef)
+	limit := catalog.EffectiveAgentConcurrency(admission.agentDef)
 	if s.queryLimiter == nil {
 		return func() {}, availabilityOK(admission.req.AgentKey, admission.req.ChatID, admission.req.TeamID, limit, nil)
 	}

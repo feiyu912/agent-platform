@@ -444,6 +444,7 @@ type OpenAgentWorkspaceResponse struct {
 type AgentEditorOptionsResponse struct {
 	Models            []AgentEditorModelOption     `json:"models"`
 	ContextTags       []AgentEditorOption          `json:"contextTags"`
+	VisibilityScopes  []AgentEditorOption          `json:"visibilityScopes"`
 	Modes             []AgentEditorOption          `json:"modes"`
 	ProxyConfigSchema AgentEditorProxyConfigSchema `json:"proxyConfigSchema"`
 }

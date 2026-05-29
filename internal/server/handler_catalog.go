@@ -426,6 +426,12 @@ func (s *Server) buildAgentEditorOptions() api.AgentEditorOptionsResponse {
 			{Key: "owner", Label: "owner"},
 			{Key: "all-agents", Label: "all-agents"},
 		},
+		VisibilityScopes: []api.AgentEditorOption{
+			{Key: "nav", Label: "nav"},
+			{Key: "copilot", Label: "copilot"},
+			{Key: "invoke", Label: "invoke"},
+			{Key: "internal", Label: "internal"},
+		},
 		Modes: []api.AgentEditorOption{
 			{Key: "REACT", Label: "REACT"},
 			{Key: "PLAN-EXECUTE", Label: "PLAN-EXECUTE"},

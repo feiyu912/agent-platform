@@ -264,21 +264,21 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		return AgentDefinition{}, nil, fmt.Errorf("agent file must be a map")
 	}
 	def := AgentDefinition{
-		Key:               stringNode(root["key"]),
-		Name:              stringNode(root["name"]),
-		Icon:              root["icon"],
-		Description:       stringNode(root["description"]),
-		Role:              stringNode(root["role"]),
-		Wonders:           normalizeWonderStrings(root["wonders"]),
-		Mode:              NormalizeAgentModeForRuntime(stringNode(root["mode"])),
-		VisibilityScopes:  parseAgentVisibilityScopes(root["visibility"]),
-		KanbanConcurrency: 1,
+		Key:              stringNode(root["key"]),
+		Name:             stringNode(root["name"]),
+		Icon:             root["icon"],
+		Description:      stringNode(root["description"]),
+		Role:             stringNode(root["role"]),
+		Wonders:          normalizeWonderStrings(root["wonders"]),
+		Mode:             NormalizeAgentModeForRuntime(stringNode(root["mode"])),
+		VisibilityScopes: parseAgentVisibilityScopes(root["visibility"]),
+		Concurrency:      1,
 	}
-	kanbanConcurrency, err := parseAgentKanbanConcurrency(root["kanban"])
+	concurrency, err := parseAgentConcurrency(root)
 	if err != nil {
 		return AgentDefinition{}, nil, err
 	}
-	def.KanbanConcurrency = kanbanConcurrency
+	def.Concurrency = concurrency
 	agentType, err := normalizeAgentType(stringNode(root["type"]))
 	if err != nil {
 		return AgentDefinition{}, nil, err
