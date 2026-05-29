@@ -246,49 +246,6 @@ func TestParseAgentFileRejectsInvalidConcurrency(t *testing.T) {
 	}
 }
 
-func TestParseAgentFileReadsLegacyKanbanConcurrency(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "agent.yml")
-	content := "" +
-		"key: demo\n" +
-		"name: Demo\n" +
-		"kanban:\n" +
-		"  concurrency: 2\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write agent file: %v", err)
-	}
-
-	def, err := parseAgentFile(path)
-	if err != nil {
-		t.Fatalf("parse agent file: %v", err)
-	}
-	if def.Concurrency != 2 {
-		t.Fatalf("concurrency = %d, want 2", def.Concurrency)
-	}
-}
-
-func TestParseAgentFileConcurrencyOverridesLegacyKanbanConcurrency(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "agent.yml")
-	content := "" +
-		"key: demo\n" +
-		"name: Demo\n" +
-		"concurrency: 4\n" +
-		"kanban:\n" +
-		"  concurrency: 2\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write agent file: %v", err)
-	}
-
-	def, err := parseAgentFile(path)
-	if err != nil {
-		t.Fatalf("parse agent file: %v", err)
-	}
-	if def.Concurrency != 4 {
-		t.Fatalf("concurrency = %d, want 4", def.Concurrency)
-	}
-}
-
 func TestParseAgentFileIgnoresLegacyToolConfigBuckets(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "agent.yml")

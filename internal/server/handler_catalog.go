@@ -226,11 +226,15 @@ func (s *Server) applyCoderDefaultAgentConfig(definition map[string]any) map[str
 	defaults := s.deps.Config.CoderSettings.DefaultAgent
 	modelKey := strings.TrimSpace(defaults.ModelKey)
 	reasoningEffort := strings.TrimSpace(defaults.ReasoningEffort)
-	if modelKey == "" && reasoningEffort == "" {
+	_, hasConcurrency := definition["concurrency"]
+	if modelKey == "" && reasoningEffort == "" && hasConcurrency {
 		return definition
 	}
 
 	out := contracts.CloneMap(definition)
+	if !hasConcurrency {
+		out["concurrency"] = catalog.DefaultAgentConcurrency
+	}
 	modelConfig := contracts.CloneMap(contracts.AnyMapNode(out["modelConfig"]))
 	if modelConfig == nil {
 		modelConfig = map[string]any{}

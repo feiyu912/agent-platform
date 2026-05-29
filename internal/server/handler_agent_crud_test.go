@@ -176,6 +176,9 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	if len(scopes) != 1 || scopes[0] != "nav" {
 		t.Fatalf("coder visibility scopes = %#v, want [nav]", visibility["scopes"])
 	}
+	if created.Definition["concurrency"] != float64(1) {
+		t.Fatalf("expected coder default concurrency 1, got %#v", created.Definition["concurrency"])
+	}
 	if created.Source == nil {
 		t.Fatalf("expected created source")
 	}
@@ -189,6 +192,9 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	}
 	if strings.Contains(string(data), "\nworkspace:") || strings.Contains(string(data), "- copilot") {
 		t.Fatalf("created coder file should omit workspace and copilot scope:\n%s", data)
+	}
+	if !strings.Contains(string(data), "\nconcurrency: 1\n") {
+		t.Fatalf("created coder file should persist default concurrency:\n%s", data)
 	}
 
 	var openedPath string

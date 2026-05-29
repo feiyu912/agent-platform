@@ -422,7 +422,7 @@ func EffectiveAgentVisibilityScopes(def AgentDefinition) []string {
 
 func EffectiveAgentConcurrency(def AgentDefinition) int {
 	if def.Concurrency <= 0 {
-		return 1
+		return DefaultAgentConcurrency
 	}
 	return def.Concurrency
 }

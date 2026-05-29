@@ -11,6 +11,7 @@ const AgentModeCoder = "CODER"
 const AgentCoderBackendNative = "native"
 const AgentCoderBackendACP = "acp"
 const AgentWorkspaceRootChat = "@chat"
+const DefaultAgentConcurrency = 1
 
 var defaultAgentVisibilityScopes = []string{"nav"}
 
@@ -129,16 +130,7 @@ func parseAgentConcurrency(root map[string]any) (int, error) {
 		}
 		return concurrency, nil
 	}
-
-	node := mapNode(root["kanban"])
-	if len(node) == 0 {
-		return 1, nil
-	}
-	concurrency := intNode(node["concurrency"])
-	if concurrency <= 0 {
-		return 0, fmt.Errorf("concurrency must be greater than or equal to 1")
-	}
-	return concurrency, nil
+	return DefaultAgentConcurrency, nil
 }
 
 func parseAgentProjectConfig(value any) AgentProjectConfig {
