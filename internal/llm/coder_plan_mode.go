@@ -13,6 +13,7 @@ import (
 
 var coderPlanningModePlanTools = []string{
 	"file_read",
+	"file_glob",
 	"file_grep",
 	"datetime",
 	"ask_user_question",

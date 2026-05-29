@@ -205,7 +205,7 @@ func fileAccessPlanInput(toolName string, args map[string]any) (filetools.Access
 	switch strings.ToLower(strings.TrimSpace(toolName)) {
 	case "file_read":
 		return filetools.ReadAccess, mapStringArg(args, "file_path"), strings.TrimSpace(mapStringArg(args, "file_path")) != ""
-	case "file_grep":
+	case "file_glob", "file_grep":
 		rawPath := strings.TrimSpace(mapStringArg(args, "path"))
 		if rawPath == "" {
 			rawPath = "."

@@ -19,6 +19,7 @@ var requiredBuiltinToolNames = []string{
 	"desktop_action",
 	"desktop_cdp",
 	"file_edit",
+	"file_glob",
 	"file_grep",
 	"file_read",
 	"file_write",

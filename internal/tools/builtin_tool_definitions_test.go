@@ -119,6 +119,36 @@ func TestFileGrepOutputModeEnumIsSchemaArray(t *testing.T) {
 	}
 }
 
+func TestFileGlobSchemaIncludesRequiredPattern(t *testing.T) {
+	defs, err := LoadEmbeddedToolDefinitions()
+	if err != nil {
+		t.Fatalf("load embedded tool definitions: %v", err)
+	}
+
+	var fileGlobDef map[string]any
+	for _, def := range defs {
+		if def.Name == "file_glob" {
+			fileGlobDef = def.Parameters
+			break
+		}
+	}
+	if fileGlobDef == nil {
+		t.Fatal("expected file_glob builtin tool definition")
+	}
+
+	properties := mapChild(t, fileGlobDef, "properties")
+	if _, ok := properties["pattern"]; !ok {
+		t.Fatal("expected file_glob pattern property")
+	}
+	required, ok := fileGlobDef["required"].([]any)
+	if !ok {
+		t.Fatalf("expected file_glob required array, got %#v", fileGlobDef["required"])
+	}
+	if len(required) != 1 || required[0] != "pattern" {
+		t.Fatalf("expected file_glob to require pattern, got %#v", required)
+	}
+}
+
 func TestEmbeddedToolDescriptionsAreEnglishFriendlyAndComplete(t *testing.T) {
 	defs, err := LoadEmbeddedToolDefinitions()
 	if err != nil {

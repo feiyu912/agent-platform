@@ -21,6 +21,7 @@ var coderAgentProfile = agentModeProfile{
 		"file_read",
 		"file_write",
 		"file_edit",
+		"file_glob",
 		"file_grep",
 		"datetime",
 	},

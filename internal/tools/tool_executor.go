@@ -111,6 +111,8 @@ func (t *RuntimeToolExecutor) Invoke(ctx context.Context, toolName string, args 
 		return t.invokeWrite(ctx, args, execCtx)
 	case "file_edit":
 		return t.invokeEdit(ctx, args, execCtx)
+	case "file_glob":
+		return t.invokeGlob(ctx, args, execCtx)
 	case "file_grep":
 		return t.invokeGrep(ctx, args, execCtx)
 	case "plan_add_tasks":

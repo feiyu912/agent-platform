@@ -77,7 +77,7 @@ func (s *llmRunStream) toolResultChatDir() string {
 
 func toolResultSpillEligible(toolName string) bool {
 	switch strings.TrimSpace(toolName) {
-	case "bash", "file_read", "file_grep":
+	case "bash", "file_read", "file_glob", "file_grep":
 		return true
 	default:
 		return false

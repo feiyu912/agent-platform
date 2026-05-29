@@ -20,7 +20,7 @@ func TestResolveAgentModeCoder(t *testing.T) {
 
 func TestCoderPlanningStageToolsAreReadOnlyPlusQuestionsAndPlan(t *testing.T) {
 	stream := &coderPlanningStream{}
-	want := []string{"file_read", "file_grep", "datetime", "ask_user_question", "planning_write"}
+	want := []string{"file_read", "file_glob", "file_grep", "datetime", "ask_user_question", "planning_write"}
 	if got := stream.planStageTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("planStageTools()=%#v want %#v", got, want)
 	}
