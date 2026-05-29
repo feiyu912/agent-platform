@@ -393,9 +393,6 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 	if def.Key == "" {
 		return AgentDefinition{}, nil, fmt.Errorf("agent key is required")
 	}
-	if def.Name == "" {
-		def.Name = def.Key
-	}
 	if def.Description == "" {
 		def.Description = def.Key
 	}

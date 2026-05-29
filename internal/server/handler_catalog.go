@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/catalog"
@@ -209,6 +211,7 @@ func (s *Server) createAgent(ctx context.Context, req api.CreateAgentRequest) (a
 	}
 	key := strings.TrimSpace(req.Key)
 	definition := s.applyCoderDefaultAgentConfig(req.Definition)
+	key, definition = s.normalizeCoderCreation(key, definition)
 	if _, err := editor.CreateEditableAgent(key, definition, req.SoulPrompt, req.AgentsPrompt); err != nil {
 		return api.AgentDetailResponse{}, mapAgentEditError(err)
 	}
@@ -258,6 +261,26 @@ func (s *Server) applyCoderDefaultAgentConfig(definition map[string]any) map[str
 		out["modelConfig"] = modelConfig
 	}
 	return out
+}
+
+func (s *Server) normalizeCoderCreation(key string, definition map[string]any) (string, map[string]any) {
+	if definition == nil {
+		return key, definition
+	}
+	mode := catalog.NormalizeAgentModeForRuntime(stringValue(definition["mode"]))
+	if mode != catalog.AgentModeCoder {
+		return key, definition
+	}
+	newKey := fmt.Sprintf("coder-%d", time.Now().UnixMilli())
+	out := contracts.CloneMap(definition)
+	out["key"] = newKey
+
+	runtimeCfg := contracts.AnyMapNode(out["runtimeConfig"])
+	wsRoot := strings.TrimSpace(stringValue(runtimeCfg["workspaceRoot"]))
+	if wsRoot != "" {
+		out["name"] = filepath.Base(wsRoot)
+	}
+	return newKey, out
 }
 
 func (s *Server) updateAgent(ctx context.Context, req api.UpdateAgentRequest) (api.AgentDetailResponse, error) {

@@ -150,7 +150,10 @@ func TestAgentPlanExecuteCRUDUsesAPIModeContract(t *testing.T) {
 
 func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	fixture := newTestFixture(t)
-	workspaceDir := t.TempDir()
+	workspaceDir := filepath.Join(t.TempDir(), "project-alpha")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatalf("create workspace dir: %v", err)
+	}
 
 	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
 		"key": "coder-project",
@@ -170,17 +173,25 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 			},
 		},
 	})
-	if created.Key != "coder-project" || created.Mode != "CODER" {
+	if !strings.HasPrefix(created.Key, "coder-") || created.Mode != "CODER" {
 		t.Fatalf("unexpected coder create response %#v", created)
+	}
+	if created.Key == "coder-project" || created.Definition["key"] != created.Key {
+		t.Fatalf("expected generated coder key to be persisted, key=%q definition=%#v", created.Key, created.Definition["key"])
 	}
 	if _, ok := created.Definition["workspace"]; ok {
 		t.Fatalf("coder definition should not persist legacy workspace root, got %#v", created.Definition)
 	}
-	if _, ok := created.Definition["name"]; ok {
-		t.Fatalf("coder definition should not persist name, got %#v", created.Definition)
+	name, nameOk := created.Definition["name"].(string)
+	if !nameOk || name == "" {
+		t.Fatalf("coder definition name missing or empty: %#v", created.Definition["name"])
 	}
-	if created.Definition["icon"] != "folder" {
-		t.Fatalf("coder definition icon = %#v, want folder", created.Definition["icon"])
+	if name != filepath.Base(workspaceDir) {
+		t.Fatalf("coder definition name = %q, want %q", name, filepath.Base(workspaceDir))
+	}
+	icon, iconOk := created.Definition["icon"].(map[string]any)
+	if !iconOk || icon["name"] != "folder" {
+		t.Fatalf("coder definition icon = %#v, want {name: folder}", created.Definition["icon"])
 	}
 	visibility, _ := created.Definition["visibility"].(map[string]any)
 	scopes, _ := visibility["scopes"].([]any)
@@ -198,38 +209,40 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 		t.Fatalf("read created agent file: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) < 2 || lines[0] != "key: coder-project" || lines[1] != "mode: CODER" {
+	if len(lines) < 3 || lines[0] != "key: "+created.Key || lines[1] != "name: project-alpha" || lines[2] != "mode: CODER" {
 		t.Fatalf("unexpected YAML header order:\n%s", data)
 	}
-	if strings.Contains(string(data), "\nname:") || strings.Contains(string(data), "\nworkspace:") || strings.Contains(string(data), "- copilot") {
-		t.Fatalf("created coder file should omit name, workspace, and copilot scope:\n%s", data)
+	if !strings.Contains(string(data), "\nname:") || strings.Contains(string(data), "\nworkspace:") || strings.Contains(string(data), "- copilot") {
+		t.Fatalf("created coder file should include name, omit workspace and copilot scope:\n%s", data)
 	}
 	if !strings.Contains(string(data), "\nconcurrency: 1\n") {
 		t.Fatalf("created coder file should persist default concurrency:\n%s", data)
 	}
-	if !strings.Contains(string(data), "\nicon: folder\n") {
-		t.Fatalf("created coder file should persist folder icon:\n%s", data)
+	if !strings.Contains(string(data), "\n  name: folder\n") {
+		t.Fatalf("created coder file should persist icon.name: folder:\n%s", data)
 	}
 
 	updatedDefinition := created.Definition
 	updatedDefinition["name"] = "Renamed Coder"
 	updatedDefinition["icon"] = "sparkles"
 	updated := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/update", map[string]any{
-		"key":        "coder-project",
+		"key":        created.Key,
 		"definition": updatedDefinition,
 	})
-	if _, ok := updated.Definition["name"]; ok {
-		t.Fatalf("updated coder definition should not persist name, got %#v", updated.Definition)
+	updatedName, _ := updated.Definition["name"].(string)
+	if updatedName != "Renamed Coder" {
+		t.Fatalf("updated coder definition should persist name, got %#v", updated.Definition["name"])
 	}
-	if updated.Definition["icon"] != "folder" {
-		t.Fatalf("updated coder definition icon = %#v, want folder", updated.Definition["icon"])
+	updatedIcon, updatedIconOk := updated.Definition["icon"].(map[string]any)
+	if !updatedIconOk || updatedIcon["name"] != "folder" {
+		t.Fatalf("updated coder definition icon = %#v, want {name: folder}", updated.Definition["icon"])
 	}
 	updatedData, err := os.ReadFile(created.Source.Path)
 	if err != nil {
 		t.Fatalf("read updated agent file: %v", err)
 	}
-	if strings.Contains(string(updatedData), "\nname:") || !strings.Contains(string(updatedData), "\nicon: folder\n") {
-		t.Fatalf("updated coder file should omit name and persist folder icon:\n%s", updatedData)
+	if !strings.Contains(string(updatedData), "\nname: Renamed Coder\n") || !strings.Contains(string(updatedData), "\n  name: folder\n") {
+		t.Fatalf("updated coder file should persist name and icon.name: folder:\n%s", updatedData)
 	}
 
 	var openedPath string
@@ -241,7 +254,7 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	t.Cleanup(func() { openWorkspacePath = previousOpen })
 
 	opened := postAgentJSON[api.OpenAgentWorkspaceResponse](t, fixture.server, "/api/agent/open-workspace", map[string]any{
-		"agentKey": "coder-project",
+		"agentKey": created.Key,
 	})
 	if !opened.Opened || opened.WorkspaceDir != workspaceDir || openedPath != workspaceDir {
 		t.Fatalf("unexpected open response=%#v openedPath=%q", opened, openedPath)
@@ -346,7 +359,7 @@ func TestAgentModelConfigUpdatePersistsCoderDefaults(t *testing.T) {
 	}
 
 	body, err := json.Marshal(map[string]any{
-		"agentKey":        "coder-model-config",
+		"agentKey":        created.Key,
 		"modelKey":        "mock-model",
 		"reasoningEffort": "HIGH",
 	})
@@ -365,7 +378,7 @@ func TestAgentModelConfigUpdatePersistsCoderDefaults(t *testing.T) {
 	if len(rawResponse.Data) != 2 {
 		t.Fatalf("expected compact model config response, got %#v", rawResponse.Data)
 	}
-	if rawResponse.Data["key"] != "coder-model-config" {
+	if rawResponse.Data["key"] != created.Key {
 		t.Fatalf("expected response key, got %#v", rawResponse.Data)
 	}
 	rawModelConfig, _ := rawResponse.Data["modelConfig"].(map[string]any)
@@ -405,7 +418,7 @@ func TestAgentModelConfigUpdatePersistsNoneReasoning(t *testing.T) {
 	})
 
 	updated := postAgentJSON[api.AgentModelConfigResponse](t, fixture.server, "/api/agent/model-config", map[string]any{
-		"key":             "coder-model-none",
+		"key":             created.Key,
 		"modelKey":        "mock-model",
 		"reasoningEffort": "NONE",
 	})
@@ -427,7 +440,7 @@ func TestAgentModelConfigUpdatePersistsNoneReasoning(t *testing.T) {
 	agents := fixture.server.deps.Registry.Agents("all")
 	var matched api.AgentSummary
 	for _, agent := range agents {
-		if agent.Key == "coder-model-none" {
+		if agent.Key == created.Key {
 			matched = agent
 			break
 		}
@@ -440,7 +453,7 @@ func TestAgentModelConfigUpdatePersistsNoneReasoning(t *testing.T) {
 func TestAgentModelConfigUpdateRejectsInvalidRequests(t *testing.T) {
 	fixture := newTestFixture(t)
 	workspaceDir := t.TempDir()
-	postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
+	createdCoder := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
 		"key": "coder-model-errors",
 		"definition": map[string]any{
 			"key":  "coder-model-errors",
@@ -468,8 +481,8 @@ func TestAgentModelConfigUpdateRejectsInvalidRequests(t *testing.T) {
 	}{
 		{name: "missing agent", body: map[string]any{"agentKey": "missing-agent", "modelKey": "mock-model", "reasoningEffort": "HIGH"}, status: http.StatusNotFound},
 		{name: "non coder", body: map[string]any{"agentKey": "react-model-errors", "modelKey": "mock-model", "reasoningEffort": "HIGH"}, status: http.StatusBadRequest},
-		{name: "unknown model", body: map[string]any{"agentKey": "coder-model-errors", "modelKey": "missing-model", "reasoningEffort": "HIGH"}, status: http.StatusBadRequest},
-		{name: "bad reasoning", body: map[string]any{"agentKey": "coder-model-errors", "modelKey": "mock-model", "reasoningEffort": "FAST"}, status: http.StatusBadRequest},
+		{name: "unknown model", body: map[string]any{"agentKey": createdCoder.Key, "modelKey": "missing-model", "reasoningEffort": "HIGH"}, status: http.StatusBadRequest},
+		{name: "bad reasoning", body: map[string]any{"agentKey": createdCoder.Key, "modelKey": "mock-model", "reasoningEffort": "FAST"}, status: http.StatusBadRequest},
 		{name: "bad key", body: map[string]any{"agentKey": "../bad", "modelKey": "mock-model", "reasoningEffort": "HIGH"}, status: http.StatusBadRequest},
 	}
 	for _, tc := range cases {
@@ -727,13 +740,20 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 	if coderCreateFrame.Frame != ws.FrameResponse || coderCreateFrame.ID != "create-coder" {
 		t.Fatalf("unexpected coder create frame %#v", coderCreateFrame)
 	}
+	coderCreated, err := marshalAgentResponseData[api.AgentDetailResponse](coderCreateFrame.Data)
+	if err != nil {
+		t.Fatalf("decode coder create data: %v", err)
+	}
+	if !strings.HasPrefix(coderCreated.Key, "coder-") || coderCreated.Mode != "CODER" {
+		t.Fatalf("unexpected coder create key=%q mode=%q", coderCreated.Key, coderCreated.Mode)
+	}
 
 	if err := conn.WriteJSON(ws.RequestFrame{
 		Frame: ws.FrameRequest,
 		Type:  "/api/agent/model-config",
 		ID:    "update-coder-model",
 		Payload: ws.MarshalPayload(map[string]any{
-			"agentKey":        "ws-coder",
+			"agentKey":        coderCreated.Key,
 			"modelKey":        "mock-model",
 			"reasoningEffort": "NONE",
 		}),

@@ -47,6 +47,45 @@ quotedNull: "null"
 	}
 }
 
+func TestLoadYAMLTreePreservesQuotedNumericScalars(t *testing.T) {
+	content := []byte(`
+bareInt: 123
+quotedInt: "123"
+singleQuotedFloat: '1.5'
+bareFloat: 1.5
+rule: { bare: 42, quoted: "42" }
+`)
+
+	tree, err := LoadYAMLTreeBytes(content)
+	if err != nil {
+		t.Fatalf("load yaml tree: %v", err)
+	}
+
+	root := tree.(map[string]any)
+	if got := root["bareInt"]; got != int64(123) {
+		t.Fatalf("expected bare int to parse as int64, got %#v", got)
+	}
+	if got := root["quotedInt"]; got != "123" {
+		t.Fatalf("expected quoted int to remain string, got %#v", got)
+	}
+	if got := root["singleQuotedFloat"]; got != "1.5" {
+		t.Fatalf("expected quoted float to remain string, got %#v", got)
+	}
+	if got := root["bareFloat"]; got != 1.5 {
+		t.Fatalf("expected bare float to parse as float64, got %#v", got)
+	}
+	rule, ok := root["rule"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected flow map, got %#v", root["rule"])
+	}
+	if got := rule["bare"]; got != int64(42) {
+		t.Fatalf("expected flow map bare value to parse as int64, got %#v", got)
+	}
+	if got := rule["quoted"]; got != "42" {
+		t.Fatalf("expected flow map quoted value to remain string, got %#v", got)
+	}
+}
+
 func TestLoadYAMLTreeSupportsFlowMapListItems(t *testing.T) {
 	content := []byte(`
 commands:

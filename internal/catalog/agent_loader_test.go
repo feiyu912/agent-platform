@@ -597,8 +597,8 @@ func TestParseAgentFileAppliesCoderProfileDefaults(t *testing.T) {
 	if def.ReactMaxSteps != 0 {
 		t.Fatalf("react max steps = %d, want 0 after budget migration", def.ReactMaxSteps)
 	}
-	if def.Name != "coder" || def.Role != "coder" || def.Description != "coder" {
-		t.Fatalf("identity defaults = name:%q role:%q description:%q, want key fallback", def.Name, def.Role, def.Description)
+	if def.Name != "" || def.Role != "" || def.Description != "coder" {
+		t.Fatalf("identity defaults = name:%q role:%q description:%q, want name/role empty, description key fallback", def.Name, def.Role, def.Description)
 	}
 }
 

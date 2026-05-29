@@ -305,11 +305,13 @@ func parseYAMLScalar(raw string) any {
 		}
 		return nil
 	}
-	if n, err := strconv.ParseInt(value, 10, 64); err == nil {
-		return n
-	}
-	if f, err := strconv.ParseFloat(value, 64); err == nil && strings.Contains(value, ".") {
-		return f
+	if !quoted {
+		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return n
+		}
+		if f, err := strconv.ParseFloat(value, 64); err == nil && strings.Contains(value, ".") {
+			return f
+		}
 	}
 	return value
 }

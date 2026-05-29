@@ -247,8 +247,7 @@ func normalizeEditableDefinition(definition map[string]any) map[string]any {
 		normalized["mode"] = AgentModeForAPI(stringNode(normalized["mode"]))
 	}
 	if mode == AgentModeCoder {
-		delete(normalized, "name")
-		normalized["icon"] = "folder"
+		normalized["icon"] = map[string]any{"name": "folder"}
 		delete(normalized, "workspace")
 		normalizeEditableCoderVisibility(normalized)
 	}
