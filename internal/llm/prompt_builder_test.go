@@ -79,6 +79,44 @@ func TestBuildSystemPromptAddsCoderSystemPromptOnlyForMainCoderStage(t *testing.
 	}
 }
 
+func TestBuildSystemPromptRendersCoderSystemPromptPlaceholders(t *testing.T) {
+	prompt := buildSystemPrompt(QuerySession{
+		AgentKey:          "coder",
+		AgentName:         "Coder",
+		Mode:              "CODER",
+		PlanningMode:      false,
+		ToolNames:         []string{"bash", "file_read", "file_write", "file_edit", "ask_user_question"},
+		CoderSystemPrompt: "CODER {{agent_key}} {{agent_name}} {{planning_mode}} {{workspace_dir}} {{available_tools}} {{plan_stage_tools}} {{execute_stage_tools}} {{file_read_tool_name}} {{ask_user_question_tool_name}}",
+		RuntimeContext: RuntimeRequestContext{
+			LocalPaths: LocalPaths{WorkspaceDir: "/workspace"},
+		},
+	}, api.QueryRequest{Message: "hello"}, "", PromptBuildOptions{
+		Stage: "coder",
+		ToolDefinitions: []api.ToolDetailResponse{
+			{Name: "bash"},
+			{Name: "file_read"},
+			{Name: "file_write"},
+			{Name: "file_edit"},
+			{Name: "ask_user_question"},
+		},
+	})
+
+	for _, expected := range []string{
+		"CODER coder Coder false /workspace",
+		"bash, file_read, file_write, file_edit, ask_user_question",
+		"file_read, file_glob, file_grep, datetime, ask_user_question, planning_write",
+		"bash, file_read, file_write, file_edit",
+		"file_read ask_user_question",
+	} {
+		if !strings.Contains(prompt, expected) {
+			t.Fatalf("expected %q in rendered CODER prompt, got %q", expected, prompt)
+		}
+	}
+	if strings.Contains(prompt, "{{") || strings.Contains(prompt, "}}") {
+		t.Fatalf("expected CODER system placeholders to be rendered, got %q", prompt)
+	}
+}
+
 func TestBuildSystemPromptPlacesAgentIdentityBeforeSoul(t *testing.T) {
 	prompt := buildSystemPrompt(QuerySession{
 		AgentKey:   "demo",

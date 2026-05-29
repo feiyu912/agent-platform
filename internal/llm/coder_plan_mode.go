@@ -204,11 +204,44 @@ func (s *coderPlanningStream) planningPrompt() string {
 	if s.engine != nil && strings.TrimSpace(s.engine.cfg.CoderPrompts.PlanningPrompt) != "" {
 		custom = joinNonEmptyPrompts(custom, s.engine.cfg.CoderPrompts.PlanningPrompt)
 	}
-	prompt := strings.TrimSpace(custom)
-	if desc := s.buildExecuteToolDescriptions(); desc != "" {
-		prompt += "\n\n" + desc
+	executeToolDescriptions := s.buildExecuteToolDescriptions()
+	hasExecuteToolDescriptionsPlaceholder := promptHasTemplateValue(custom, "execute_tool_descriptions")
+	prompt := renderCoderPromptTemplate(custom, s.coderPromptTemplateValues(coderPromptTemplateData{
+		AvailableTools:          s.planStageTools(),
+		PlanStageTools:          s.planStageTools(),
+		ExecuteStageTools:       s.executeStageTools(),
+		ExecuteToolDescriptions: executeToolDescriptions,
+	}))
+	if executeToolDescriptions != "" && !hasExecuteToolDescriptionsPlaceholder {
+		prompt += "\n\n" + executeToolDescriptions
 	}
-	return prompt
+	return strings.TrimSpace(prompt)
+}
+
+func promptHasTemplateValue(prompt string, key string) bool {
+	return strings.Contains(prompt, "{{"+key+"}}") || strings.Contains(prompt, "{{ "+key+" }}")
+}
+
+func (s *coderPlanningStream) coderPromptTemplateValues(data coderPromptTemplateData) map[string]string {
+	return coderPromptTemplateValues(s.session, s.req, data)
+}
+
+func (s *coderPlanningStream) executionSystemPrompt(fallback string) string {
+	stagePrompt := strings.TrimSpace(s.settings.Execute.PrimaryPrompt())
+	if stagePrompt == "" {
+		stagePrompt = fallback
+	}
+	stagePrompt = renderCoderPromptTemplate(stagePrompt, s.coderPromptTemplateValues(coderPromptTemplateData{
+		AvailableTools:    s.executeStageTools(),
+		PlanStageTools:    s.planStageTools(),
+		ExecuteStageTools: s.executeStageTools(),
+	}))
+	coderPrompt := renderCoderPromptTemplate(s.session.CoderSystemPrompt, s.coderPromptTemplateValues(coderPromptTemplateData{
+		AvailableTools:    s.executeStageTools(),
+		PlanStageTools:    s.planStageTools(),
+		ExecuteStageTools: s.executeStageTools(),
+	}))
+	return joinNonEmptyPrompts(coderPrompt, stagePrompt)
 }
 
 func joinNonEmptyPrompts(values ...string) string {
@@ -468,10 +501,7 @@ func (s *coderPlanningStream) startExecutionStage() error {
 	}
 	executePrompt := "Execute the confirmed CODER plan.\n\nOriginal request:\n" + s.req.Message + "\n\nConfirmed plan:\n" + planningMarkdown
 	messages := make([]openAIMessage, 0, len(s.executeMessages)+2)
-	systemPrompt := s.settings.Execute.PrimaryPrompt()
-	if systemPrompt == "" {
-		systemPrompt = "Execute the confirmed CODER plan for the user."
-	}
+	systemPrompt := s.executionSystemPrompt("Execute the confirmed CODER plan for the user.")
 	messages = append(messages, openAIMessage{Role: "system", Content: systemPrompt})
 	messages = append(messages, s.executeMessages...)
 	messages = append(messages, openAIMessage{Role: "user", Content: executePrompt})
@@ -519,10 +549,7 @@ func (s *coderPlanningStream) startTaskStream(task *PlanTask) error {
 		"task_description": task.Description,
 	})
 	messages := make([]openAIMessage, 0, len(s.executeMessages)+2)
-	systemPrompt := s.settings.Execute.PrimaryPrompt()
-	if systemPrompt == "" {
-		systemPrompt = "Execute the current confirmed CODER plan task."
-	}
+	systemPrompt := s.executionSystemPrompt("Execute the current confirmed CODER plan task.")
 	messages = append(messages, openAIMessage{Role: "system", Content: systemPrompt})
 	messages = append(messages, s.executeMessages...)
 	messages = append(messages, openAIMessage{Role: "user", Content: taskPrompt})
@@ -689,6 +716,9 @@ func (s *coderPlanningStream) buildExecuteToolDescriptions() string {
 }
 
 func (s *coderPlanningStream) toolDescriptionsByName() map[string]string {
+	if s.engine == nil || s.engine.tools == nil {
+		return map[string]string{}
+	}
 	defs := s.engine.tools.Definitions()
 	out := make(map[string]string, len(defs))
 	for _, def := range defs {

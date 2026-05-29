@@ -36,7 +36,7 @@ func buildSystemPrompt(session QuerySession, req api.QueryRequest, _ string, opt
 
 	sections := []string{
 		buildAgentIdentitySection(session),
-		buildCoderSystemPromptSection(session, options.Stage),
+		buildCoderSystemPromptSection(session, req, toolNamesFromDefinitions(options.ToolDefinitions, session.ToolNames), options.Stage),
 		strings.TrimSpace(session.SoulPrompt),
 		strings.TrimSpace(session.AgentsPrompt),
 		buildWorkspaceAgentsSection(session.WorkspaceAgentsPrompt),
@@ -50,14 +50,124 @@ func buildSystemPrompt(session QuerySession, req api.QueryRequest, _ string, opt
 	return joinPromptSections(sections...)
 }
 
-func buildCoderSystemPromptSection(session QuerySession, stage string) string {
+func buildCoderSystemPromptSection(session QuerySession, req api.QueryRequest, toolNames []string, stage string) string {
 	if !strings.EqualFold(strings.TrimSpace(session.Mode), "CODER") {
 		return ""
 	}
 	if !strings.EqualFold(strings.TrimSpace(stage), "coder") {
 		return ""
 	}
-	return strings.TrimSpace(session.CoderSystemPrompt)
+	return renderCoderPromptTemplate(session.CoderSystemPrompt, coderPromptTemplateValues(session, req, coderPromptTemplateData{
+		AvailableTools:    toolNames,
+		PlanStageTools:    coderPlanningModePlanTools,
+		ExecuteStageTools: removeToolNames(toolNames, "plan_add_tasks", "plan_get_tasks", "plan_update_task", "planning_write", "ask_user_question"),
+	}))
+}
+
+type coderPromptTemplateData struct {
+	AvailableTools          []string
+	PlanStageTools          []string
+	ExecuteStageTools       []string
+	ExecuteToolDescriptions string
+}
+
+func renderCoderPromptTemplate(prompt string, values map[string]string) string {
+	return strings.TrimSpace(renderTemplate(prompt, values))
+}
+
+func coderPromptTemplateValues(session QuerySession, req api.QueryRequest, data coderPromptTemplateData) map[string]string {
+	availableTools := data.AvailableTools
+	if len(availableTools) == 0 {
+		availableTools = session.ToolNames
+	}
+	planStageTools := data.PlanStageTools
+	if len(planStageTools) == 0 {
+		planStageTools = coderPlanningModePlanTools
+	}
+	executeStageTools := data.ExecuteStageTools
+	if len(executeStageTools) == 0 {
+		executeStageTools = removeToolNames(availableTools, "plan_add_tasks", "plan_get_tasks", "plan_update_task", "planning_write", "ask_user_question")
+	}
+	workspaceDir := firstNonBlank(
+		session.RuntimeContext.LocalPaths.WorkspaceDir,
+		session.RuntimeContext.SandboxPaths.WorkspaceDir,
+		session.WorkspaceRoot,
+	)
+	chatDir := firstNonBlank(
+		session.RuntimeContext.LocalPaths.ChatAttachmentsDir,
+		session.RuntimeContext.SandboxPaths.WorkspaceDir,
+	)
+	return map[string]string{
+		"agent_key":                   session.AgentKey,
+		"agent_name":                  session.AgentName,
+		"mode":                        session.Mode,
+		"planning_mode":               fmt.Sprintf("%t", session.PlanningMode),
+		"workspace_dir":               workspaceDir,
+		"chat_dir":                    chatDir,
+		"current_date":                time.Now().Format("2006-01-02"),
+		"timezone":                    localTimezoneName(),
+		"language_preference":         "中文",
+		"available_tools":             strings.Join(normalizeToolNameList(availableTools), ", "),
+		"plan_stage_tools":            strings.Join(normalizeToolNameList(planStageTools), ", "),
+		"execute_stage_tools":         strings.Join(normalizeToolNameList(executeStageTools), ", "),
+		"execute_tool_descriptions":   strings.TrimSpace(data.ExecuteToolDescriptions),
+		"ask_user_question_tool_name": "ask_user_question",
+		"planning_write_tool_name":    "planning_write",
+		"bash_tool_name":              "bash",
+		"datetime_tool_name":          "datetime",
+		"file_read_tool_name":         "file_read",
+		"file_glob_tool_name":         "file_glob",
+		"file_grep_tool_name":         "file_grep",
+		"file_write_tool_name":        "file_write",
+		"file_edit_tool_name":         "file_edit",
+		"agent_tool_name":             InvokeAgentsToolName,
+		"user_request":                req.Message,
+	}
+}
+
+func toolNamesFromDefinitions(definitions []api.ToolDetailResponse, fallback []string) []string {
+	if len(definitions) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	names := make([]string, 0, len(definitions))
+	for _, definition := range definitions {
+		name := strings.TrimSpace(definition.Name)
+		if name == "" {
+			name = strings.TrimSpace(definition.Key)
+		}
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func normalizeToolNameList(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func localTimezoneName() string {
+	tz := time.Local.String()
+	if tz == "Local" {
+		if zone := strings.TrimSpace(os.Getenv("TZ")); zone != "" {
+			tz = zone
+		}
+	}
+	return tz
 }
 
 func buildAgentIdentitySection(session QuerySession) string {
@@ -162,18 +272,11 @@ func buildRuntimeContextPrompt(session QuerySession, req api.QueryRequest) strin
 }
 
 func buildSystemEnvironmentSection(session QuerySession) string {
-	tz := time.Local.String()
-	if tz == "Local" {
-		// Try to resolve a meaningful timezone name instead of "Local".
-		if zone := strings.TrimSpace(os.Getenv("TZ")); zone != "" {
-			tz = zone
-		}
-	}
 	lines := []string{
 		"Runtime Context: System Environment",
 		"os: " + runtime.GOOS,
 		"arch: " + runtime.GOARCH,
-		"timezone: " + tz,
+		"timezone: " + localTimezoneName(),
 		"language: 中文",
 	}
 	appendContextPaths(&lines, session)

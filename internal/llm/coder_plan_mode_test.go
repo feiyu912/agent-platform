@@ -24,6 +24,16 @@ func TestCoderPlanningStageToolsAreReadOnlyPlusQuestionsAndPlan(t *testing.T) {
 	if got := stream.planStageTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("planStageTools()=%#v want %#v", got, want)
 	}
+	forbidden := map[string]struct{}{
+		"bash":       {},
+		"file_write": {},
+		"file_edit":  {},
+	}
+	for _, tool := range stream.planStageTools() {
+		if _, ok := forbidden[tool]; ok {
+			t.Fatalf("planStageTools() must not include mutating tool %q: %#v", tool, stream.planStageTools())
+		}
+	}
 }
 
 func TestCoderExecuteStageToolsExcludePlanningOnlyTools(t *testing.T) {
@@ -42,16 +52,65 @@ func TestCoderPlanningPromptUsesCoderPromptsConfig(t *testing.T) {
 	stream := &coderPlanningStream{
 		engine: &LLMAgentEngine{cfg: config.Config{
 			CoderPrompts: config.CoderPromptsConfig{
-				PlanningPrompt: "custom coder planning prompt\nUse planning_write.",
+				PlanningPrompt: "custom {{agent_key}} {{workspace_dir}} {{plan_stage_tools}} {{execute_stage_tools}}\nUse {{planning_write_tool_name}}.\n{{execute_tool_descriptions}}",
 			},
 		}},
+		session: contracts.QuerySession{
+			AgentKey:     "coder",
+			PlanningMode: true,
+			ToolNames:    []string{"bash", "file_read", "file_write", "file_edit", "datetime"},
+			RuntimeContext: contracts.RuntimeRequestContext{
+				LocalPaths: contracts.LocalPaths{WorkspaceDir: "/workspace"},
+			},
+		},
 	}
 	prompt := stream.planningPrompt()
-	if !strings.Contains(prompt, "custom coder planning prompt") {
+	if !strings.Contains(prompt, "custom coder /workspace") {
 		t.Fatalf("expected custom coder planning prompt, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "Use planning_write.") {
 		t.Fatalf("expected configured planning_write instructions, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "file_read, file_glob, file_grep, datetime, ask_user_question, planning_write") {
+		t.Fatalf("expected rendered plan stage tools, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "bash, file_read, file_write, file_edit, datetime") {
+		t.Fatalf("expected rendered execute stage tools, got %q", prompt)
+	}
+	if strings.Contains(prompt, "{{") || strings.Contains(prompt, "}}") {
+		t.Fatalf("expected all configured CODER planning placeholders to be rendered, got %q", prompt)
+	}
+}
+
+func TestCoderExecutionSystemPromptIncludesRenderedCoderSystemPrompt(t *testing.T) {
+	stream := &coderPlanningStream{
+		req: api.QueryRequest{Message: "build it"},
+		session: contracts.QuerySession{
+			AgentKey:          "coder",
+			AgentName:         "Coder",
+			Mode:              "CODER",
+			PlanningMode:      true,
+			ToolNames:         []string{"bash", "file_read", "planning_write", "ask_user_question"},
+			CoderSystemPrompt: "CODER {{agent_key}} {{agent_name}} {{available_tools}} {{execute_stage_tools}} {{bash_tool_name}}",
+		},
+		settings: contracts.PlanExecuteSettings{
+			Execute: contracts.StageSettings{
+				SystemPrompt: "stage {{agent_key}} {{workspace_dir}}",
+				Tools:        []string{"bash", "file_read"},
+			},
+		},
+	}
+	got := stream.executionSystemPrompt("fallback {{agent_key}}")
+	for _, expected := range []string{
+		"CODER coder Coder bash, file_read bash, file_read bash",
+		"stage coder",
+	} {
+		if !strings.Contains(got, expected) {
+			t.Fatalf("expected %q in rendered execution prompt, got %q", expected, got)
+		}
+	}
+	if strings.Contains(got, "{{") || strings.Contains(got, "}}") {
+		t.Fatalf("expected all configured CODER execution placeholders to be rendered, got %q", got)
 	}
 }
 
