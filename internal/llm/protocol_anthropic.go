@@ -352,11 +352,11 @@ func anthropicToolChoice(toolChoice string, reasoningEnabled bool) map[string]an
 }
 
 func resolveAnthropicMaxTokens(cfg config.Config, stageSettings StageSettings) int {
-	if stageSettings.MaxTokens > 0 {
-		return stageSettings.MaxTokens
+	if stageSettings.MaxOutputTokens > 0 {
+		return stageSettings.MaxOutputTokens
 	}
-	if cfg.Defaults.MaxTokens > 0 {
-		return cfg.Defaults.MaxTokens
+	if cfg.Defaults.MaxOutputTokens > 0 {
+		return cfg.Defaults.MaxOutputTokens
 	}
 	return 4096
 }

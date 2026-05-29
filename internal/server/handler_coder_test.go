@@ -46,7 +46,7 @@ func setupCoderRuntime(t *testing.T, cfg *config.Config) {
 		"isFunction: true",
 		"isReasoner: true",
 		"isVision: true",
-		"contextWindow: 200000",
+		"maxInputTokens: 200000",
 	}, "\n")), 0o644); err != nil {
 		t.Fatalf("write coder model config: %v", err)
 	}

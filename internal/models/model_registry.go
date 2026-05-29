@@ -475,7 +475,7 @@ func loadModels(dir string) (map[string]ModelDefinition, error) {
 			IsFunction:    parseTruthy(stringNode(values["isFunction"])),
 			IsReasoner:    parseTruthy(stringNode(values["isReasoner"])),
 			IsVision:      parseTruthyDefault(values["isVision"], false),
-			ContextWindow: contracts.AnyIntNode(values["contextWindow"]),
+			ContextWindow: contracts.AnyIntNode(values["maxInputTokens"]),
 			Pricing:       loadModelPricing(values["pricing"]),
 			Headers:       stringMapNode(values["headers"]),
 			Compat:        contracts.CloneAnyMap(contracts.AnyMapNode(values["compat"])),

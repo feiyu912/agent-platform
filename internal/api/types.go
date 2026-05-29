@@ -388,7 +388,7 @@ type AgentSource struct {
 }
 
 type CreateAgentRequest struct {
-	Key          string         `json:"key"`
+	Key          string         `json:"key,omitempty"`
 	Definition   map[string]any `json:"definition"`
 	SoulPrompt   *string        `json:"soulPrompt,omitempty"`
 	AgentsPrompt *string        `json:"agentsPrompt,omitempty"`

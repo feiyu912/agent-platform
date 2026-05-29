@@ -67,7 +67,7 @@ func defaultConfig() Config {
 			StorageDir:         paths.MemoryDir,
 		},
 		Defaults: DefaultsConfig{
-			MaxTokens: 4096,
+			MaxOutputTokens: 4096,
 			Budget: BudgetDefaultsConfig{
 				RunTimeoutMs: 300000,
 				MaxSteps:     100,

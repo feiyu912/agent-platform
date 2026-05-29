@@ -145,6 +145,42 @@ func TestLoadModelRegistryParsesModelVisionFalse(t *testing.T) {
 	}
 }
 
+func TestLoadModelRegistryParsesMaxInputTokensAsContextWindow(t *testing.T) {
+	root := t.TempDir()
+	writeTestProviderAndModel(t, root, "apiKey: plain-text", "maxInputTokens: 1048576")
+
+	registry, err := LoadModelRegistry(root)
+	if err != nil {
+		t.Fatalf("LoadModelRegistry returned error: %v", err)
+	}
+
+	model, _, err := registry.Get("mock-model")
+	if err != nil {
+		t.Fatalf("registry.Get returned error: %v", err)
+	}
+	if model.ContextWindow != 1048576 {
+		t.Fatalf("expected maxInputTokens to populate ContextWindow, got %d", model.ContextWindow)
+	}
+}
+
+func TestLoadModelRegistryIgnoresLegacyContextWindowField(t *testing.T) {
+	root := t.TempDir()
+	writeTestProviderAndModel(t, root, "apiKey: plain-text", "contextWindow: 1048576")
+
+	registry, err := LoadModelRegistry(root)
+	if err != nil {
+		t.Fatalf("LoadModelRegistry returned error: %v", err)
+	}
+
+	model, _, err := registry.Get("mock-model")
+	if err != nil {
+		t.Fatalf("registry.Get returned error: %v", err)
+	}
+	if model.ContextWindow != 0 {
+		t.Fatalf("expected legacy contextWindow field to be ignored, got %d", model.ContextWindow)
+	}
+}
+
 func TestLoadModelRegistryParsesModelPricing(t *testing.T) {
 	root := t.TempDir()
 	writeTestProviderAndModel(t, root, "apiKey: plain-text",

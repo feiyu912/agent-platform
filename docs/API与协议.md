@@ -141,6 +141,8 @@ GET /ws -> request / response / stream / push / error frames
 - `defaultModelKey`: model registry 默认模型；无默认模型时为空
 - `defaultReasoningEffort`: 固定为 `MEDIUM`
 
+其中 `contextWindow` 是 API 响应字段名；model registry YAML 中对应配置字段为 `maxInputTokens`。
+
 HITL 三态细节见 [HITL协议](HITL协议.md)。真流式、heartbeat、attach backlog 与 H2A 缓冲见 [真流式和H2A](真流式和H2A.md)。
 
 ### Memory

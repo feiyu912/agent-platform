@@ -156,10 +156,8 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	}
 
 	created := postAgentJSON[api.AgentDetailResponse](t, fixture.server, "/api/agent/create", map[string]any{
-		"key": "coder-project",
 		"definition": map[string]any{
-			"key":  "coder-project",
-			"name": "coder-project",
+			"name": "agent-coder",
 			"icon": "bot",
 			"mode": "CODER",
 			"workspace": map[string]any{
@@ -176,7 +174,7 @@ func TestAgentCreateCoderAndOpenWorkspace(t *testing.T) {
 	if !strings.HasPrefix(created.Key, "coder-") || created.Mode != "CODER" {
 		t.Fatalf("unexpected coder create response %#v", created)
 	}
-	if created.Key == "coder-project" || created.Definition["key"] != created.Key {
+	if created.Definition["key"] != created.Key {
 		t.Fatalf("expected generated coder key to be persisted, key=%q definition=%#v", created.Key, created.Definition["key"])
 	}
 	if _, ok := created.Definition["workspace"]; ok {
@@ -720,9 +718,7 @@ func TestAgentWSCRUDMirrorHTTP(t *testing.T) {
 		Type:  "/api/agent/create",
 		ID:    "create-coder",
 		Payload: ws.MarshalPayload(map[string]any{
-			"key": "ws-coder",
 			"definition": map[string]any{
-				"key":  "ws-coder",
 				"name": "WS Coder",
 				"mode": "CODER",
 				"runtimeConfig": map[string]any{

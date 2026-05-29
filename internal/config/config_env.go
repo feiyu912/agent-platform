@@ -45,7 +45,7 @@ func (c *Config) applyEnv() {
 	c.Memory.DualWriteMarkdown = boolEnv("AGENT_MEMORY_DUAL_WRITE_MARKDOWN", c.Memory.DualWriteMarkdown)
 	c.Memory.StorageDir = pathEnv("MEMORY_DIR", c.Memory.StorageDir)
 
-	c.Defaults.MaxTokens = intEnv("AGENT_DEFAULT_MAX_TOKENS", c.Defaults.MaxTokens)
+	c.Defaults.MaxOutputTokens = intEnv("AGENT_DEFAULT_MAX_OUTPUT_TOKENS", c.Defaults.MaxOutputTokens)
 	c.Defaults.Budget.RunTimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_RUN_TIMEOUT_MS", c.Defaults.Budget.RunTimeoutMs)
 	_, defaultBudgetMaxStepsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_MAX_STEPS")
 	_, legacyModelMaxCallsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_MODEL_MAX_CALLS")

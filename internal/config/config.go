@@ -170,10 +170,10 @@ type MemoryConfig struct {
 }
 
 type DefaultsConfig struct {
-	MaxTokens int
-	Budget    BudgetDefaultsConfig
-	React     ReactDefaultsConfig
-	Plan      PlanExecuteDefaultsConfig
+	MaxOutputTokens int
+	Budget          BudgetDefaultsConfig
+	React           ReactDefaultsConfig
+	Plan            PlanExecuteDefaultsConfig
 }
 
 type BudgetDefaultsConfig struct {

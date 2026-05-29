@@ -13,7 +13,7 @@ type StageSettings struct {
 	ReasoningEffort    string
 	DeepThinking       bool
 	InstructionsPrompt string
-	MaxTokens          int
+	MaxOutputTokens    int
 }
 
 type PlanExecuteSettings struct {
@@ -81,7 +81,7 @@ func parseStageSettings(raw map[string]any) StageSettings {
 		ReasoningEffort:    anyStringNode(raw["reasoningEffort"]),
 		DeepThinking:       anyBoolNode(raw["deepThinking"]),
 		InstructionsPrompt: anyStringNode(raw["instructionsPrompt"]),
-		MaxTokens:          anyIntNode(raw["maxTokens"]),
+		MaxOutputTokens:    anyIntNode(raw["maxOutputTokens"]),
 	}
 }
 
@@ -103,5 +103,5 @@ func (s StageSettings) IsZero() bool {
 		strings.TrimSpace(s.ReasoningEffort) == "" &&
 		!s.DeepThinking &&
 		strings.TrimSpace(s.InstructionsPrompt) == "" &&
-		s.MaxTokens == 0
+		s.MaxOutputTokens == 0
 }
