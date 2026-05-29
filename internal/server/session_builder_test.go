@@ -106,7 +106,7 @@ func TestBuildQuerySessionUsesCoderProfileDefaults(t *testing.T) {
 	if !reflect.DeepEqual(session.ToolNames, wantTools) {
 		t.Fatalf("tool names = %#v, want %#v", session.ToolNames, wantTools)
 	}
-	if session.ResolvedBudget.RunTimeoutMs != 600000 || session.ResolvedBudget.MaxSteps != 240 || session.ResolvedBudget.Model.MaxCalls != 240 || session.ResolvedBudget.Tool.MaxCalls != 200 {
+	if session.ResolvedBudget.RunTimeoutMs != 1800000 || session.ResolvedBudget.MaxSteps != 240 || session.ResolvedBudget.Model.MaxCalls != 240 || session.ResolvedBudget.Tool.MaxCalls != 200 {
 		t.Fatalf("resolved budget = %#v, want CODER defaults", session.ResolvedBudget)
 	}
 	if session.ReactMaxSteps != 0 {
