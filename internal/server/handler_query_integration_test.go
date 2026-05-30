@@ -19,6 +19,7 @@ import (
 	"agent-platform/internal/chat"
 	"agent-platform/internal/config"
 	"agent-platform/internal/llm"
+	"agent-platform/internal/stream"
 )
 
 func TestQuerySSEPersistsChatHistory(t *testing.T) {
@@ -1459,7 +1460,7 @@ Plan should be canceled before execution.
 	if got := providerCallCount.Load(); got != 2 {
 		t.Fatalf("provider calls = %d, want 2", got)
 	}
-	assertNoPersistedPlanningEvents(t, fixture.server)
+	assertPersistedPlanningModeRequestQuery(t, fixture.server)
 }
 
 func TestCoderPlanningModeRejectCanGenerateRevisionAndApprove(t *testing.T) {
@@ -1905,12 +1906,18 @@ func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) 
 	for _, event := range chatResp.Data.Events {
 		if event.Type == "request.query" && event.Value("planningMode") == true {
 			for _, ev := range chatResp.Data.Events {
-				if strings.HasPrefix(ev.Type, "planning.") {
-					t.Fatalf("did not expect persisted planning event %s in %#v", ev.Type, chatResp.Data.Events)
+				if ev.Type == "planning.delta" {
+					t.Fatalf("did not expect persisted planning.delta in %#v", chatResp.Data.Events)
 				}
 			}
-			if chatResp.Data.Planning != nil {
-				t.Fatalf("did not expect persisted planning state, got %#v", chatResp.Data.Planning)
+			if detailEventTypeCountForServerTest(chatResp.Data.Events, "planning.snapshot") == 0 {
+				t.Fatalf("expected persisted planning.snapshot, got %#v", chatResp.Data.Events)
+			}
+			planning, _ := chatResp.Data.Planning.(map[string]any)
+			if len(planning) == 0 || strings.TrimSpace(anyString(planning["planningId"])) == "" ||
+				strings.TrimSpace(anyString(planning["planningFile"])) == "" ||
+				!strings.Contains(anyString(planning["text"]), "#") {
+				t.Fatalf("expected persisted planning state from file, got %#v", chatResp.Data.Planning)
 			}
 			return
 		}
@@ -1918,32 +1925,14 @@ func assertPersistedPlanningModeRequestQuery(t *testing.T, server http.Handler) 
 	t.Fatalf("expected persisted request.query planningMode=true, got %#v", chatResp.Data.Events)
 }
 
-func assertNoPersistedPlanningEvents(t *testing.T, server http.Handler) {
-	t.Helper()
-	chatsRec := httptest.NewRecorder()
-	server.ServeHTTP(chatsRec, httptest.NewRequest(http.MethodGet, "/api/chats", nil))
-	var chatsResp api.ApiResponse[[]api.ChatSummaryResponse]
-	if err := json.Unmarshal(chatsRec.Body.Bytes(), &chatsResp); err != nil {
-		t.Fatalf("decode chats response: %v", err)
-	}
-	if len(chatsResp.Data) != 1 {
-		t.Fatalf("expected one chat, got %#v", chatsResp.Data)
-	}
-
-	chatRec := httptest.NewRecorder()
-	server.ServeHTTP(chatRec, httptest.NewRequest(http.MethodGet, "/api/chat?chatId="+chatsResp.Data[0].ChatID, nil))
-	var chatResp api.ApiResponse[api.ChatDetailResponse]
-	if err := json.Unmarshal(chatRec.Body.Bytes(), &chatResp); err != nil {
-		t.Fatalf("decode chat response: %v", err)
-	}
-	for _, ev := range chatResp.Data.Events {
-		if strings.HasPrefix(ev.Type, "planning.") {
-			t.Fatalf("did not expect persisted planning event %s, got %#v", ev.Type, chatResp.Data.Events)
+func detailEventTypeCountForServerTest(events []stream.EventData, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
 		}
 	}
-	if chatResp.Data.Planning != nil {
-		t.Fatalf("did not expect persisted planning state, got %#v", chatResp.Data.Planning)
-	}
+	return count
 }
 
 func TestQueryPersistsToolSnapshotWhenStreamToolPayloadEventsDisabled(t *testing.T) {

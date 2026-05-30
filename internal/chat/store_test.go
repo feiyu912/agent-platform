@@ -1954,7 +1954,7 @@ func TestStepWriterIgnoresEmptyUsageSnapshot(t *testing.T) {
 	}
 }
 
-func TestStepWriterPlanningEventsAreLiveOnly(t *testing.T) {
+func TestStepWriterPlanningDeltasAreLiveOnly(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -1971,7 +1971,7 @@ func TestStepWriterPlanningEventsAreLiveOnly(t *testing.T) {
 		t.Fatalf("read jsonl: %v", err)
 	}
 	if len(lines) != 0 {
-		t.Fatalf("did not expect planning events to persist, got %#v", lines)
+		t.Fatalf("did not expect planning delta/end events to persist, got %#v", lines)
 	}
 	detail, err := store.LoadChat("chat-planning-live-only")
 	if err != nil {
@@ -1982,7 +1982,7 @@ func TestStepWriterPlanningEventsAreLiveOnly(t *testing.T) {
 	}
 }
 
-func TestLoadChatIgnoresLegacyPlanningEventLines(t *testing.T) {
+func TestLoadChatReplaysPlanningSnapshotRefsAndIgnoresDeltas(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -1991,6 +1991,13 @@ func TestLoadChatIgnoresLegacyPlanningEventLines(t *testing.T) {
 	runID := "run-planning"
 	if _, _, err := store.EnsureChat(chatID, "coder", "", "plan it"); err != nil {
 		t.Fatalf("ensure chat: %v", err)
+	}
+	planningFile := filepath.Join(store.ChatDir(chatID), ToolRootDirName, ToolPlansDirName, "plan-run-planning.md")
+	if err := os.MkdirAll(filepath.Dir(planningFile), 0o755); err != nil {
+		t.Fatalf("mkdir planning dir: %v", err)
+	}
+	if err := os.WriteFile(planningFile, []byte("# Final\n\nBody"), 0o644); err != nil {
+		t.Fatalf("write planning file: %v", err)
 	}
 	appendPlanningEventLineForTest(t, store, chatID, runID, 1002, map[string]any{
 		"type":       "planning.delta",
@@ -2002,20 +2009,21 @@ func TestLoadChatIgnoresLegacyPlanningEventLines(t *testing.T) {
 		"type":         "planning.snapshot",
 		"timestamp":    int64(1004),
 		"planningId":   "plan-run-planning",
-		"planningFile": "plan-run-planning.md",
+		"planningFile": planningFile,
 		"chatId":       chatID,
 		"runId":        runID,
-		"markdown":     "# Final\n\nBody",
 	})
 
 	detail, err := store.LoadChat(chatID)
 	if err != nil {
 		t.Fatalf("load chat: %v", err)
 	}
-	if detail.Planning != nil ||
-		detailHasEventType(detail.Events, "planning.snapshot") ||
-		detailHasEventType(detail.Events, "planning.delta") {
-		t.Fatalf("did not expect legacy planning replay, planning=%#v events=%#v", detail.Planning, detail.Events)
+	if detail.Planning == nil || detail.Planning.PlanningID != "plan-run-planning" ||
+		detail.Planning.PlanningFile != planningFile || detail.Planning.Markdown != "# Final\n\nBody" {
+		t.Fatalf("expected replayed planning state from file, got planning=%#v events=%#v", detail.Planning, detail.Events)
+	}
+	if detailEventTypeCount(detail.Events, "planning.snapshot") != 1 || detailHasEventType(detail.Events, "planning.delta") {
+		t.Fatalf("expected one replayed planning.snapshot and no delta, got %#v", detail.Events)
 	}
 }
 

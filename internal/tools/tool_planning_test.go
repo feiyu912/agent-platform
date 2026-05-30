@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"agent-platform/internal/api"
+	"agent-platform/internal/chat"
 	"agent-platform/internal/config"
 	. "agent-platform/internal/contracts"
 	planutil "agent-platform/internal/planning"
@@ -72,6 +73,83 @@ func TestPlanningWriteCreatesMarkdownFile(t *testing.T) {
 	}
 	if execCtx.PlanningState == nil || execCtx.PlanningState.PlanningID != planningID {
 		t.Fatalf("expected execution context planning state, got %#v", execCtx.PlanningState)
+	}
+}
+
+func TestPlanningWritePersistsSnapshotRefsOnly(t *testing.T) {
+	root := t.TempDir()
+	store, err := chat.NewFileStore(root)
+	if err != nil {
+		t.Fatalf("new chat store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat_1", "coder", "", "plan it"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	executor := &RuntimeToolExecutor{
+		cfg:   config.Config{Paths: config.PathsConfig{ChatsDir: root}},
+		chats: store,
+	}
+	execCtx := &ExecutionContext{
+		Session: QuerySession{
+			RunID:        "run_refs",
+			ChatID:       "chat_1",
+			AgentKey:     "coder",
+			PlanningMode: true,
+		},
+	}
+
+	firstMarkdown := "# Persisted Plan V1\n\n## Summary\nFirst plan"
+	if result, err := executor.Invoke(context.Background(), "planning_write", map[string]any{"markdown": firstMarkdown}, execCtx); err != nil || result.ExitCode != 0 {
+		t.Fatalf("first planning_write result=%#v err=%v", result, err)
+	}
+	execCtx.PlanningState = nil
+	execCtx.PlanningRevision = 2
+	secondMarkdown := "# Persisted Plan V2\n\n## Summary\nSecond plan"
+	if result, err := executor.Invoke(context.Background(), "planning_write", map[string]any{"markdown": secondMarkdown}, execCtx); err != nil || result.ExitCode != 0 {
+		t.Fatalf("second planning_write result=%#v err=%v", result, err)
+	}
+
+	jsonlBytes, err := os.ReadFile(filepath.Join(root, "chat_1.jsonl"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	jsonl := string(jsonlBytes)
+	if got := strings.Count(jsonl, `"_type":"planning"`); got != 2 {
+		t.Fatalf("expected two planning refs in jsonl, got %d:\n%s", got, jsonl)
+	}
+	for _, want := range []string{"run_refs_planning_1", "run_refs_planning_2", "planningFile"} {
+		if !strings.Contains(jsonl, want) {
+			t.Fatalf("expected jsonl to contain %q, got:\n%s", want, jsonl)
+		}
+	}
+	for _, notWant := range []string{"markdown", "Persisted Plan V1", "Persisted Plan V2", "Second plan"} {
+		if strings.Contains(jsonl, notWant) {
+			t.Fatalf("planning jsonl should store refs only, found %q in:\n%s", notWant, jsonl)
+		}
+	}
+
+	detail, err := store.LoadChat("chat_1")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	if detail.Planning == nil || detail.Planning.PlanningID != "run_refs_planning_2" || detail.Planning.Markdown != secondMarkdown {
+		t.Fatalf("expected latest planning state from second file, got %#v", detail.Planning)
+	}
+	snapshots := 0
+	for _, event := range detail.Events {
+		if event.Type != "planning.snapshot" {
+			continue
+		}
+		snapshots++
+		if event.String("planningId") == "run_refs_planning_1" && event.String("text") != firstMarkdown {
+			t.Fatalf("unexpected first planning snapshot %#v", event)
+		}
+		if event.String("planningId") == "run_refs_planning_2" && event.String("text") != secondMarkdown {
+			t.Fatalf("unexpected second planning snapshot %#v", event)
+		}
+	}
+	if snapshots != 2 {
+		t.Fatalf("expected two replayed planning snapshots, got %d in %#v", snapshots, detail.Events)
 	}
 }
 

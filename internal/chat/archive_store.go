@@ -285,7 +285,7 @@ func (s *ArchiveStore) LoadArchived(chatID string) (*ArchivedChat, error) {
 		LastRunContent: archived.Summary.LastRunContent,
 		Usage:          archived.Summary.Usage,
 	}
-	archived.Detail, err = parseChatNewFormat(summary, lines, rawMessages)
+	archived.Detail, err = parseChatNewFormat(summary, lines, rawMessages, s.ChatDir(chatID))
 	if err != nil {
 		return nil, err
 	}

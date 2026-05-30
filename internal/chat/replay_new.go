@@ -26,7 +26,7 @@ func (s *FileStore) LoadChat(chatID string) (Detail, error) {
 
 	rawMessages := s.loadRawMessagesFromJSONL(chatID)
 
-	return parseChatNewFormat(*sum, lines, rawMessages)
+	return parseChatNewFormat(*sum, lines, rawMessages, s.ChatDir(chatID))
 }
 
 func (s *FileStore) LoadRunTrace(chatID string, runID string) (RunTrace, error) {
@@ -95,8 +95,9 @@ func (s *FileStore) LoadRunTrace(chatID string, runID string) (RunTrace, error) 
 // New format: _type = "query" / "step" / "event" (matching Java)
 // ---------------------------------------------------------------------------
 
-func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []map[string]any) (Detail, error) {
+func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []map[string]any, chatDir string) (Detail, error) {
 	var plan *PlanState
+	var planning *PlanningState
 	var artifact *ArtifactState
 
 	runs := map[string]*chatRunData{}
@@ -367,7 +368,14 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.events = append(rd.events, stream.EventDataFromMap(answer))
 			}
 		case "planning":
-			continue
+			state, event := planningSnapshotFromLine(line, chatDir)
+			if state == nil || event == nil {
+				continue
+			}
+			planning = state
+			rd := ensureRun(runs, &runOrder, runID)
+			event.Seq = nextSeq()
+			rd.events = append(rd.events, *event)
 		case "event", "steer":
 			event, _ := line["event"].(map[string]any)
 			if len(event) == 0 {
@@ -444,6 +452,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		RawMessages: rawMessages,
 		Events:      allEvents,
 		Plan:        plan,
+		Planning:    planning,
 		Artifact:    artifact,
 	}, nil
 }
