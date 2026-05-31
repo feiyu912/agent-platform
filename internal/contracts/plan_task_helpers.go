@@ -1,39 +1,6 @@
 package contracts
 
-import (
-	"encoding/json"
-	"strings"
-)
-
-func NormalizeBudget(b Budget) Budget {
-	return normalizeBudget(b)
-}
-
-func CloneMap(values map[string]any) map[string]any {
-	return CloneAnyMap(values)
-}
-
-func CloneAnyMap(values map[string]any) map[string]any {
-	if values == nil {
-		return nil
-	}
-	out := make(map[string]any, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
-}
-
-func CloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make(map[string]string, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
-	return cloned
-}
+import "strings"
 
 func NormalizePlanTaskStatus(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
@@ -65,12 +32,4 @@ func PlanTasksArray(state *PlanRuntimeState) []map[string]any {
 		})
 	}
 	return tasks
-}
-
-func MarshalJSON(value any) string {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return "{}"
-	}
-	return string(data)
 }

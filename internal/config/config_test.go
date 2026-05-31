@@ -152,35 +152,34 @@ func TestLoadDesktopConfigMissingFileLeavesBridgeUnconfigured(t *testing.T) {
 func TestLoadDesktopConfigFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"action:\n" +
-			"  host: 127.0.0.2\n" +
-			"  port: 17001\n" +
-			"  path: actions/custom\n" +
-			"  request-timeout-ms: 1234\n" +
-			"cdp:\n" +
-			"  host: localhost\n" +
-			"  port: 17002\n" +
-			"  path: /cdp/custom\n" +
-			"  request-timeout-ms: 5678\n"
-		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "desktop.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if cfg.Desktop.Action.BridgeURL != "http://127.0.0.2:17001/actions/custom" {
-					t.Fatalf("unexpected desktop action bridge url: %q", cfg.Desktop.Action.BridgeURL)
-				}
-				if cfg.Desktop.Action.RequestTimeoutMs != 1234 {
-					t.Fatalf("unexpected desktop action timeout: %d", cfg.Desktop.Action.RequestTimeoutMs)
-				}
-				if cfg.Desktop.CDP.BridgeURL != "http://localhost:17002/cdp/custom" {
-					t.Fatalf("unexpected desktop cdp bridge url: %q", cfg.Desktop.CDP.BridgeURL)
-				}
-				if cfg.Desktop.CDP.RequestTimeoutMs != 5678 {
-					t.Fatalf("unexpected desktop cdp timeout: %d", cfg.Desktop.CDP.RequestTimeoutMs)
-				}
-			})
+			"desktop:\n" +
+			"  action:\n" +
+			"    host: 127.0.0.2\n" +
+			"    port: 17001\n" +
+			"    path: actions/custom\n" +
+			"    request-timeout-ms: 1234\n" +
+			"  cdp:\n" +
+			"    host: localhost\n" +
+			"    port: 17002\n" +
+			"    path: /cdp/custom\n" +
+			"    request-timeout-ms: 5678\n"
+		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.Desktop.Action.BridgeURL != "http://127.0.0.2:17001/actions/custom" {
+				t.Fatalf("unexpected desktop action bridge url: %q", cfg.Desktop.Action.BridgeURL)
+			}
+			if cfg.Desktop.Action.RequestTimeoutMs != 1234 {
+				t.Fatalf("unexpected desktop action timeout: %d", cfg.Desktop.Action.RequestTimeoutMs)
+			}
+			if cfg.Desktop.CDP.BridgeURL != "http://localhost:17002/cdp/custom" {
+				t.Fatalf("unexpected desktop cdp bridge url: %q", cfg.Desktop.CDP.BridgeURL)
+			}
+			if cfg.Desktop.CDP.RequestTimeoutMs != 5678 {
+				t.Fatalf("unexpected desktop cdp timeout: %d", cfg.Desktop.CDP.RequestTimeoutMs)
+			}
 		})
 	})
 }
@@ -255,7 +254,7 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 	})
 }
 
-func TestLoadRuntimeConfigOverridesLegacyRuntimeFiles(t *testing.T) {
+func TestLoadRuntimeConfigIgnoresLegacyRuntimeFiles(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		legacyContainer := "" +
 			"base-url: http://legacy-hub\n" +
@@ -288,14 +287,14 @@ func TestLoadRuntimeConfigOverridesLegacyRuntimeFiles(t *testing.T) {
 						if cfg.ContainerHub.BaseURL != "http://runtime-hub" {
 							t.Fatalf("expected runtime container hub base url to win, got %q", cfg.ContainerHub.BaseURL)
 						}
-						if cfg.ContainerHub.AuthToken != "legacy-token" || cfg.ContainerHub.DefaultEnvironmentID != "legacy-env" {
-							t.Fatalf("expected legacy container hub fallback to remain, got %#v", cfg.ContainerHub)
+						if cfg.ContainerHub.AuthToken != "" || cfg.ContainerHub.DefaultEnvironmentID != "" {
+							t.Fatalf("expected legacy container hub file to be ignored, got %#v", cfg.ContainerHub)
 						}
-						if cfg.Desktop.Action.BridgeURL != "http://127.0.0.4:17301/actions/legacy" {
-							t.Fatalf("expected runtime desktop port with legacy fallback, got %#v", cfg.Desktop.Action)
+						if cfg.Desktop.Action.BridgeURL != "" || cfg.Desktop.Action.Port != 17301 {
+							t.Fatalf("expected runtime desktop config without legacy fallback, got %#v", cfg.Desktop.Action)
 						}
-						if !cfg.CORS.Enabled || cfg.CORS.PathPattern != "/legacy/**" {
-							t.Fatalf("expected runtime cors enabled with legacy path fallback, got %#v", cfg.CORS)
+						if !cfg.CORS.Enabled || cfg.CORS.PathPattern == "/legacy/**" {
+							t.Fatalf("expected legacy cors file to be ignored, got %#v", cfg.CORS)
 						}
 					})
 				})
@@ -442,35 +441,34 @@ func TestLoadPromptsConfigFromFile(t *testing.T) {
 func TestLoadCoderPromptsConfigFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"system-prompt: |\n" +
-			"  custom coder system\n" +
-			"  read before editing\n" +
-			"planning-prompt: |\n" +
-			"  custom coder planning\n" +
-			"  use planning_write only\n" +
-			"summary-system-prompt: custom coder summary system\n" +
-			"summary-user-prompt-template: |\n" +
-			"  custom coder summary {{confirmed_plan}}\n"
-		withProjectFileContents(t, filepath.Join("configs", "prompts.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "coder-prompts.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if cfg.CoderPrompts.SystemPrompt != "custom coder system\nread before editing" {
-					t.Fatalf("expected coder system prompt override, got %q", cfg.CoderPrompts.SystemPrompt)
-				}
-				want := "custom coder planning\nuse planning_write only"
-				if cfg.CoderPrompts.PlanningPrompt != want {
-					t.Fatalf("expected coder planning prompt %q, got %q", want, cfg.CoderPrompts.PlanningPrompt)
-				}
-				if cfg.CoderPrompts.SummarySystemPrompt != "custom coder summary system" {
-					t.Fatalf("expected coder summary system prompt override, got %q", cfg.CoderPrompts.SummarySystemPrompt)
-				}
-				if cfg.CoderPrompts.SummaryUserPromptTemplate != "custom coder summary {{confirmed_plan}}" {
-					t.Fatalf("expected coder summary user prompt override, got %q", cfg.CoderPrompts.SummaryUserPromptTemplate)
-				}
-			})
+			"coder:\n" +
+			"  system-prompt: |\n" +
+			"    custom coder system\n" +
+			"    read before editing\n" +
+			"  planning-prompt: |\n" +
+			"    custom coder planning\n" +
+			"    use planning_write only\n" +
+			"  summary-system-prompt: custom coder summary system\n" +
+			"  summary-user-prompt-template: |\n" +
+			"    custom coder summary {{confirmed_plan}}\n"
+		withProjectFileContents(t, filepath.Join("configs", "prompts.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.CoderPrompts.SystemPrompt != "custom coder system\nread before editing" {
+				t.Fatalf("expected coder system prompt override, got %q", cfg.CoderPrompts.SystemPrompt)
+			}
+			want := "custom coder planning\nuse planning_write only"
+			if cfg.CoderPrompts.PlanningPrompt != want {
+				t.Fatalf("expected coder planning prompt %q, got %q", want, cfg.CoderPrompts.PlanningPrompt)
+			}
+			if cfg.CoderPrompts.SummarySystemPrompt != "custom coder summary system" {
+				t.Fatalf("expected coder summary system prompt override, got %q", cfg.CoderPrompts.SummarySystemPrompt)
+			}
+			if cfg.CoderPrompts.SummaryUserPromptTemplate != "custom coder summary {{confirmed_plan}}" {
+				t.Fatalf("expected coder summary user prompt override, got %q", cfg.CoderPrompts.SummaryUserPromptTemplate)
+			}
 		})
 	})
 }
@@ -478,30 +476,29 @@ func TestLoadCoderPromptsConfigFromFile(t *testing.T) {
 func TestLoadMemoryPromptsConfigFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"system-prompt-template: |\n" +
-			"  custom memory system\n" +
-			"  {{task_instruction}}\n" +
-			"user-prompt-template: |\n" +
-			"  custom memory user\n" +
-			"  {{source_text}}\n"
-		withProjectFileContents(t, filepath.Join("configs", "prompts.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "memory-prompts.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if cfg.MemoryPrompts.SystemPromptTemplate != "custom memory system\n{{task_instruction}}" {
-					t.Fatalf("expected memory system prompt override, got %q", cfg.MemoryPrompts.SystemPromptTemplate)
-				}
-				if cfg.MemoryPrompts.UserPromptTemplate != "custom memory user\n{{source_text}}" {
-					t.Fatalf("expected memory user prompt override, got %q", cfg.MemoryPrompts.UserPromptTemplate)
-				}
-			})
+			"memory:\n" +
+			"  system-prompt-template: |\n" +
+			"    custom memory system\n" +
+			"    {{task_instruction}}\n" +
+			"  user-prompt-template: |\n" +
+			"    custom memory user\n" +
+			"    {{source_text}}\n"
+		withProjectFileContents(t, filepath.Join("configs", "prompts.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.MemoryPrompts.SystemPromptTemplate != "custom memory system\n{{task_instruction}}" {
+				t.Fatalf("expected memory system prompt override, got %q", cfg.MemoryPrompts.SystemPromptTemplate)
+			}
+			if cfg.MemoryPrompts.UserPromptTemplate != "custom memory user\n{{source_text}}" {
+				t.Fatalf("expected memory user prompt override, got %q", cfg.MemoryPrompts.UserPromptTemplate)
+			}
 		})
 	})
 }
 
-func TestLoadPromptsConfigOverridesLegacyPromptFiles(t *testing.T) {
+func TestLoadPromptsConfigIgnoresLegacyPromptFiles(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		legacyCoder := "" +
 			"system-prompt: legacy coder system\n" +
@@ -529,11 +526,11 @@ func TestLoadPromptsConfigOverridesLegacyPromptFiles(t *testing.T) {
 					if cfg.CoderPrompts.SystemPrompt != "merged coder system" {
 						t.Fatalf("expected merged coder system prompt to win, got %q", cfg.CoderPrompts.SystemPrompt)
 					}
-					if cfg.CoderPrompts.SummarySystemPrompt != "legacy coder summary" {
-						t.Fatalf("expected legacy coder fallback to remain, got %q", cfg.CoderPrompts.SummarySystemPrompt)
+					if cfg.CoderPrompts.SummarySystemPrompt == "legacy coder summary" {
+						t.Fatalf("expected legacy coder prompt file to be ignored, got %q", cfg.CoderPrompts.SummarySystemPrompt)
 					}
-					if cfg.MemoryPrompts.SystemPromptTemplate != "legacy memory system" {
-						t.Fatalf("expected legacy memory fallback to remain, got %q", cfg.MemoryPrompts.SystemPromptTemplate)
+					if cfg.MemoryPrompts.SystemPromptTemplate == "legacy memory system" {
+						t.Fatalf("expected legacy memory prompt file to be ignored, got %q", cfg.MemoryPrompts.SystemPromptTemplate)
 					}
 					if cfg.MemoryPrompts.UserPromptTemplate != "merged memory user" {
 						t.Fatalf("expected merged memory prompt to win, got %q", cfg.MemoryPrompts.UserPromptTemplate)
@@ -638,38 +635,37 @@ func TestLoadVisionRecognizeMissingFileDefaultsDisabled(t *testing.T) {
 func TestLoadVisionRecognizeConfigFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"enabled: true\n" +
-			"default-profile: ocr\n" +
-			"profiles:\n" +
-			"  ocr:\n" +
-			"    model-key: bailian-qwen3_5-plus\n" +
-			"    timeout-ms: 12345\n" +
-			"    max-images: 3\n" +
-			"    max-image-bytes: 456789\n" +
-			"    output-format: json\n" +
-			"    system-prompt: |\n" +
-			"      extract text\n" +
-			"      return json\n"
-		withProjectFileContents(t, filepath.Join("configs", "ai-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "vision-recognize.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if !cfg.VisionRecognize.Enabled {
-					t.Fatal("expected vision_recognize enabled")
-				}
-				if cfg.VisionRecognize.DefaultProfile != "ocr" {
-					t.Fatalf("unexpected default profile: %q", cfg.VisionRecognize.DefaultProfile)
-				}
-				profile := cfg.VisionRecognize.Profiles["ocr"]
-				if profile.ModelKey != "bailian-qwen3_5-plus" || profile.TimeoutMs != 12345 || profile.MaxImages != 3 || profile.MaxImageBytes != 456789 || profile.OutputFormat != "json" {
-					t.Fatalf("unexpected profile: %#v", profile)
-				}
-				if profile.SystemPrompt != "extract text\nreturn json" {
-					t.Fatalf("unexpected system prompt: %q", profile.SystemPrompt)
-				}
-			})
+			"vision-recognize:\n" +
+			"  enabled: true\n" +
+			"  default-profile: ocr\n" +
+			"  profiles:\n" +
+			"    ocr:\n" +
+			"      model-key: bailian-qwen3_5-plus\n" +
+			"      timeout-ms: 12345\n" +
+			"      max-images: 3\n" +
+			"      max-image-bytes: 456789\n" +
+			"      output-format: json\n" +
+			"      system-prompt: |\n" +
+			"        extract text\n" +
+			"        return json\n"
+		withProjectFileContents(t, filepath.Join("configs", "ai-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if !cfg.VisionRecognize.Enabled {
+				t.Fatal("expected vision_recognize enabled")
+			}
+			if cfg.VisionRecognize.DefaultProfile != "ocr" {
+				t.Fatalf("unexpected default profile: %q", cfg.VisionRecognize.DefaultProfile)
+			}
+			profile := cfg.VisionRecognize.Profiles["ocr"]
+			if profile.ModelKey != "bailian-qwen3_5-plus" || profile.TimeoutMs != 12345 || profile.MaxImages != 3 || profile.MaxImageBytes != 456789 || profile.OutputFormat != "json" {
+				t.Fatalf("unexpected profile: %#v", profile)
+			}
+			if profile.SystemPrompt != "extract text\nreturn json" {
+				t.Fatalf("unexpected system prompt: %q", profile.SystemPrompt)
+			}
 		})
 	})
 }
@@ -723,7 +719,7 @@ func TestLoadAIToolsConfigFromFile(t *testing.T) {
 	})
 }
 
-func TestLoadAIToolsConfigOverridesLegacyVisionRecognizeFile(t *testing.T) {
+func TestLoadAIToolsConfigIgnoresLegacyVisionRecognizeFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		legacy := "" +
 			"enabled: true\n" +
@@ -743,8 +739,8 @@ func TestLoadAIToolsConfigOverridesLegacyVisionRecognizeFile(t *testing.T) {
 				if err != nil {
 					t.Fatalf("load config: %v", err)
 				}
-				if !cfg.VisionRecognize.Enabled {
-					t.Fatal("expected legacy enabled flag to remain")
+				if cfg.VisionRecognize.Enabled {
+					t.Fatal("expected legacy enabled flag to be ignored")
 				}
 				if cfg.VisionRecognize.DefaultProfile != "merged" {
 					t.Fatalf("expected ai-tools default profile to win, got %q", cfg.VisionRecognize.DefaultProfile)
@@ -1191,45 +1187,44 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS": "60000",
 	}, func() {
 		content := "" +
-			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
-			"allowed-commands: pwd,echo\n" +
-			"shell-features-enabled: true\n" +
-			"shell-args:\n" +
-			"  - -NoProfile\n" +
-			"  - -Command\n" +
-			"  - \"{{command}}\"\n" +
-			"hitl-default-timeout-ms: 45000\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "bash.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if !cfg.ContainerHub.Enabled {
-					t.Fatalf("expected container hub enabled when base url is set")
-				}
-				if cfg.ContainerHub.BaseURL != "http://127.0.0.1:18000" {
-					t.Fatalf("unexpected base url: %q", cfg.ContainerHub.BaseURL)
-				}
-				if !cfg.Bash.ShellFeaturesEnabled {
-					t.Fatalf("expected shell features enabled from yaml")
-				}
-				if cfg.Bash.WorkingDirectory != filepath.Join("var", "runtime") {
-					t.Fatalf("unexpected working directory: %q", cfg.Bash.WorkingDirectory)
-				}
-				if len(cfg.Bash.AllowedCommands) != 2 {
-					t.Fatalf("unexpected allowed commands: %#v", cfg.Bash.AllowedCommands)
-				}
-				if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-Command|{{command}}" {
-					t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
-				}
-				if cfg.BashHITL.DefaultTimeoutMs != 45000 {
-					t.Fatalf("unexpected bash HITL timeout: %d", cfg.BashHITL.DefaultTimeoutMs)
-				}
-				if cfg.Defaults.Budget.Hitl.TimeoutMs != 60000 {
-					t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
-				}
-			})
+			"bash:\n" +
+			"  working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
+			"  allowed-commands: pwd,echo\n" +
+			"  shell-features-enabled: true\n" +
+			"  shell-args:\n" +
+			"    - -NoProfile\n" +
+			"    - -Command\n" +
+			"    - \"{{command}}\"\n" +
+			"  hitl-default-timeout-ms: 45000\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if !cfg.ContainerHub.Enabled {
+				t.Fatalf("expected container hub enabled when base url is set")
+			}
+			if cfg.ContainerHub.BaseURL != "http://127.0.0.1:18000" {
+				t.Fatalf("unexpected base url: %q", cfg.ContainerHub.BaseURL)
+			}
+			if !cfg.Bash.ShellFeaturesEnabled {
+				t.Fatalf("expected shell features enabled from yaml")
+			}
+			if cfg.Bash.WorkingDirectory != filepath.Join("var", "runtime") {
+				t.Fatalf("unexpected working directory: %q", cfg.Bash.WorkingDirectory)
+			}
+			if len(cfg.Bash.AllowedCommands) != 2 {
+				t.Fatalf("unexpected allowed commands: %#v", cfg.Bash.AllowedCommands)
+			}
+			if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-Command|{{command}}" {
+				t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
+			}
+			if cfg.BashHITL.DefaultTimeoutMs != 45000 {
+				t.Fatalf("unexpected bash HITL timeout: %d", cfg.BashHITL.DefaultTimeoutMs)
+			}
+			if cfg.Defaults.Budget.Hitl.TimeoutMs != 60000 {
+				t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
+			}
 		})
 	})
 }
@@ -1237,26 +1232,25 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 func TestLoadBashShellArgsFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"shell-executable: powershell.exe\n" +
-			"shell-args:\n" +
-			"  - -NoProfile\n" +
-			"  - -ExecutionPolicy\n" +
-			"  - Bypass\n" +
-			"  - -Command\n" +
-			"  - \"{{command}}\"\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "bash.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if cfg.Bash.ShellExecutable != "powershell.exe" {
-					t.Fatalf("unexpected shell executable: %q", cfg.Bash.ShellExecutable)
-				}
-				if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-ExecutionPolicy|Bypass|-Command|{{command}}" {
-					t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
-				}
-			})
+			"bash:\n" +
+			"  shell-executable: powershell.exe\n" +
+			"  shell-args:\n" +
+			"    - -NoProfile\n" +
+			"    - -ExecutionPolicy\n" +
+			"    - Bypass\n" +
+			"    - -Command\n" +
+			"    - \"{{command}}\"\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.Bash.ShellExecutable != "powershell.exe" {
+				t.Fatalf("unexpected shell executable: %q", cfg.Bash.ShellExecutable)
+			}
+			if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-ExecutionPolicy|Bypass|-Command|{{command}}" {
+				t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
+			}
 		})
 	})
 }
@@ -1264,15 +1258,14 @@ func TestLoadBashShellArgsFromFile(t *testing.T) {
 func TestDeprecatedBashPathConfigFailsStartup(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
-			"allowed-paths: [\".\", \"/tmp/example\"]\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "bash.yml"), &content, func() {
-				_, err := Load()
-				if err == nil || !strings.Contains(err.Error(), "allowed-paths") {
-					t.Fatalf("expected deprecated allowed-paths error, got %v", err)
-				}
-			})
+			"bash:\n" +
+			"  working-directory: " + filepath.ToSlash(filepath.Join("var", "runtime")) + "\n" +
+			"  allowed-paths: [\".\", \"/tmp/example\"]\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "allowed-paths") {
+				t.Fatalf("expected deprecated allowed-paths error, got %v", err)
+			}
 		})
 	})
 }
@@ -1280,15 +1273,14 @@ func TestDeprecatedBashPathConfigFailsStartup(t *testing.T) {
 func TestDeprecatedFileToolsPathConfigFailsStartup(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"allowed-read-paths:\n" +
-			"  - /read/a\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "file-tools.yml"), &content, func() {
-				_, err := Load()
-				if err == nil || !strings.Contains(err.Error(), "allowed-read-paths") {
-					t.Fatalf("expected deprecated allowed-read-paths error, got %v", err)
-				}
-			})
+			"file-tools:\n" +
+			"  allowed-read-paths:\n" +
+			"    - /read/a\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "allowed-read-paths") {
+				t.Fatalf("expected deprecated allowed-read-paths error, got %v", err)
+			}
 		})
 	})
 }
@@ -1296,32 +1288,31 @@ func TestDeprecatedFileToolsPathConfigFailsStartup(t *testing.T) {
 func TestAccessPolicyConfigYAMLOverrides(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"version: 1\n" +
-			"working-directory: \"@workspace\"\n" +
-			"levels:\n" +
-			"  default:\n" +
-			"    read-roots:\n" +
-			"      - \"@workspace\"\n" +
-			"    write-roots:\n" +
-			"      - \"@workspace\"\n" +
-			"    readonly-roots: []\n" +
-			"    approvals:\n" +
-			"      read-outside-roots: block\n" +
-			"      write-outside-roots: hitl\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "access-policy.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				level := cfg.AccessPolicy.Levels["default"]
-				if strings.Join(level.ReadRoots, ",") != "@workspace" {
-					t.Fatalf("unexpected read roots: %#v", level.ReadRoots)
-				}
-				if level.Approvals.ReadOutsideRoots != "block" {
-					t.Fatalf("unexpected read outside action: %#v", level.Approvals)
-				}
-			})
+			"access-policy:\n" +
+			"  version: 1\n" +
+			"  working-directory: \"@workspace\"\n" +
+			"  levels:\n" +
+			"    default:\n" +
+			"      read-roots:\n" +
+			"        - \"@workspace\"\n" +
+			"      write-roots:\n" +
+			"        - \"@workspace\"\n" +
+			"      readonly-roots: []\n" +
+			"      approvals:\n" +
+			"        read-outside-roots: block\n" +
+			"        write-outside-roots: hitl\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			level := cfg.AccessPolicy.Levels["default"]
+			if strings.Join(level.ReadRoots, ",") != "@workspace" {
+				t.Fatalf("unexpected read roots: %#v", level.ReadRoots)
+			}
+			if level.Approvals.ReadOutsideRoots != "block" {
+				t.Fatalf("unexpected read outside action: %#v", level.Approvals)
+			}
 		})
 	})
 }
@@ -1329,49 +1320,46 @@ func TestAccessPolicyConfigYAMLOverrides(t *testing.T) {
 func TestFileToolsConfigYAMLOverrides(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"working-directory: " + filepath.ToSlash(filepath.Join("tmp", "files")) + "\n" +
-			"max-read-bytes: 1234\n" +
-			"max-write-bytes: 5678\n" +
-			"max-batch-ops: 9\n" +
-			"require-write-approval: false\n" +
-			"require-read-before-write: false\n" +
-			"read-before-write-scope: chat\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "file-tools.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if cfg.FileTools.WorkingDirectory != filepath.Join("tmp", "files") {
-					t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
-				}
-				if cfg.FileTools.MaxReadBytes != 1234 || cfg.FileTools.MaxWriteBytes != 5678 || cfg.FileTools.MaxBatchOps != 9 {
-					t.Fatalf("unexpected file limits: %#v", cfg.FileTools)
-				}
-				if cfg.FileTools.RequireWriteApproval {
-					t.Fatalf("expected write approval disabled from yaml")
-				}
-				if cfg.FileTools.RequireReadBeforeWrite {
-					t.Fatalf("expected read-before-write disabled from yaml")
-				}
-				if cfg.FileTools.ReadBeforeWriteScope != "chat" {
-					t.Fatalf("expected chat read-before-write scope, got %q", cfg.FileTools.ReadBeforeWriteScope)
-				}
-			})
+			"file-tools:\n" +
+			"  working-directory: " + filepath.ToSlash(filepath.Join("tmp", "files")) + "\n" +
+			"  max-read-bytes: 1234\n" +
+			"  max-write-bytes: 5678\n" +
+			"  max-batch-ops: 9\n" +
+			"  require-write-approval: false\n" +
+			"  require-read-before-write: false\n" +
+			"  read-before-write-scope: chat\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.FileTools.WorkingDirectory != filepath.Join("tmp", "files") {
+				t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
+			}
+			if cfg.FileTools.MaxReadBytes != 1234 || cfg.FileTools.MaxWriteBytes != 5678 || cfg.FileTools.MaxBatchOps != 9 {
+				t.Fatalf("unexpected file limits: %#v", cfg.FileTools)
+			}
+			if cfg.FileTools.RequireWriteApproval {
+				t.Fatalf("expected write approval disabled from yaml")
+			}
+			if cfg.FileTools.RequireReadBeforeWrite {
+				t.Fatalf("expected read-before-write disabled from yaml")
+			}
+			if cfg.FileTools.ReadBeforeWriteScope != "chat" {
+				t.Fatalf("expected chat read-before-write scope, got %q", cfg.FileTools.ReadBeforeWriteScope)
+			}
 		})
 	})
 }
 
 func TestFileToolsConfigRejectsInvalidReadBeforeWriteScope(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
-		content := "read-before-write-scope: global\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "file-tools.yml"), &content, func() {
-				_, err := Load()
-				if err == nil || !strings.Contains(err.Error(), "read-before-write-scope") {
-					t.Fatalf("expected invalid read-before-write-scope error, got %v", err)
-				}
-			})
+		content := "file-tools:\n  read-before-write-scope: global\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "read-before-write-scope") {
+				t.Fatalf("expected invalid read-before-write-scope error, got %v", err)
+			}
 		})
 	})
 }
@@ -1379,39 +1367,38 @@ func TestFileToolsConfigRejectsInvalidReadBeforeWriteScope(t *testing.T) {
 func TestFileToolsConfigLSPHookYAMLOverrides(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
-			"hooks:\n" +
-			"  after-file-change:\n" +
-			"    lsp-diagnostics:\n" +
-			"      enabled: false\n" +
-			"      timeout-ms: 42\n" +
-			"      languages: [\"go\", \"python\"]\n" +
-			"      servers:\n" +
-			"        go:\n" +
-			"          command: custom-gopls\n" +
-			"          args: [\"serve\"]\n"
-		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), nil, func() {
-			withProjectFileContents(t, filepath.Join("configs", "file-tools.yml"), &content, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				lsp := cfg.FileTools.Hooks.AfterFileChange.LSPDiagnostics
-				if lsp.Enabled {
-					t.Fatalf("expected lsp diagnostics hook disabled from yaml")
-				}
-				if lsp.TimeoutMs != 42 {
-					t.Fatalf("unexpected timeout: %d", lsp.TimeoutMs)
-				}
-				if strings.Join(lsp.Languages, ",") != "go,python" {
-					t.Fatalf("unexpected languages: %#v", lsp.Languages)
-				}
-				if got := lsp.Servers["go"]; got.Command != "custom-gopls" || strings.Join(got.Args, ",") != "serve" {
-					t.Fatalf("unexpected go server: %#v", got)
-				}
-				if got := lsp.Servers["typescript"]; got.Command != "typescript-language-server" {
-					t.Fatalf("expected default typescript server to remain, got %#v", got)
-				}
-			})
+			"file-tools:\n" +
+			"  hooks:\n" +
+			"    after-file-change:\n" +
+			"      lsp-diagnostics:\n" +
+			"        enabled: false\n" +
+			"        timeout-ms: 42\n" +
+			"        languages: [\"go\", \"python\"]\n" +
+			"        servers:\n" +
+			"          go:\n" +
+			"            command: custom-gopls\n" +
+			"            args: [\"serve\"]\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			lsp := cfg.FileTools.Hooks.AfterFileChange.LSPDiagnostics
+			if lsp.Enabled {
+				t.Fatalf("expected lsp diagnostics hook disabled from yaml")
+			}
+			if lsp.TimeoutMs != 42 {
+				t.Fatalf("unexpected timeout: %d", lsp.TimeoutMs)
+			}
+			if strings.Join(lsp.Languages, ",") != "go,python" {
+				t.Fatalf("unexpected languages: %#v", lsp.Languages)
+			}
+			if got := lsp.Servers["go"]; got.Command != "custom-gopls" || strings.Join(got.Args, ",") != "serve" {
+				t.Fatalf("unexpected go server: %#v", got)
+			}
+			if got := lsp.Servers["typescript"]; got.Command != "typescript-language-server" {
+				t.Fatalf("expected default typescript server to remain, got %#v", got)
+			}
 		})
 	})
 }
@@ -1491,7 +1478,7 @@ func TestHostToolsConfigYAMLOverrides(t *testing.T) {
 	})
 }
 
-func TestHostToolsConfigOverridesLegacyToolFiles(t *testing.T) {
+func TestHostToolsConfigIgnoresLegacyToolFiles(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		legacyAccess := "" +
 			"levels:\n" +
@@ -1528,11 +1515,11 @@ func TestHostToolsConfigOverridesLegacyToolFiles(t *testing.T) {
 						if cfg.Bash.WorkingDirectory != "merged-bash" {
 							t.Fatalf("expected host-tools bash working dir to win, got %q", cfg.Bash.WorkingDirectory)
 						}
-						if strings.Join(cfg.Bash.AllowedCommands, ",") != "pwd" {
-							t.Fatalf("expected legacy bash fallback to remain, got %#v", cfg.Bash.AllowedCommands)
+						if strings.Join(cfg.Bash.AllowedCommands, ",") == "pwd" {
+							t.Fatalf("expected legacy bash file to be ignored, got %#v", cfg.Bash.AllowedCommands)
 						}
-						if cfg.FileTools.WorkingDirectory != "legacy-files" {
-							t.Fatalf("expected legacy file-tools fallback to remain, got %q", cfg.FileTools.WorkingDirectory)
+						if cfg.FileTools.WorkingDirectory == "legacy-files" {
+							t.Fatalf("expected legacy file-tools file to be ignored, got %q", cfg.FileTools.WorkingDirectory)
 						}
 						if cfg.FileTools.MaxReadBytes != 222 {
 							t.Fatalf("expected host-tools file-tools max read to win, got %d", cfg.FileTools.MaxReadBytes)

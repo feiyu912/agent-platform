@@ -6,29 +6,12 @@ import (
 )
 
 func (c *Config) applyStructuredConfig() error {
-	c.applyContainerHubFile(ConfigFile("configs/container-hub.yml"))
-	c.applyDesktopFile(ConfigFile("configs/desktop.yml"))
-	c.applyCORSFile(ConfigFile("configs/cors.yml"))
 	c.applyRuntimeFile(ConfigFile("configs/runtime.yml"))
-	if err := c.applyAccessPolicyFile(ConfigFile("configs/access-policy.yml")); err != nil {
-		return err
-	}
-	if err := c.applyBashFile(ConfigFile("configs/bash.yml")); err != nil {
-		return err
-	}
-	if err := c.applyFileToolsFile(ConfigFile("configs/file-tools.yml")); err != nil {
-		return err
-	}
 	if err := c.applyHostToolsFile(ConfigFile("configs/host-tools.yml")); err != nil {
 		return err
 	}
-	c.applyCoderPromptsFile(ConfigFile("configs/coder-prompts.yml"))
-	c.applyMemoryPromptsFile(ConfigFile("configs/memory-prompts.yml"))
 	c.applyPromptsFile(ConfigFile("configs/prompts.yml"))
 	if err := c.applyCoderSettingsFile(ConfigFile("configs/coder-settings.yml")); err != nil {
-		return err
-	}
-	if err := c.applyVisionRecognizeFile(ConfigFile("configs/vision-recognize.yml")); err != nil {
 		return err
 	}
 	if err := c.applyAIToolsFile(ConfigFile("configs/ai-tools.yml")); err != nil {
@@ -49,17 +32,6 @@ func loadYAMLMap(path string) (map[string]any, error) {
 	return values, nil
 }
 
-func (c *Config) applyDesktopFile(path string) {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return
-	}
-	if len(values) == 0 {
-		return
-	}
-	c.applyDesktopValues(values)
-}
-
 func (c *Config) applyDesktopValues(values map[string]any) {
 	c.Desktop.Action = parseDesktopBridgeConfig(values["action"], c.Desktop.Action)
 	c.Desktop.CDP = parseDesktopBridgeConfig(values["cdp"], c.Desktop.CDP)
@@ -75,17 +47,6 @@ func parseDesktopBridgeConfig(raw any, fallback DesktopBridgeConfig) DesktopBrid
 	fallback.Path = stringValue(anyValue(values["path"], fallback.Path), fallback.Path)
 	fallback.RequestTimeoutMs = intValue(anyValue(values["request-timeout-ms"], fallback.RequestTimeoutMs), fallback.RequestTimeoutMs)
 	return fallback
-}
-
-func (c *Config) applyContainerHubFile(path string) {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return
-	}
-	if len(values) == 0 {
-		return
-	}
-	c.applyContainerHubValues(values)
 }
 
 func (c *Config) applyContainerHubValues(values map[string]any) {
@@ -122,18 +83,6 @@ func (c *Config) applyRuntimeFile(path string) {
 
 func (c *Config) applyBillingValues(values map[string]any) {
 	c.Billing.Currency = strings.ToUpper(stringValue(anyValue(values["currency"], c.Billing.Currency), c.Billing.Currency))
-}
-
-func (c *Config) applyAccessPolicyFile(path string) error {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return err
-	}
-	if len(values) == 0 {
-		return nil
-	}
-	c.applyAccessPolicyValues(values)
-	return nil
 }
 
 func (c *Config) applyAccessPolicyValues(values map[string]any) {
@@ -187,21 +136,6 @@ func parseAccessPolicyApprovals(raw any, fallback AccessPolicyApprovalConfig) Ac
 	return fallback
 }
 
-func (c *Config) applyBashFile(path string) error {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return err
-	}
-	if len(values) == 0 {
-		return nil
-	}
-	if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", values, "allowed-paths", "path-checked-commands", "path-check-bypass-commands"); err != nil {
-		return err
-	}
-	c.applyBashValues(values)
-	return nil
-}
-
 func (c *Config) applyBashValues(values map[string]any) {
 	c.Bash.WorkingDirectory = stringValue(anyValue(values["working-directory"], c.Bash.WorkingDirectory), c.Bash.WorkingDirectory)
 	c.Bash.AllowedCommands = csvOrList(anyValue(values["allowed-commands"], c.Bash.AllowedCommands), c.Bash.AllowedCommands)
@@ -211,20 +145,6 @@ func (c *Config) applyBashValues(values map[string]any) {
 	c.Bash.ShellTimeoutMs = intValue(anyValue(values["shell-timeout-ms"], c.Bash.ShellTimeoutMs), c.Bash.ShellTimeoutMs)
 	c.Bash.MaxCommandChars = intValue(anyValue(values["max-command-chars"], c.Bash.MaxCommandChars), c.Bash.MaxCommandChars)
 	c.BashHITL.DefaultTimeoutMs = intValue(anyValue(values["hitl-default-timeout-ms"], c.BashHITL.DefaultTimeoutMs), c.BashHITL.DefaultTimeoutMs)
-}
-
-func (c *Config) applyFileToolsFile(path string) error {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return err
-	}
-	if len(values) == 0 {
-		return nil
-	}
-	if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", values, "allowed-read-paths", "allowed-write-paths"); err != nil {
-		return err
-	}
-	return c.applyFileToolsValues(path, values)
 }
 
 func (c *Config) applyFileToolsValues(path string, values map[string]any) error {
@@ -377,17 +297,6 @@ func normalizeLanguageIDs(values []string) []string {
 	return out
 }
 
-func (c *Config) applyCORSFile(path string) {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return
-	}
-	if len(values) == 0 {
-		return
-	}
-	c.applyCORSValues(values)
-}
-
 func (c *Config) applyCORSValues(values map[string]any) {
 	c.CORS.Enabled = boolValue(anyValue(values["enabled"], c.CORS.Enabled), c.CORS.Enabled)
 	c.CORS.PathPattern = stringValue(anyValue(values["path-pattern"], c.CORS.PathPattern), c.CORS.PathPattern)
@@ -438,33 +347,11 @@ func (c *Config) applyPromptsValues(values map[string]any) {
 	}
 }
 
-func (c *Config) applyCoderPromptsFile(path string) {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return
-	}
-	if len(values) == 0 {
-		return
-	}
-	c.applyCoderPromptsValues(values)
-}
-
 func (c *Config) applyCoderPromptsValues(values map[string]any) {
 	c.CoderPrompts.SystemPrompt = stringValue(anyValue(values["system-prompt"], c.CoderPrompts.SystemPrompt), c.CoderPrompts.SystemPrompt)
 	c.CoderPrompts.PlanningPrompt = stringValue(anyValue(values["planning-prompt"], c.CoderPrompts.PlanningPrompt), c.CoderPrompts.PlanningPrompt)
 	c.CoderPrompts.SummarySystemPrompt = stringValue(anyValue(values["summary-system-prompt"], c.CoderPrompts.SummarySystemPrompt), c.CoderPrompts.SummarySystemPrompt)
 	c.CoderPrompts.SummaryUserPromptTemplate = stringValue(anyValue(values["summary-user-prompt-template"], c.CoderPrompts.SummaryUserPromptTemplate), c.CoderPrompts.SummaryUserPromptTemplate)
-}
-
-func (c *Config) applyMemoryPromptsFile(path string) {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return
-	}
-	if len(values) == 0 {
-		return
-	}
-	c.applyMemoryPromptsValues(values)
 }
 
 func (c *Config) applyMemoryPromptsValues(values map[string]any) {
@@ -533,18 +420,6 @@ func parseCoderACPProxies(raw any, fallback map[string]CoderACPProxyConfig) (map
 		out[id] = cfg
 	}
 	return out, nil
-}
-
-func (c *Config) applyVisionRecognizeFile(path string) error {
-	values, err := loadYAMLMap(path)
-	if err != nil {
-		return err
-	}
-	if len(values) == 0 {
-		return nil
-	}
-	c.applyVisionRecognizeValues(values)
-	return nil
 }
 
 func (c *Config) applyVisionRecognizeValues(values map[string]any) {
