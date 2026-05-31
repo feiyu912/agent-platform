@@ -454,6 +454,10 @@ func (w *StepWriter) captureTaskDebugData(buffer *taskStepBuffer, eventType stri
 }
 
 func (w *StepWriter) flushCurrentStep() {
+	w.flushCurrentStepAt(0)
+}
+
+func (w *StepWriter) flushCurrentStepAt(updatedAt int64) {
 	if len(w.messages) == 0 && len(w.pendingAwaiting) == 0 {
 		w.pendingUsage = nil
 		w.pendingContextWindowMax = 0
@@ -462,7 +466,9 @@ func (w *StepWriter) flushCurrentStep() {
 		return
 	}
 
-	updatedAt := time.Now().UnixMilli()
+	if updatedAt <= 0 {
+		updatedAt = time.Now().UnixMilli()
+	}
 	messages := append([]StoredMessage(nil), w.messages...)
 	if w.pendingApproval != nil && approvalMatchesToolMessages(w.pendingApproval, messages) {
 		if approvalMessage, ok := approvalAuditMessage(w.pendingApproval, updatedAt); ok {

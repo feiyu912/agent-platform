@@ -232,7 +232,7 @@ func TestFileStoreLoadAllPendingAwaitingsReturnsPersistedRows(t *testing.T) {
 	}
 }
 
-func TestFileStoreLoadAwaitingAskFindsStepAndEventLines(t *testing.T) {
+func TestFileStoreLoadAwaitingAskUsesCanonicalStepOnly(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -266,6 +266,27 @@ func TestFileStoreLoadAwaitingAskFindsStepAndEventLines(t *testing.T) {
 	if ask == nil || ask.AwaitingID != "await_step" || ask.RunID != "run-step" || ask.Mode != "question" {
 		t.Fatalf("unexpected step awaiting ask %#v", ask)
 	}
+	if err := store.AppendSubmitLine("chat-awaiting-step", SubmitLine{
+		ChatID:    "chat-awaiting-step",
+		RunID:     "run-step",
+		UpdatedAt: 101,
+		Type:      "submit",
+		Answer: map[string]any{
+			"type":       "awaiting.answer",
+			"awaitingId": "await_step",
+			"mode":       "question",
+			"status":     "answered",
+		},
+	}); err != nil {
+		t.Fatalf("append answer line: %v", err)
+	}
+	ask, err = store.LoadAwaitingAsk("chat-awaiting-step", "await_step")
+	if err != nil {
+		t.Fatalf("load answered awaiting ask: %v", err)
+	}
+	if ask != nil {
+		t.Fatalf("expected answered awaiting ask to be unresolved, got %#v", ask)
+	}
 
 	if _, _, err := store.EnsureChat("chat-awaiting-event", "agent", "", "hello"); err != nil {
 		t.Fatalf("ensure event chat: %v", err)
@@ -290,8 +311,8 @@ func TestFileStoreLoadAwaitingAskFindsStepAndEventLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load event awaiting ask: %v", err)
 	}
-	if ask == nil || ask.AwaitingID != "await_event" || ask.RunID != "run-event" || ask.Mode != "approval" {
-		t.Fatalf("unexpected event awaiting ask %#v", ask)
+	if ask != nil {
+		t.Fatalf("did not expect event-only awaiting ask to be loaded, got %#v", ask)
 	}
 }
 
@@ -1193,26 +1214,19 @@ func TestStepWriterEmbedsAwaitingInStepLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read chat jsonl: %v", err)
 	}
-	if len(lines) != 3 {
-		t.Fatalf("expected immediate awaiting event, one step line, and one submit line, got %#v", lines)
-	}
-	if got := lines[0]["_type"]; got != "event" {
-		t.Fatalf("expected first persisted line to be immediate awaiting event, got %#v", lines[0])
-	}
-	event, _ := lines[0]["event"].(map[string]any)
-	if event == nil || event["type"] != "awaiting.ask" || event["awaitingId"] != "tool-1" {
-		t.Fatalf("expected immediate awaiting.ask event line, got %#v", lines[0])
-	}
-	if _, ok := event["seq"]; ok {
-		t.Fatalf("did not expect seq on immediate awaiting event, got %#v", event)
+	if len(lines) != 2 {
+		t.Fatalf("expected awaiting step line and submit line, got %#v", lines)
 	}
 
-	if got := lines[1]["_type"]; got != "react" {
-		t.Fatalf("expected second persisted line to be step, got %#v", lines[1])
+	if got := lines[0]["_type"]; got != "react" {
+		t.Fatalf("expected first persisted line to be step, got %#v", lines[0])
 	}
-	awaiting, _ := lines[1]["awaiting"].([]any)
+	if got := toIntValue(lines[0]["updatedAt"]); got != 1002 {
+		t.Fatalf("expected awaiting step updatedAt=1002, got %#v", lines[0])
+	}
+	awaiting, _ := lines[0]["awaiting"].([]any)
 	if len(awaiting) != 1 {
-		t.Fatalf("expected embedded awaiting events on step line, got %#v", lines[1])
+		t.Fatalf("expected embedded awaiting events on step line, got %#v", lines[0])
 	}
 	for _, raw := range awaiting {
 		item, _ := raw.(map[string]any)
@@ -1223,20 +1237,20 @@ func TestStepWriterEmbedsAwaitingInStepLine(t *testing.T) {
 			t.Fatalf("did not expect seq on embedded awaiting item, got %#v", item)
 		}
 	}
-	messages, _ := lines[1]["messages"].([]any)
+	messages, _ := lines[0]["messages"].([]any)
 	if len(messages) != 1 {
-		t.Fatalf("expected one tool snapshot message, got %#v", lines[1])
+		t.Fatalf("expected one tool snapshot message, got %#v", lines[0])
 	}
 
-	if got := lines[2]["_type"]; got != "submit" {
-		t.Fatalf("expected third persisted line to be submit, got %#v", lines[2])
+	if got := lines[1]["_type"]; got != "submit" {
+		t.Fatalf("expected second persisted line to be submit, got %#v", lines[1])
 	}
-	submit, _ := lines[2]["submit"].(map[string]any)
+	submit, _ := lines[1]["submit"].(map[string]any)
 	if submit == nil || submit["type"] != "request.submit" {
-		t.Fatalf("expected request.submit submit line, got %#v", lines[2])
+		t.Fatalf("expected request.submit submit line, got %#v", lines[1])
 	}
-	if _, ok := lines[2]["answer"]; ok {
-		t.Fatalf("did not expect answer on submit-only line, got %#v", lines[2])
+	if _, ok := lines[1]["answer"]; ok {
+		t.Fatalf("did not expect answer on submit-only line, got %#v", lines[1])
 	}
 }
 
@@ -1356,34 +1370,28 @@ func TestStepWriterTimeoutAnswerDoesNotSplitToolStep(t *testing.T) {
 		t.Fatalf("read chat jsonl: %v", err)
 	}
 	if len(lines) != 3 {
-		t.Fatalf("expected immediate awaiting event, one step line, and one submit line, got %#v", lines)
+		t.Fatalf("expected awaiting step, submit line, and tool result step, got %#v", lines)
 	}
-	var stepLine map[string]any
-	var submitLine map[string]any
-	var eventLine map[string]any
-	for _, line := range lines {
-		switch line["_type"] {
-		case "event":
-			eventLine = line
-		case "react":
-			stepLine = line
-		case "submit":
-			submitLine = line
-		}
+	awaitingStep := lines[0]
+	submitLine := lines[1]
+	toolResultStep := lines[2]
+	if awaitingStep["_type"] != "react" || toIntValue(awaitingStep["seq"]) != 1 || toIntValue(awaitingStep["updatedAt"]) != 1002 {
+		t.Fatalf("expected awaiting step seq=1 updatedAt=1002, got %#v", awaitingStep)
 	}
-	if eventLine == nil || stepLine == nil || submitLine == nil {
-		t.Fatalf("expected event, step, and submit lines, got %#v", lines)
+	awaiting, _ := awaitingStep["awaiting"].([]any)
+	if len(awaiting) != 1 {
+		t.Fatalf("expected awaiting on first step line, got %#v", awaitingStep)
 	}
-	event, _ := eventLine["event"].(map[string]any)
-	if event == nil || event["type"] != "awaiting.ask" || event["awaitingId"] != "tool-1" {
-		t.Fatalf("expected immediate awaiting.ask event line, got %#v", eventLine)
+	messages, _ := awaitingStep["messages"].([]any)
+	if len(messages) != 1 {
+		t.Fatalf("expected tool snapshot on first step line, got %#v", awaitingStep)
 	}
-	if toIntValue(stepLine["seq"]) != 1 {
-		t.Fatalf("expected timeout tool step seq=1, got %#v", stepLine)
+	if toolResultStep["_type"] != "react" || toIntValue(toolResultStep["seq"]) != 1 {
+		t.Fatalf("expected tool result step to reuse seq=1, got %#v", toolResultStep)
 	}
-	messages, _ := stepLine["messages"].([]any)
-	if len(messages) != 2 {
-		t.Fatalf("expected tool snapshot and tool result in same step line, got %#v", stepLine)
+	resultMessages, _ := toolResultStep["messages"].([]any)
+	if len(resultMessages) != 1 {
+		t.Fatalf("expected tool result in split step line, got %#v", toolResultStep)
 	}
 	answer, _ := submitLine["answer"].(map[string]any)
 	if answer == nil || answer["type"] != "awaiting.answer" {
@@ -1492,25 +1500,21 @@ func TestStepWriterReusesReactSeqForSplitHITLToolResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read chat jsonl: %v", err)
 	}
-	if len(lines) != 5 {
-		t.Fatalf("expected immediate awaiting event, assistant step, submit line, tool step, final assistant step; got %#v", lines)
+	if len(lines) != 4 {
+		t.Fatalf("expected assistant awaiting step, submit line, tool step, final assistant step; got %#v", lines)
 	}
-	eventLine := lines[0]
-	if eventLine["_type"] != "event" {
-		t.Fatalf("expected first line to be immediate awaiting event, got %#v", eventLine)
+	firstStep := lines[0]
+	if firstStep["_type"] != "react" || toIntValue(firstStep["seq"]) != 1 || toIntValue(firstStep["updatedAt"]) != 1002 {
+		t.Fatalf("expected first react step seq=1 updatedAt=1002, got %#v", firstStep)
 	}
-	event, _ := eventLine["event"].(map[string]any)
-	if event == nil || event["type"] != "awaiting.ask" || event["awaitingId"] != "tool-1" {
-		t.Fatalf("expected immediate awaiting.ask event line, got %#v", eventLine)
-	}
-	firstStep := lines[1]
-	if firstStep["_type"] != "react" || toIntValue(firstStep["seq"]) != 1 {
-		t.Fatalf("expected first react step seq=1, got %#v", firstStep)
+	awaiting, _ := firstStep["awaiting"].([]any)
+	if len(awaiting) != 1 {
+		t.Fatalf("expected awaiting on first step, got %#v", firstStep)
 	}
 	if _, ok := firstStep["approval"]; ok {
 		t.Fatalf("did not expect approval on assistant tool-call step, got %#v", firstStep)
 	}
-	toolStep := lines[3]
+	toolStep := lines[2]
 	if toolStep["_type"] != "react" || toIntValue(toolStep["seq"]) != 1 {
 		t.Fatalf("expected split tool result step to reuse seq=1, got %#v", toolStep)
 	}
@@ -1533,7 +1537,7 @@ func TestStepWriterReusesReactSeqForSplitHITLToolResult(t *testing.T) {
 	if !ok || approval["summary"] != `[HITL] git push origin main -> approve` {
 		t.Fatalf("expected inline approval metadata, got %#v", approvalMessage)
 	}
-	finalStep := lines[4]
+	finalStep := lines[3]
 	if finalStep["_type"] != "react" || toIntValue(finalStep["seq"]) != 2 {
 		t.Fatalf("expected next model step seq=2, got %#v", finalStep)
 	}
@@ -2756,20 +2760,90 @@ func TestStepWriterPersistsAwaitingWithoutMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read chat jsonl: %v", err)
 	}
-	if len(lines) != 2 {
-		t.Fatalf("expected immediate event and step line for standalone awaiting, got %#v", lines)
+	if len(lines) != 1 {
+		t.Fatalf("expected standalone awaiting step line, got %#v", lines)
 	}
-	event, _ := lines[0]["event"].(map[string]any)
-	if lines[0]["_type"] != "event" || event == nil || event["type"] != "awaiting.ask" || event["awaitingId"] != "tool-1" {
-		t.Fatalf("expected immediate awaiting.ask event line, got %#v", lines[0])
+	if lines[0]["_type"] != "react" || toIntValue(lines[0]["updatedAt"]) != 3001 {
+		t.Fatalf("expected awaiting step line updatedAt=3001, got %#v", lines[0])
 	}
-	awaiting, _ := lines[1]["awaiting"].([]any)
+	awaiting, _ := lines[0]["awaiting"].([]any)
 	if len(awaiting) != 1 {
-		t.Fatalf("expected standalone awaiting on step line, got %#v", lines[1])
+		t.Fatalf("expected standalone awaiting on step line, got %#v", lines[0])
 	}
 	item, _ := awaiting[0].(map[string]any)
 	if item["type"] != "awaiting.ask" || item["awaitingId"] != "tool-1" {
 		t.Fatalf("unexpected standalone awaiting item %#v", item)
+	}
+}
+
+func TestStepWriterFlushesAwaitingAskImmediatelyForAllModes(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	tests := []struct {
+		mode string
+		key  string
+		data any
+	}{
+		{
+			mode: "question",
+			key:  "questions",
+			data: []any{map[string]any{"id": "q1", "question": "Need input", "type": "text"}},
+		},
+		{
+			mode: "approval",
+			key:  "approvals",
+			data: []any{map[string]any{"id": "cmd-1", "command": "deploy"}},
+		},
+		{
+			mode: "form",
+			key:  "forms",
+			data: []any{map[string]any{"id": "form-1", "title": "Review"}},
+		},
+		{
+			mode: "plan",
+			key:  "plan",
+			data: map[string]any{"title": "Plan", "steps": []any{"one"}},
+		},
+	}
+
+	for _, tc := range tests {
+		chatID := "chat-awaiting-" + tc.mode
+		runID := "run-awaiting-" + tc.mode
+		writer := NewStepWriter(store, chatID, runID, "react", false)
+		payload := map[string]any{
+			"awaitingId": "await-" + tc.mode,
+			"mode":       tc.mode,
+			"timeout":    120000,
+			"runId":      runID,
+			tc.key:       tc.data,
+		}
+		writer.OnEvent(stream.EventData{
+			Type:      "awaiting.ask",
+			Timestamp: 4000,
+			Payload:   payload,
+		})
+
+		lines, err := readJSONLines(store.chatJSONLPath(chatID))
+		if err != nil {
+			t.Fatalf("read %s jsonl: %v", tc.mode, err)
+		}
+		if len(lines) != 1 || lines[0]["_type"] != "react" {
+			t.Fatalf("expected one canonical step line for %s, got %#v", tc.mode, lines)
+		}
+		if _, ok := lines[0]["event"]; ok {
+			t.Fatalf("did not expect event payload for %s, got %#v", tc.mode, lines[0])
+		}
+		awaiting, _ := lines[0]["awaiting"].([]any)
+		if len(awaiting) != 1 {
+			t.Fatalf("expected awaiting payload for %s, got %#v", tc.mode, lines[0])
+		}
+		item, _ := awaiting[0].(map[string]any)
+		if item["type"] != "awaiting.ask" || item["mode"] != tc.mode || item[tc.key] == nil {
+			t.Fatalf("unexpected awaiting item for %s: %#v", tc.mode, item)
+		}
 	}
 }
 
@@ -3845,7 +3919,7 @@ func eventOrder(events []stream.EventData, eventTypes ...string) map[string]int 
 	return order
 }
 
-func TestLoadChatReplaysQuestionAwaitLifecycleLegacyEventLines(t *testing.T) {
+func TestLoadChatIgnoresQuestionAwaitingAskEventLines(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -3953,15 +4027,14 @@ func TestLoadChatReplaysQuestionAwaitLifecycleLegacyEventLines(t *testing.T) {
 		t.Fatalf("load chat: %v", err)
 	}
 
-	if len(detail.Events) != 7 {
-		t.Fatalf("expected 7 replayed events, got %d: %#v", len(detail.Events), detail.Events)
+	if len(detail.Events) != 6 {
+		t.Fatalf("expected 6 replayed events, got %d: %#v", len(detail.Events), detail.Events)
 	}
 
 	expectedTypes := []string{
 		"chat.start",
 		"run.start",
 		"request.query",
-		"awaiting.ask",
 		"request.submit",
 		"awaiting.answer",
 		"run.complete",
@@ -3972,25 +4045,12 @@ func TestLoadChatReplaysQuestionAwaitLifecycleLegacyEventLines(t *testing.T) {
 		}
 	}
 
-	viewport := detail.Events[3]
-	if _, exists := viewport.Payload["awaitName"]; exists {
-		t.Fatalf("did not expect awaitName on awaiting.ask replay %#v", viewport)
-	}
-	if _, exists := viewport.Payload["chatId"]; exists {
-		t.Fatalf("did not expect chatId on awaiting.ask replay %#v", viewport)
-	}
-
-	questions, _ := viewport.Value("questions").([]any)
-	if len(questions) != 2 {
-		t.Fatalf("expected inline await ask replay, got %#v", viewport)
-	}
-
-	submit := detail.Events[4]
+	submit := detail.Events[3]
 	submitParams, _ := submit.Value("params").([]any)
 	if submit.String("awaitingId") != "tool-1" || len(submitParams) != 2 {
 		t.Fatalf("unexpected request.submit replay %#v", submit)
 	}
-	answer := detail.Events[5]
+	answer := detail.Events[4]
 	answerQuestions, _ := answer.Value("answers").([]any)
 	if answer.String("awaitingId") != "tool-1" || len(answerQuestions) != 2 {
 		t.Fatalf("unexpected awaiting.answer replay %#v", answer)
@@ -4180,29 +4240,29 @@ func TestLoadChatReplaysAwaitingFromStepLine(t *testing.T) {
 	}
 }
 
-func TestLoadChatSuppressesImmediateAwaitingAskWhenStepLineExists(t *testing.T) {
+func TestLoadChatIgnoresEventLineAwaitingAsk(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
 	}
-	if _, _, err := store.EnsureChat("chat-awaiting-dedupe", "agent", "", "hello"); err != nil {
+	if _, _, err := store.EnsureChat("chat-awaiting-event-ignored", "agent", "", "hello"); err != nil {
 		t.Fatalf("ensure chat: %v", err)
 	}
-	if err := store.AppendQueryLine("chat-awaiting-dedupe", QueryLine{
-		ChatID:    "chat-awaiting-dedupe",
-		RunID:     "run-awaiting-dedupe",
+	if err := store.AppendQueryLine("chat-awaiting-event-ignored", QueryLine{
+		ChatID:    "chat-awaiting-event-ignored",
+		RunID:     "run-awaiting-event-ignored",
 		UpdatedAt: 1000,
 		Query: map[string]any{
-			"chatId":  "chat-awaiting-dedupe",
+			"chatId":  "chat-awaiting-event-ignored",
 			"message": "please ask me",
 		},
 		Type: "query",
 	}); err != nil {
 		t.Fatalf("append query line: %v", err)
 	}
-	if err := store.AppendEventLine("chat-awaiting-dedupe", EventLine{
-		ChatID:    "chat-awaiting-dedupe",
-		RunID:     "run-awaiting-dedupe",
+	if err := store.AppendEventLine("chat-awaiting-event-ignored", EventLine{
+		ChatID:    "chat-awaiting-event-ignored",
+		RunID:     "run-awaiting-event-ignored",
 		UpdatedAt: 1001,
 		Type:      "event",
 		Event: map[string]any{
@@ -4210,37 +4270,57 @@ func TestLoadChatSuppressesImmediateAwaitingAskWhenStepLineExists(t *testing.T) 
 			"awaitingId": "tool-1",
 			"mode":       "question",
 			"timeout":    120000,
-			"runId":      "run-awaiting-dedupe",
+			"runId":      "run-awaiting-event-ignored",
 			"questions": []any{
 				map[string]any{"id": "q1", "question": "How many?", "type": "number"},
 			},
 		},
 	}); err != nil {
-		t.Fatalf("append immediate awaiting event line: %v", err)
+		t.Fatalf("append awaiting event line: %v", err)
 	}
 
-	toolTs := int64(1002)
-	if err := store.AppendStepLine("chat-awaiting-dedupe", StepLine{
-		ChatID:    "chat-awaiting-dedupe",
-		RunID:     "run-awaiting-dedupe",
-		UpdatedAt: 1003,
+	detail, err := store.LoadChat("chat-awaiting-event-ignored")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	for _, event := range detail.Events {
+		if event.Type == "awaiting.ask" {
+			t.Fatalf("did not expect event-line awaiting.ask to replay, got %#v", detail.Events)
+		}
+	}
+}
+
+func TestLoadChatDoesNotSynthesizeRunCompleteForPendingAwaiting(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-awaiting-pending", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := store.AppendQueryLine("chat-awaiting-pending", QueryLine{
+		ChatID:    "chat-awaiting-pending",
+		RunID:     "run-awaiting-pending",
+		UpdatedAt: 1000,
+		Query: map[string]any{
+			"chatId":  "chat-awaiting-pending",
+			"runId":   "run-awaiting-pending",
+			"message": "please ask me",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+	if err := store.AppendStepLine("chat-awaiting-pending", StepLine{
+		ChatID:    "chat-awaiting-pending",
+		RunID:     "run-awaiting-pending",
+		UpdatedAt: 1001,
 		Type:      "react",
-		Seq:       1,
-		Messages: []StoredMessage{{
-			Role: "assistant",
-			ToolCalls: []StoredToolCall{{
-				ID:       "tool-1",
-				Type:     "function",
-				Function: StoredFunction{Name: "ask_user", Arguments: "{}"},
-			}},
-			ToolID: "tool-1",
-			MsgID:  "msg-1",
-			Ts:     &toolTs,
-		}},
 		Awaiting: []map[string]any{{
 			"type":       "awaiting.ask",
 			"timestamp":  1001,
 			"awaitingId": "tool-1",
+			"runId":      "run-awaiting-pending",
 			"mode":       "question",
 			"timeout":    120000,
 			"questions": []any{
@@ -4248,29 +4328,32 @@ func TestLoadChatSuppressesImmediateAwaitingAskWhenStepLineExists(t *testing.T) 
 			},
 		}},
 	}); err != nil {
-		t.Fatalf("append step line: %v", err)
+		t.Fatalf("append awaiting step: %v", err)
+	}
+	if err := store.SetPendingAwaiting("chat-awaiting-pending", PendingAwaiting{
+		AwaitingID: "tool-1",
+		RunID:      "run-awaiting-pending",
+		Mode:       "question",
+		CreatedAt:  1001,
+	}); err != nil {
+		t.Fatalf("set pending awaiting: %v", err)
 	}
 
-	detail, err := store.LoadChat("chat-awaiting-dedupe")
+	detail, err := store.LoadChat("chat-awaiting-pending")
 	if err != nil {
 		t.Fatalf("load chat: %v", err)
 	}
-	awaitingCount := 0
-	var toolIndex, awaitingIndex int
-	for index, event := range detail.Events {
-		switch event.Type {
-		case "tool.snapshot":
-			toolIndex = index
-		case "awaiting.ask":
-			awaitingCount++
-			awaitingIndex = index
+	var sawAwaiting bool
+	for _, event := range detail.Events {
+		if event.Type == "awaiting.ask" {
+			sawAwaiting = true
+		}
+		if event.Type == "run.complete" && event.String("runId") == "run-awaiting-pending" {
+			t.Fatalf("did not expect synthesized run.complete while awaiting is pending, got %#v", detail.Events)
 		}
 	}
-	if awaitingCount != 1 {
-		t.Fatalf("expected duplicate immediate awaiting.ask to be suppressed, got %d events: %#v", awaitingCount, detail.Events)
-	}
-	if toolIndex == 0 || awaitingIndex <= toolIndex {
-		t.Fatalf("expected canonical awaiting.ask after matching tool snapshot, got %#v", detail.Events)
+	if !sawAwaiting {
+		t.Fatalf("expected replayed pending awaiting.ask, got %#v", detail.Events)
 	}
 }
 
@@ -4837,7 +4920,7 @@ func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
 	}
 }
 
-func TestLoadChatReplaysApprovalAwaitLifecycleLegacyEventLines(t *testing.T) {
+func TestLoadChatIgnoresApprovalAwaitingAskEventLines(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -4942,8 +5025,8 @@ func TestLoadChatReplaysApprovalAwaitLifecycleLegacyEventLines(t *testing.T) {
 			}
 		}
 	}
-	if !foundAwaitAsk {
-		t.Fatalf("expected approval awaiting.ask replay, got %#v", detail.Events)
+	if foundAwaitAsk {
+		t.Fatalf("did not expect approval awaiting.ask event-line replay, got %#v", detail.Events)
 	}
 	if !foundAwaitAnswer {
 		t.Fatalf("expected approval awaiting.answer replay, got %#v", detail.Events)

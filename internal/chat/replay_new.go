@@ -113,7 +113,6 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 	var chatTotalToolCallCount int
 	taskQueries := map[string]replayedSubTaskQuery{}
 	legacyConfirmIDs := map[string]bool{}
-	stepAwaitingAsks := map[string]bool{}
 	for _, line := range lines {
 		if lineType, _ := line["_type"].(string); lineType != "query" {
 			continue
@@ -130,26 +129,6 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			TaskDesc:    stringFromAny(query["message"]),
 			SubAgentKey: stringFromAny(line["subAgentKey"]),
 			MainToolID:  taskToolIDFromLine(line),
-		}
-	}
-	for _, line := range lines {
-		lineType, _ := line["_type"].(string)
-		if lineType != "react" && lineType != "plan-execute" && lineType != "step" {
-			continue
-		}
-		runID, _ := line["runId"].(string)
-		awaitingItems, _ := line["awaiting"].([]any)
-		for _, raw := range awaitingItems {
-			item, _ := raw.(map[string]any)
-			if item == nil || strings.TrimSpace(stringFromAny(item["type"])) != "awaiting.ask" {
-				continue
-			}
-			awaitingID := strings.TrimSpace(stringFromAny(item["awaitingId"]))
-			if awaitingID == "" {
-				continue
-			}
-			itemRunID := strings.TrimSpace(stringFromAny(item["runId"]))
-			stepAwaitingAsks[awaitingReplayKey(firstNonBlankReplayString(itemRunID, runID), awaitingID)] = true
 		}
 	}
 
@@ -405,7 +384,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			if suppressLegacyConfirmReplay(event, legacyConfirmIDs) {
 				continue
 			}
-			if shouldSuppressImmediateAwaitingAskReplay(event, runID, stepAwaitingAsks) {
+			if strings.TrimSpace(stringFromAny(event["type"])) == "awaiting.ask" {
 				continue
 			}
 			if _, ok := event["runId"]; !ok && runID != "" {
@@ -455,7 +434,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		}
 		allEvents = append(allEvents, rd.events...)
 		// Synthesize run.complete for the frontend (not persisted in JSONL).
-		if runID != "" {
+		if runID != "" && !isPendingAwaitingRun(summary, runID) {
 			payload := map[string]any{"runId": runID, "finishReason": "stop"}
 			allEvents = append(allEvents, stream.EventData{
 				Seq:       nextSeq(),
@@ -499,6 +478,14 @@ func suppressLegacyConfirmReplay(event map[string]any, legacyConfirmIDs map[stri
 	default:
 		return false
 	}
+}
+
+func isPendingAwaitingRun(summary Summary, runID string) bool {
+	if summary.PendingAwaiting == nil {
+		return false
+	}
+	pendingRunID := strings.TrimSpace(summary.PendingAwaiting.RunID)
+	return pendingRunID != "" && pendingRunID == strings.TrimSpace(runID)
 }
 
 func taskToolIDFromLine(line map[string]any) string {

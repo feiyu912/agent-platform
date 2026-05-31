@@ -474,6 +474,73 @@ func TestHydrationSkipsExpiredAwaitings(t *testing.T) {
 	}
 }
 
+func TestHydrationClearsDanglingAndAnsweredAwaitings(t *testing.T) {
+	notifications := &recordingNotificationSink{}
+	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderSSE(t, w, `[DONE]`)
+	}, testFixtureOptions{
+		notifications: notifications,
+	})
+
+	nowMs := time.Now().UnixMilli()
+	if _, _, err := fixture.chats.EnsureChat("chat-dangling", "mock-agent", "", "hello"); err != nil {
+		t.Fatalf("ensure dangling chat: %v", err)
+	}
+	if err := fixture.chats.SetPendingAwaiting("chat-dangling", chat.PendingAwaiting{
+		AwaitingID: "await-dangling",
+		RunID:      "run-dangling",
+		Mode:       "question",
+		CreatedAt:  nowMs,
+	}); err != nil {
+		t.Fatalf("set dangling pending awaiting: %v", err)
+	}
+	seedDeferredAwaiting(t, fixture.chats, "chat-answered", "run-answered", "await-answered", "question", 60000, nowMs)
+	if err := fixture.chats.AppendSubmitLine("chat-answered", chat.SubmitLine{
+		ChatID:    "chat-answered",
+		RunID:     "run-answered",
+		UpdatedAt: nowMs + 1,
+		Type:      "submit",
+		Answer: map[string]any{
+			"type":       "awaiting.answer",
+			"awaitingId": "await-answered",
+			"mode":       "question",
+			"status":     "answered",
+		},
+	}); err != nil {
+		t.Fatalf("append answered line: %v", err)
+	}
+
+	_, err := New(Dependencies{
+		Config:          fixture.cfg,
+		Chats:           fixture.chats,
+		Memory:          fixture.memories,
+		Registry:        fixture.registry,
+		Runs:            fixture.runs,
+		Agent:           fixture.agent,
+		Tools:           fixture.tools,
+		DeltaMappers:    llm.DeltaMapperFactory{Frontend: fixture.frontend},
+		SystemInits:     llm.SystemInitProfileBuilder{},
+		Sandbox:         fixture.sandbox,
+		MCP:             fixture.mcp,
+		Viewport:        fixture.viewport,
+		CatalogReloader: fixture.catalogReloader,
+		Notifications:   notifications,
+	})
+	if err != nil {
+		t.Fatalf("new restarted server: %v", err)
+	}
+
+	for _, chatID := range []string{"chat-dangling", "chat-answered"} {
+		summary, err := fixture.chats.Summary(chatID)
+		if err != nil {
+			t.Fatalf("load %s summary: %v", chatID, err)
+		}
+		if summary == nil || summary.PendingAwaiting != nil {
+			t.Fatalf("expected %s pending awaiting cleared during hydration, got %#v", chatID, summary)
+		}
+	}
+}
+
 func TestDeferredSubmitAcceptsWithinTimeout(t *testing.T) {
 	notifications := &recordingNotificationSink{}
 	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {

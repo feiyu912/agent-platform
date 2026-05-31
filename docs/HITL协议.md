@@ -46,7 +46,7 @@ tool.start
 ## 约束与注意事项
 
 - `request.submit` 记录前端原始数组，`awaiting.answer` 才是后端归一化结果。
-- `awaiting.ask` 会在发出时立即写入 JSONL event line，并同步写入 `CHATS.AWAITING_*`，用于服务重启后的等待项还原；完整 step line 后续仍可保存同一等待项，回放时会去重。
+- `awaiting.ask` 会在发出时立即 flush 当前 JSONL step，完整现场保存在 step 的 `awaiting[]`；`CHATS.AWAITING_*` 只记录当前等待状态，不再为 `awaiting.ask` 写 event line。
 
 ## 相关文件
 

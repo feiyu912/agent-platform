@@ -3,9 +3,6 @@ package chat
 import (
 	"os"
 	"strings"
-	"time"
-
-	"agent-platform/internal/stream"
 )
 
 func (s *FileStore) LoadAllPendingAwaitings() ([]PendingAwaitingWithChat, error) {
@@ -69,16 +66,10 @@ func loadPersistedAwaitingAskFromLines(lines []map[string]any, awaitingID string
 					latest = candidate
 				}
 			}
-		case "event", "steer":
-			event, _ := line["event"].(map[string]any)
-			candidate := persistedAwaitingAskFromMap(event, runID)
-			if candidate != nil && candidate.AwaitingID == awaitingID {
-				latest = candidate
-			}
-		default:
-			candidate := persistedAwaitingAskFromMap(line, runID)
-			if candidate != nil && candidate.AwaitingID == awaitingID {
-				latest = candidate
+		case "submit":
+			answer, _ := line["answer"].(map[string]any)
+			if isPersistedAwaitingAnswer(answer, awaitingID) {
+				latest = nil
 			}
 		}
 	}
@@ -105,65 +96,6 @@ func persistedAwaitingAskFromMap(item map[string]any, fallbackRunID string) *Per
 	}
 }
 
-func (s *FileStore) PersistAwaitingAsk(chatID string, pending PendingAwaiting, event stream.EventData) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	awaitingID := strings.TrimSpace(pending.AwaitingID)
-	if awaitingID == "" {
-		awaitingID = strings.TrimSpace(event.String("awaitingId"))
-	}
-	if awaitingID == "" {
-		return nil
-	}
-	runID := strings.TrimSpace(pending.RunID)
-	if runID == "" {
-		runID = strings.TrimSpace(event.String("runId"))
-	}
-	mode := strings.TrimSpace(pending.Mode)
-	if mode == "" {
-		mode = strings.TrimSpace(event.String("mode"))
-	}
-	createdAt := pending.CreatedAt
-	if createdAt <= 0 {
-		createdAt = event.Timestamp
-	}
-	if createdAt <= 0 {
-		createdAt = time.Now().UnixMilli()
-	}
-
-	eventPayload := event.Map()
-	delete(eventPayload, "seq")
-	if strings.TrimSpace(stringValue(eventPayload["type"])) == "" {
-		eventPayload["type"] = "awaiting.ask"
-	}
-	if strings.TrimSpace(stringValue(eventPayload["awaitingId"])) == "" {
-		eventPayload["awaitingId"] = awaitingID
-	}
-	if strings.TrimSpace(stringValue(eventPayload["mode"])) == "" && mode != "" {
-		eventPayload["mode"] = mode
-	}
-	if strings.TrimSpace(stringValue(eventPayload["timestamp"])) == "" {
-		eventPayload["timestamp"] = createdAt
-	}
-
-	if err := s.appendJSONLineLocked(s.chatJSONLPath(chatID), EventLine{
-		ChatID:    chatID,
-		RunID:     runID,
-		UpdatedAt: createdAt,
-		Event:     eventPayload,
-		Type:      "event",
-	}); err != nil {
-		return err
-	}
-
-	_, err := s.db.Exec(`UPDATE CHATS
-		SET AWAITING_ID_=?, AWAITING_RUN_ID_=?, AWAITING_MODE_=?, AWAITING_CREATED_AT_=?
-		WHERE CHAT_ID_=?`,
-		awaitingID, runID, mode, createdAt, chatID)
-	return err
-}
-
 func (s *FileStore) SetPendingAwaiting(chatID string, pending PendingAwaiting) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -173,6 +105,13 @@ func (s *FileStore) SetPendingAwaiting(chatID string, pending PendingAwaiting) e
 		WHERE CHAT_ID_=?`,
 		pending.AwaitingID, pending.RunID, pending.Mode, pending.CreatedAt, chatID)
 	return err
+}
+
+func isPersistedAwaitingAnswer(item map[string]any, awaitingID string) bool {
+	if item == nil || strings.TrimSpace(stringValue(item["type"])) != "awaiting.answer" {
+		return false
+	}
+	return strings.TrimSpace(stringValue(item["awaitingId"])) == strings.TrimSpace(awaitingID)
 }
 
 func (s *FileStore) ClearPendingAwaiting(chatID string, awaitingID string) error {
