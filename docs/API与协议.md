@@ -175,6 +175,33 @@ HITL 三态细节见 [HITL协议](HITL协议.md)。真流式、heartbeat、attac
 
 resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界.md)。
 
+### Monitor
+
+监控接口是 HTTP polling snapshot，不使用 WebSocket 实时订阅；鉴权沿用普通 `/api/*` 链路。
+
+| Method | Path | 参数 | 响应 |
+|---|---|---|---|
+| GET | `/api/monitor` | query: `messageLimit` 可选，默认 5，范围 1..50 | 总览与 WS 摘要 |
+| GET | `/api/monitor/ws/connections` | query: `limit` 默认 100，范围 1..500；`sessionId` 可选 | 当前/最近 WS 连接列表 |
+| GET | `/api/monitor/ws/messages` | query: `limit` 默认 5，范围 1..50；`sessionId` 可选 | 最近 WS 消息列表 |
+
+`/api/monitor` 返回：
+
+```json
+{
+  "generatedAt": 1710000000000,
+  "ws": {
+    "connectionCount": 1,
+    "latestConnection": {},
+    "recentMessages": []
+  }
+}
+```
+
+连接项包含 `sessionId`、`kind`、`active`、`subject`、`gatewayId`、`channel`、`remoteAddr`、`userAgent`、`connectedAt`、`closedAt`、`lastSeenAt`、`lastMessageAt`、`receivedMessages`、`sentMessages`、`errors`、`inflightRequests`、`activeStreams`、`writeQueueDepth`。
+
+消息项包含 `seq`、`timestamp`、`sessionId`、`direction`、`frame`、`type`、`id`、`sizeBytes`、`payloadPreview`、`truncated`、`error`。`payloadPreview` 只保存脱敏后的截断摘要，最多 512 字符；不会记录完整 payload，不记录 ping/pong/control frame，并跳过 `push.heartbeat`。
+
 ## WebSocket 定义
 
 ### 入口与鉴权

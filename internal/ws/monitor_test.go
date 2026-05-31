@@ -1,0 +1,88 @@
+package ws
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"agent-platform/internal/config"
+	"agent-platform/internal/observability"
+)
+
+func TestHubMonitorTracksConnectionLifecycle(t *testing.T) {
+	hub := NewHub()
+	conn := NewConn(nil, hub, config.WebSocketConfig{WriteQueueSize: 4}, time.Second, AuthSession{Subject: "tester"})
+	conn.SetClientInfo("192.168.1.42:4815", "monitor-test-agent")
+
+	hub.register(conn)
+
+	overview := hub.MonitorOverview(5)
+	if overview.WS.ConnectionCount != 1 {
+		t.Fatalf("expected one active connection, got %#v", overview.WS)
+	}
+	if overview.WS.LatestConnection == nil {
+		t.Fatalf("expected latest connection")
+	}
+	latest := overview.WS.LatestConnection
+	if latest.SessionID != conn.SessionID() || !latest.Active || latest.Kind != "client" || latest.Subject != "tester" {
+		t.Fatalf("unexpected latest connection: %#v", latest)
+	}
+	if latest.RemoteAddr != "192.168.1.0" {
+		t.Fatalf("expected masked remote address, got %q", latest.RemoteAddr)
+	}
+	if latest.UserAgent != "monitor-test-agent" {
+		t.Fatalf("unexpected user agent: %q", latest.UserAgent)
+	}
+
+	hub.unregister(conn)
+
+	overview = hub.MonitorOverview(5)
+	if overview.WS.ConnectionCount != 0 {
+		t.Fatalf("expected no active connections, got %#v", overview.WS)
+	}
+	if overview.WS.LatestConnection == nil || overview.WS.LatestConnection.Active {
+		t.Fatalf("expected latest connection to remain as inactive, got %#v", overview.WS.LatestConnection)
+	}
+	if overview.WS.LatestConnection.ClosedAt == 0 {
+		t.Fatalf("expected closedAt to be populated, got %#v", overview.WS.LatestConnection)
+	}
+
+	connections := hub.MonitorConnections(10, conn.SessionID()).Connections
+	if len(connections) != 1 || connections[0].SessionID != conn.SessionID() {
+		t.Fatalf("expected session filter to return closed connection, got %#v", connections)
+	}
+}
+
+func TestHubMonitorRecordsRecentMessagesAndSanitizesPreview(t *testing.T) {
+	hub := NewHub()
+	conn := NewConn(nil, hub, config.WebSocketConfig{WriteQueueSize: 8}, time.Second, AuthSession{})
+	hub.register(conn)
+
+	conn.recordOutboundMessage(PushFrame{Frame: FramePush, Type: "heartbeat", Data: map[string]any{"timestamp": 1}})
+	conn.recordOutboundMessage(PushFrame{Frame: FramePush, Type: "connected", Data: map[string]any{"sessionId": conn.SessionID(), "token": "secret-value"}})
+	raw := []byte(`{"frame":"request","type":"/api/agents","id":"req_1","payload":{"token":"secret-value","message":"` + strings.Repeat("x", 600) + `"}}`)
+	conn.recordInboundMessage(raw, RequestFrame{Frame: FrameRequest, Type: "/api/agents", ID: "req_1"}, "")
+
+	messages := hub.MonitorMessages(5, "").Messages
+	if len(messages) != 2 {
+		t.Fatalf("expected heartbeat to be skipped and two messages to remain, got %#v", messages)
+	}
+	latest := messages[0]
+	if latest.Direction != "in" || latest.Frame != FrameRequest || latest.Type != "/api/agents" || latest.ID != "req_1" {
+		t.Fatalf("unexpected latest message: %#v", latest)
+	}
+	if !latest.Truncated || len([]rune(latest.PayloadPreview)) > monitorPreviewMaxRunes {
+		t.Fatalf("expected truncated preview capped at %d runes, got %#v", monitorPreviewMaxRunes, latest)
+	}
+	if strings.Contains(latest.PayloadPreview, "secret-value") || !strings.Contains(latest.PayloadPreview, observability.HiddenToken) {
+		t.Fatalf("expected sensitive payload to be hidden, got %q", latest.PayloadPreview)
+	}
+
+	connections := hub.MonitorConnections(10, conn.SessionID()).Connections
+	if len(connections) != 1 {
+		t.Fatalf("expected connection snapshot, got %#v", connections)
+	}
+	if connections[0].ReceivedMessages != 1 || connections[0].SentMessages != 1 || connections[0].Errors != 0 {
+		t.Fatalf("unexpected message counters: %#v", connections[0])
+	}
+}

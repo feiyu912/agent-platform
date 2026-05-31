@@ -5,10 +5,20 @@ import "sync"
 type Hub struct {
 	mu    sync.RWMutex
 	conns map[*Conn]struct{}
+
+	monitorMu          sync.RWMutex
+	monitorConns       map[string]*monitorConnectionState
+	latestConnectionID string
+	monitorMessages    []MonitorMessage
+	monitorSeq         int64
+	monitorConnSeq     int64
 }
 
 func NewHub() *Hub {
-	return &Hub{conns: map[*Conn]struct{}{}}
+	return &Hub{
+		conns:        map[*Conn]struct{}{},
+		monitorConns: map[string]*monitorConnectionState{},
+	}
 }
 
 func (h *Hub) register(conn *Conn) {
@@ -18,6 +28,7 @@ func (h *Hub) register(conn *Conn) {
 	h.mu.Lock()
 	h.conns[conn] = struct{}{}
 	h.mu.Unlock()
+	h.monitorRegister(conn)
 }
 
 func (h *Hub) unregister(conn *Conn) {
@@ -27,6 +38,7 @@ func (h *Hub) unregister(conn *Conn) {
 	h.mu.Lock()
 	delete(h.conns, conn)
 	h.mu.Unlock()
+	h.monitorClose(conn)
 }
 
 func (h *Hub) Broadcast(eventType string, data map[string]any) {

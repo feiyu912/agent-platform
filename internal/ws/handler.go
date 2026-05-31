@@ -77,6 +77,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	conn := NewConn(socket, h.hub, h.cfg, h.heartbeatInterval, auth)
 	conn.SetRequestBaseURL(wsRequestBaseURL(r))
+	conn.SetClientInfo(r.RemoteAddr, r.UserAgent())
 	dispatch := h.Dispatch
 	if h.dispatch != nil {
 		dispatch = h.dispatch

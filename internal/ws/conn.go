@@ -39,6 +39,9 @@ type Conn struct {
 	cfg               config.WebSocketConfig
 	heartbeatInterval time.Duration
 	requestBaseURL    string
+	clientInfoMu      sync.RWMutex
+	remoteAddr        string
+	userAgent         string
 
 	// silent=true 时：Run 不主动发 push.connected，writeLoop 不发 push.heartbeat / auth.expiring。
 	// 用于 agent-platform 反向连出到网关的场景——网关按自己的节奏发注册 ACK，我们只做被动应答。
@@ -102,12 +105,17 @@ func NewConn(socket *gws.Conn, hub *Hub, cfg config.WebSocketConfig, heartbeatIn
 	if heartbeatInterval <= 0 {
 		heartbeatInterval = time.Duration(cfg.PingIntervalMs) * time.Millisecond
 	}
+	remoteAddr := ""
+	if socket != nil && socket.RemoteAddr() != nil {
+		remoteAddr = socket.RemoteAddr().String()
+	}
 	return &Conn{
 		sessionID:         fmt.Sprintf("ws_%d", nextSessionID.Add(1)),
 		socket:            socket,
 		hub:               hub,
 		cfg:               cfg,
 		heartbeatInterval: heartbeatInterval,
+		remoteAddr:        remoteAddr,
 		auth:              auth,
 		inflightRequests:  map[string]struct{}{},
 		activeStreams:     map[string]*streamEntry{},
@@ -170,6 +178,7 @@ func (c *Conn) Run(dispatch RouteHandler) {
 		}
 		var req RequestFrame
 		if err := json.Unmarshal(data, &req); err != nil {
+			c.recordInboundMessage(data, RequestFrame{}, "invalid json frame")
 			c.SendError("", "invalid_request", 400, "invalid json frame", nil)
 			continue
 		}
@@ -179,28 +188,36 @@ func (c *Conn) Run(dispatch RouteHandler) {
 			// 反向被动端，不需要主动消费 push，但也不应回 invalid_request 污染连接。
 			// 对 push 帧静默放行，其他未知帧仍记录日志便于排查（不回 error 帧）。
 			if c.silent {
+				errText := ""
 				if req.Frame != FramePush {
+					errText = "unexpected frame"
 					log.Printf("gateway-reverse: unexpected frame dropped: frame=%s type=%s id=%s", req.Frame, req.Type, req.ID)
 				}
+				c.recordInboundMessage(data, req, errText)
 				continue
 			}
+			c.recordInboundMessage(data, req, "frame must be request")
 			c.SendError(req.ID, "invalid_request", 400, "frame must be request", nil)
 			continue
 		}
 		if strings.TrimSpace(req.ID) == "" {
+			c.recordInboundMessage(data, req, "id is required")
 			c.SendError("", "invalid_request", 400, "id is required", nil)
 			continue
 		}
 		if strings.TrimSpace(req.Type) == "" {
+			c.recordInboundMessage(data, req, "type is required")
 			c.SendError(req.ID, "invalid_request", 400, "type is required", nil)
 			continue
 		}
 		if err := c.reserveRequest(req.ID); err != nil {
+			c.recordInboundMessage(data, req, err.Error())
 			if protoErr, ok := err.(*ProtocolError); ok {
 				c.SendProtocolError(req.ID, protoErr)
 			}
 			continue
 		}
+		c.recordInboundMessage(data, req, "")
 		go dispatch(c.Context(), c, req)
 	}
 }
@@ -443,6 +460,7 @@ func (c *Conn) writeLoop() {
 					c.close(gws.CloseAbnormalClosure, err.Error())
 					return
 				}
+				c.recordOutboundMessage(msg.frame)
 			default:
 				if err := c.writeControl(msg.msgType, []byte(msg.closeText)); err != nil {
 					c.close(gws.CloseAbnormalClosure, err.Error())
