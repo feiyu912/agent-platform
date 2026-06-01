@@ -220,6 +220,8 @@ func isSyncQueryContext(ctx context.Context) bool {
 }
 
 func (s *Server) routes() {
+	s.router.HandleFunc("/monitor", s.handleMonitorPage)
+	s.router.HandleFunc("/monitor/", s.handleMonitorAsset)
 	s.router.HandleFunc("/api/agents", s.method(http.MethodGet, s.handleAgents))
 	s.router.HandleFunc("/api/agents/order", s.handleAgentOrder)
 	s.router.HandleFunc("/api/channels", s.method(http.MethodGet, s.handleChannels))

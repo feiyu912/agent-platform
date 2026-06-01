@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>智能体平台监控</title>
+    <link rel="stylesheet" href="/monitor/monitor.css">
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="title-block">
+          <h1>智能体平台监控</h1>
+          <p id="page-subtitle">localhost:11949 /monitor</p>
+        </div>
+        <div class="toolbar" aria-label="监控操作">
+          <label class="field token-field">
+            <span>access_token</span>
+            <input id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Bearer token">
+          </label>
+          <button id="apply-token" class="button button-secondary" type="button">应用 token</button>
+          <button id="clear-token" class="button button-secondary" type="button">清除 token</button>
+          <label class="field">
+            <span>sessionId</span>
+            <select id="session-select">
+              <option value="">全部 session</option>
+            </select>
+          </label>
+          <button id="clear-filter" class="button button-secondary" type="button">清除筛选</button>
+          <button id="refresh-button" class="button button-primary" type="button">刷新</button>
+        </div>
+      </header>
+
+      <div id="loading-state" class="loading-state" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span>加载中...</span>
+      </div>
+
+      <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
+      <main>
+        <section class="panel" aria-labelledby="overview-title">
+          <div class="section-head">
+            <h2 id="overview-title">总览指标</h2>
+            <span id="generated-at" class="muted">未加载</span>
+          </div>
+          <div id="overview-grid" class="metric-grid"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="connections-title">
+          <div class="section-head">
+            <h2 id="connections-title">连接列表</h2>
+            <span id="connections-count" class="muted">0 条</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>sessionId</th>
+                  <th>connectionId</th>
+                  <th>client / user / agent</th>
+                  <th>connectedAt</th>
+                  <th>lastSeenAt</th>
+                  <th>status</th>
+                  <th>remoteAddress</th>
+                  <th>messages</th>
+                  <th>runtime</th>
+                </tr>
+              </thead>
+              <tbody id="connections-body"></tbody>
+            </table>
+          </div>
+          <div id="connections-empty" class="empty-state" hidden>暂无连接</div>
+        </section>
+
+        <section class="panel" aria-labelledby="messages-title">
+          <div class="section-head">
+            <h2 id="messages-title">最近消息</h2>
+            <span id="messages-count" class="muted">0 条</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>time</th>
+                  <th>sessionId</th>
+                  <th>direction</th>
+                  <th>type</th>
+                  <th>event / topic</th>
+                  <th>payload</th>
+                </tr>
+              </thead>
+              <tbody id="messages-body"></tbody>
+            </table>
+          </div>
+          <div id="messages-empty" class="empty-state" hidden>暂无消息</div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/monitor/monitor.js" defer></script>
+  </body>
+</html>

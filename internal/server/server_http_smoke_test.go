@@ -127,6 +127,75 @@ func TestServeHTTPLogsHideTokenQueryValues(t *testing.T) {
 	}
 }
 
+func TestMonitorStaticRoutes(t *testing.T) {
+	fixture := newTestFixture(t)
+
+	tests := []struct {
+		method        string
+		path          string
+		wantStatus    int
+		wantType      string
+		wantBodyParts []string
+	}{
+		{
+			method:     http.MethodGet,
+			path:       "/monitor",
+			wantStatus: http.StatusOK,
+			wantType:   "text/html",
+			wantBodyParts: []string{
+				"智能体平台监控",
+				"access_token",
+				"/monitor/monitor.css",
+				"/monitor/monitor.js",
+			},
+		},
+		{
+			method:        http.MethodGet,
+			path:          "/monitor/monitor.css",
+			wantStatus:    http.StatusOK,
+			wantType:      "text/css",
+			wantBodyParts: []string{".metric-grid"},
+		},
+		{
+			method:        http.MethodGet,
+			path:          "/monitor/monitor.js",
+			wantStatus:    http.StatusOK,
+			wantType:      "text/javascript",
+			wantBodyParts: []string{"requestJSON", "Authorization", "sessionId"},
+		},
+		{
+			method:     http.MethodGet,
+			path:       "/monitor/not-found.js",
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			method:     http.MethodPost,
+			path:       "/monitor",
+			wantStatus: http.StatusMethodNotAllowed,
+			wantType:   "application/json",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			rec := httptest.NewRecorder()
+			fixture.server.ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.wantType != "" && !strings.Contains(rec.Header().Get("Content-Type"), tt.wantType) {
+				t.Fatalf("expected content type containing %q, got %q", tt.wantType, rec.Header().Get("Content-Type"))
+			}
+			for _, part := range tt.wantBodyParts {
+				if !strings.Contains(rec.Body.String(), part) {
+					t.Fatalf("expected response body to contain %q, got %q", part, rec.Body.String())
+				}
+			}
+		})
+	}
+}
+
 type hijackableResponseWriter struct {
 	header http.Header
 	conn   net.Conn
