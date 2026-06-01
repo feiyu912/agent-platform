@@ -42,7 +42,7 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 		USAGE_PROMPT_TOKENS_=USAGE_PROMPT_TOKENS_+?, USAGE_COMPLETION_TOKENS_=USAGE_COMPLETION_TOKENS_+?, USAGE_TOTAL_TOKENS_=USAGE_TOTAL_TOKENS_+?,
 		USAGE_CACHED_TOKENS_=USAGE_CACHED_TOKENS_+?, USAGE_REASONING_TOKENS_=USAGE_REASONING_TOKENS_+?,
 		USAGE_PROMPT_CACHE_HIT_TOKENS_=USAGE_PROMPT_CACHE_HIT_TOKENS_+?, USAGE_PROMPT_CACHE_MISS_TOKENS_=USAGE_PROMPT_CACHE_MISS_TOKENS_+?,
-		USAGE_ESTIMATED_COST_CURRENCY_=?,
+		USAGE_ESTIMATED_COST_CURRENCY_=CASE WHEN ? <> '' THEN ? ELSE USAGE_ESTIMATED_COST_CURRENCY_ END,
 		USAGE_ESTIMATED_COST_INPUT_CACHE_HIT_=USAGE_ESTIMATED_COST_INPUT_CACHE_HIT_+?,
 		USAGE_ESTIMATED_COST_INPUT_CACHE_MISS_=USAGE_ESTIMATED_COST_INPUT_CACHE_MISS_+?,
 		USAGE_ESTIMATED_COST_OUTPUT_=USAGE_ESTIMATED_COST_OUTPUT_+?,
@@ -54,7 +54,7 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 		completion.Usage.PromptTokens, completion.Usage.CompletionTokens, completion.Usage.TotalTokens,
 		completion.Usage.CachedTokens, completion.Usage.ReasoningTokens,
 		completion.Usage.PromptCacheHitTokens, completion.Usage.PromptCacheMissTokens,
-		completion.Usage.EstimatedCostCurrency,
+		completion.Usage.EstimatedCostCurrency, completion.Usage.EstimatedCostCurrency,
 		completion.Usage.EstimatedCostInputHit, completion.Usage.EstimatedCostInputMiss,
 		completion.Usage.EstimatedCostOutput, completion.Usage.EstimatedCostTotal,
 		completion.Usage.LlmChatCompletionCount,
@@ -68,9 +68,9 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 			STARTED_AT_, COMPLETED_AT_,
 			USAGE_PROMPT_TOKENS_, USAGE_COMPLETION_TOKENS_, USAGE_TOTAL_TOKENS_, USAGE_CACHED_TOKENS_, USAGE_REASONING_TOKENS_,
 			USAGE_PROMPT_CACHE_HIT_TOKENS_, USAGE_PROMPT_CACHE_MISS_TOKENS_,
-			USAGE_ESTIMATED_COST_CURRENCY_, USAGE_ESTIMATED_COST_INPUT_CACHE_HIT_, USAGE_ESTIMATED_COST_INPUT_CACHE_MISS_, USAGE_ESTIMATED_COST_OUTPUT_, USAGE_ESTIMATED_COST_TOTAL_,
+			USAGE_ESTIMATED_COST_CURRENCY_, USAGE_ESTIMATED_COST_INPUT_CACHE_HIT_, USAGE_ESTIMATED_COST_INPUT_CACHE_MISS_, USAGE_ESTIMATED_COST_OUTPUT_, USAGE_ESTIMATED_COST_TOTAL_, USAGE_MODEL_KEY_,
 			USAGE_LLM_CHAT_COMPLETION_COUNT_, USAGE_TOOL_CALL_COUNT_
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(RUN_ID_) DO UPDATE SET
 			CHAT_ID_=excluded.CHAT_ID_,
 			AGENT_KEY_=excluded.AGENT_KEY_,
@@ -91,6 +91,7 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 			USAGE_ESTIMATED_COST_INPUT_CACHE_MISS_=excluded.USAGE_ESTIMATED_COST_INPUT_CACHE_MISS_,
 			USAGE_ESTIMATED_COST_OUTPUT_=excluded.USAGE_ESTIMATED_COST_OUTPUT_,
 			USAGE_ESTIMATED_COST_TOTAL_=excluded.USAGE_ESTIMATED_COST_TOTAL_,
+			USAGE_MODEL_KEY_=excluded.USAGE_MODEL_KEY_,
 			USAGE_LLM_CHAT_COMPLETION_COUNT_=excluded.USAGE_LLM_CHAT_COMPLETION_COUNT_,
 			USAGE_TOOL_CALL_COUNT_=excluded.USAGE_TOOL_CALL_COUNT_`,
 		completion.RunID, completion.ChatID, agentKey, initialMessage, assistantText, completion.FinishReason,
@@ -101,6 +102,7 @@ func (s *FileStore) OnRunCompleted(completion RunCompletion) error {
 		completion.Usage.EstimatedCostCurrency,
 		completion.Usage.EstimatedCostInputHit, completion.Usage.EstimatedCostInputMiss,
 		completion.Usage.EstimatedCostOutput, completion.Usage.EstimatedCostTotal,
+		completion.Usage.ModelKey,
 		completion.Usage.LlmChatCompletionCount, completion.Usage.ToolCallCount)
 	return err
 }

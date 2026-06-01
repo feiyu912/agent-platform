@@ -336,9 +336,15 @@ func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) 
 	if current["toolCallCount"] != 2 {
 		t.Fatalf("expected current toolCallCount, got %#v", usage)
 	}
+	if current["modelKey"] != "deepseek-v4-pro" {
+		t.Fatalf("expected current modelKey, got %#v", usage)
+	}
 	runPromptDetails, _ := run["promptTokensDetails"].(map[string]any)
 	if runPromptDetails["cacheHitTokens"] != 128 || runPromptDetails["cacheMissTokens"] != 172 || run["llmChatCompletionCount"] != 2 || run["toolCallCount"] != 5 {
 		t.Fatalf("expected detailed run usage, got %#v", usage)
+	}
+	if run["modelKey"] != "deepseek-v4-pro" {
+		t.Fatalf("expected run modelKey, got %#v", usage)
 	}
 	cw, _ := data.Value("contextWindow").(map[string]any)
 	if cw["maxSize"] != 128000 || cw["currentSize"] != 100 || cw["estimatedNextCallSize"] != 200 {

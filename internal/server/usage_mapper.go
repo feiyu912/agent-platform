@@ -19,6 +19,7 @@ func mapUsageDataPtr(usage *chat.UsageData) *api.ChatUsageData {
 
 func mapUsageData(usage chat.UsageData) api.ChatUsageData {
 	out := api.ChatUsageData{
+		ModelKey:               strings.TrimSpace(usage.ModelKey),
 		PromptTokens:           usage.PromptTokens,
 		CompletionTokens:       usage.CompletionTokens,
 		TotalTokens:            usage.TotalTokens,
@@ -97,6 +98,7 @@ func mapUsageDataFromPayload(usage map[string]any) *api.ChatUsageData {
 		return nil
 	}
 	out := api.ChatUsageData{
+		ModelKey:               strings.TrimSpace(contracts.FirstNonEmptyString(usage["modelKey"], usage["model_key"])),
 		PromptTokens:           contracts.AnyIntNode(usage["promptTokens"]),
 		CompletionTokens:       contracts.AnyIntNode(usage["completionTokens"]),
 		TotalTokens:            contracts.AnyIntNode(usage["totalTokens"]),

@@ -262,6 +262,7 @@ type Detail struct {
 }
 
 type UsageData struct {
+	ModelKey               string  `json:"-"`
 	PromptTokens           int     `json:"promptTokens"`
 	CompletionTokens       int     `json:"completionTokens"`
 	TotalTokens            int     `json:"totalTokens"`

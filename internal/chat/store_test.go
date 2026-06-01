@@ -475,6 +475,70 @@ func TestFileStoreMarkReadAdvancesWatermarkAndClampsFutureRunID(t *testing.T) {
 	}
 }
 
+func TestFileStoreMigratesLegacyRunsUsageModelKeyColumn(t *testing.T) {
+	root := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(root, "chats.db"))
+	if err != nil {
+		t.Fatalf("open legacy chats db: %v", err)
+	}
+	_, err = db.Exec(`
+		CREATE TABLE RUNS (
+			RUN_ID_ TEXT PRIMARY KEY,
+			CHAT_ID_ TEXT NOT NULL,
+			AGENT_KEY_ TEXT NOT NULL DEFAULT '',
+			INITIAL_MESSAGE_ TEXT NOT NULL DEFAULT '',
+			ASSISTANT_TEXT_ TEXT NOT NULL DEFAULT '',
+			FINISH_REASON_ TEXT NOT NULL DEFAULT '',
+			STARTED_AT_ INTEGER NOT NULL DEFAULT 0,
+			COMPLETED_AT_ INTEGER NOT NULL,
+			USAGE_PROMPT_TOKENS_ INTEGER NOT NULL DEFAULT 0,
+			USAGE_COMPLETION_TOKENS_ INTEGER NOT NULL DEFAULT 0,
+			USAGE_TOTAL_TOKENS_ INTEGER NOT NULL DEFAULT 0
+		);
+	`)
+	if err != nil {
+		t.Fatalf("create legacy runs table: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy chats db: %v", err)
+	}
+
+	store, err := NewFileStore(root)
+	if err != nil {
+		t.Fatalf("new file store from legacy db: %v", err)
+	}
+	if store == nil {
+		t.Fatal("expected migrated store")
+	}
+
+	db, err = sql.Open("sqlite", filepath.Join(root, "chats.db"))
+	if err != nil {
+		t.Fatalf("reopen migrated chats db: %v", err)
+	}
+	defer db.Close()
+	rows, err := db.Query(`PRAGMA table_info(RUNS)`)
+	if err != nil {
+		t.Fatalf("pragma table_info runs: %v", err)
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, dataType string
+		var notNull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			t.Fatalf("scan runs table info: %v", err)
+		}
+		if name == "USAGE_MODEL_KEY_" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected USAGE_MODEL_KEY_ column to be added to legacy RUNS")
+	}
+}
+
 func TestFileStoreRunMetadataTruncatesAndFeedbackUpdates(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
@@ -494,7 +558,16 @@ func TestFileStoreRunMetadataTruncatesAndFeedbackUpdates(t *testing.T) {
 		FinishReason:    "complete",
 		StartedAtMillis: 100,
 		UpdatedAtMillis: 200,
-		Usage:           UsageData{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3},
+		Usage: UsageData{
+			ModelKey:               "mock-model",
+			PromptTokens:           1,
+			CompletionTokens:       2,
+			TotalTokens:            3,
+			EstimatedCostCurrency:  "CNY",
+			EstimatedCostInputMiss: 0.01,
+			EstimatedCostOutput:    0.02,
+			EstimatedCostTotal:     0.03,
+		},
 	}); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
@@ -520,8 +593,12 @@ func TestFileStoreRunMetadataTruncatesAndFeedbackUpdates(t *testing.T) {
 	if got := len([]rune(runs[0].InitialMessage)); got != 200 {
 		t.Fatalf("expected truncated initial message, got %d runes", got)
 	}
-	if runs[0].AgentKey != "agent-a" || runs[0].FinishReason != "complete" || runs[0].Usage.TotalTokens != 3 {
+	if runs[0].AgentKey != "agent-a" || runs[0].FinishReason != "complete" || runs[0].Usage.TotalTokens != 3 ||
+		runs[0].Usage.ModelKey != "mock-model" || runs[0].Usage.EstimatedCostTotal != 0.03 {
 		t.Fatalf("unexpected run summary: %#v", runs[0])
+	}
+	if sum.Usage == nil || sum.Usage.ModelKey != "" || sum.Usage.EstimatedCostCurrency != "CNY" || sum.Usage.EstimatedCostTotal != 0.03 {
+		t.Fatalf("expected chat summary cost without aggregate modelKey, got %#v", sum.Usage)
 	}
 
 	setAt, err := store.SetFeedback("chat-runs", "loyw3v28", "thumbs_down", "not useful")
@@ -1884,6 +1961,9 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 	writer.OnEvent(stream.EventData{
 		Type: "usage.snapshot",
 		Payload: map[string]any{
+			"model": map[string]any{
+				"key": "mock-model",
+			},
 			"contextWindow": map[string]any{
 				"maxSize":               128000,
 				"currentSize":           100,
@@ -1900,6 +1980,13 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 					},
 					"llmChatCompletionCount": 1,
 					"toolCallCount":          2,
+					"estimatedCost": map[string]any{
+						"currency":       "CNY",
+						"inputCacheHit":  0.01,
+						"inputCacheMiss": 0.02,
+						"output":         0.03,
+						"total":          0.06,
+					},
 				},
 			},
 		},
@@ -1927,6 +2014,13 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 	}
 	if toIntValue(usage["toolCallCount"]) != 2 {
 		t.Fatalf("expected persisted usage snapshot toolCallCount, got %#v", lines[0])
+	}
+	if usage["modelKey"] != "mock-model" {
+		t.Fatalf("expected persisted usage snapshot modelKey, got %#v", lines[0])
+	}
+	estimatedCost, _ := usage["estimatedCost"].(map[string]any)
+	if estimatedCost["currency"] != "CNY" || estimatedCost["total"] != 0.06 {
+		t.Fatalf("expected persisted usage snapshot estimated cost, got %#v", lines[0])
 	}
 	contextWindow, _ := lines[0]["contextWindow"].(map[string]any)
 	if toIntValue(contextWindow["maxSize"]) != 128000 || toIntValue(contextWindow["actualSize"]) != 100 || toIntValue(contextWindow["estimatedSize"]) != 200 {

@@ -575,6 +575,7 @@ type Awaiting struct {
 }
 
 type ChatUsageData struct {
+	ModelKey                string                  `json:"modelKey,omitempty"`
 	PromptTokens            int                     `json:"promptTokens"`
 	CompletionTokens        int                     `json:"completionTokens"`
 	TotalTokens             int                     `json:"totalTokens"`

@@ -23,9 +23,6 @@
   document.addEventListener("DOMContentLoaded", function () {
     dom = {
       sessionSelect: document.getElementById("session-select"),
-      tokenInput: document.getElementById("token-input"),
-      applyToken: document.getElementById("apply-token"),
-      clearToken: document.getElementById("clear-token"),
       clearFilter: document.getElementById("clear-filter"),
       refreshButton: document.getElementById("refresh-button"),
       pageSubtitle: document.getElementById("page-subtitle"),
@@ -41,22 +38,7 @@
       messagesEmpty: document.getElementById("messages-empty"),
     };
 
-    state.accessToken = loadStoredToken();
-    dom.tokenInput.value = state.accessToken;
-    dom.applyToken.addEventListener("click", function () {
-      applyTokenFromInput();
-    });
-    dom.clearToken.addEventListener("click", function () {
-      state.accessToken = "";
-      dom.tokenInput.value = "";
-      storeToken("");
-      loadDashboard();
-    });
-    dom.tokenInput.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        applyTokenFromInput();
-      }
-    });
+    initializeAccessToken();
     dom.refreshButton.addEventListener("click", function () {
       loadDashboard();
     });
@@ -101,7 +83,7 @@
     if (!response.ok) {
       var httpMessage = envelope && envelope.msg ? envelope.msg : response.statusText;
       if (response.status === 401) {
-        httpMessage = "Unauthorized。请在顶部输入 access_token 后点击“应用 token”。";
+        httpMessage = "Unauthorized。请通过带 access_token 的 /monitor 链接打开监控页。";
       }
       throw new Error("HTTP " + response.status + "：" + httpMessage);
     }
@@ -415,18 +397,19 @@
     }
     dom.loadingState.hidden = !loading;
     dom.refreshButton.disabled = loading;
-    dom.tokenInput.disabled = loading;
-    dom.applyToken.disabled = loading;
-    dom.clearToken.disabled = loading || !state.accessToken;
     dom.sessionSelect.disabled = loading;
     dom.clearFilter.disabled = loading || !state.selectedSessionId;
   }
 
-  function applyTokenFromInput() {
-    state.accessToken = normalizedAccessToken(dom.tokenInput.value);
-    dom.tokenInput.value = state.accessToken;
-    storeToken(state.accessToken);
-    loadDashboard();
+  function initializeAccessToken() {
+    var urlToken = readUrlAccessToken();
+    if (urlToken) {
+      state.accessToken = urlToken;
+      storeToken(urlToken);
+    } else {
+      state.accessToken = loadStoredToken();
+    }
+    scrubAccessTokenFromUrl();
   }
 
   function normalizedAccessToken(value) {
@@ -435,6 +418,29 @@
       token = token.slice(7).trim();
     }
     return token;
+  }
+
+  function readUrlAccessToken() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      return normalizedAccessToken(params.get("access_token"));
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function scrubAccessTokenFromUrl() {
+    try {
+      var url = new URL(window.location.href);
+      if (!url.searchParams.has("access_token")) {
+        return;
+      }
+      url.searchParams.delete("access_token");
+      var nextPath = url.pathname + url.search + url.hash;
+      window.history.replaceState(window.history.state, document.title, nextPath);
+    } catch (error) {
+      // The token has already been copied to memory; URL cleanup is best effort.
+    }
   }
 
   function loadStoredToken() {

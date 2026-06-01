@@ -10,8 +10,8 @@ const HiddenToken = "<HIDDEN_TOKEN>"
 
 var sensitivePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(bearer\s+)[a-z0-9_\-\.=]+`),
-	regexp.MustCompile(`(?i)((?:api[_-]?key|token|secret)\s*[:=]\s*)[a-z0-9_\-\.=]+`),
-	regexp.MustCompile(`(?i)((?:[?&](?:api[_-]?key|token|secret)=))[^&\s]+`),
+	regexp.MustCompile(`(?i)((?:api[_-]?key|access[_-]?token|token|secret)\s*[:=]\s*)[a-z0-9_\-\.=]+`),
+	regexp.MustCompile(`(?i)((?:[?&](?:api[_-]?key|access[_-]?token|token|secret)=))[^&\s]+`),
 	regexp.MustCompile(`(?i)sk-[a-z0-9]+`),
 }
 

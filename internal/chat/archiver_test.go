@@ -57,7 +57,16 @@ func TestArchiverMovesChatToArchiveAndPreservesAttachments(t *testing.T) {
 		FinishReason:    "complete",
 		StartedAtMillis: 1000,
 		UpdatedAtMillis: 2000,
-		Usage:           UsageData{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3},
+		Usage: UsageData{
+			ModelKey:               "mock-model",
+			PromptTokens:           1,
+			CompletionTokens:       2,
+			TotalTokens:            3,
+			EstimatedCostCurrency:  "CNY",
+			EstimatedCostInputMiss: 0.01,
+			EstimatedCostOutput:    0.02,
+			EstimatedCostTotal:     0.03,
+		},
 	}); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
@@ -98,6 +107,12 @@ func TestArchiverMovesChatToArchiveAndPreservesAttachments(t *testing.T) {
 	}
 	if !loaded.Summary.HasAttachments || loaded.Summary.AgentKey != "agent-a" || len(loaded.Detail.Events) == 0 {
 		t.Fatalf("unexpected archived chat: %#v", loaded)
+	}
+	if loaded.Summary.Usage == nil || loaded.Summary.Usage.EstimatedCostTotal != 0.03 || loaded.Summary.Usage.ModelKey != "" {
+		t.Fatalf("expected archived summary cost without aggregate modelKey, got %#v", loaded.Summary.Usage)
+	}
+	if len(loaded.Runs) != 1 || loaded.Runs[0].Usage.ModelKey != "mock-model" || loaded.Runs[0].Usage.EstimatedCostTotal != 0.03 {
+		t.Fatalf("expected archived run modelKey and cost, got %#v", loaded.Runs)
 	}
 }
 

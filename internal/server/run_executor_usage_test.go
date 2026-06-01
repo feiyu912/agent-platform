@@ -281,6 +281,9 @@ func TestRunEventProcessorDecoratesUsageSnapshotWithEstimatedCost(t *testing.T) 
 
 	usage, _ := data.Payload["usage"].(map[string]any)
 	current, _ := usage["current"].(map[string]any)
+	if current["modelKey"] != "mock-model" {
+		t.Fatalf("expected current modelKey, got %#v", current)
+	}
 	currentCost, _ := current["estimatedCost"].(map[string]any)
 	if currentCost["currency"] != "CNY" || floatValue(currentCost["inputCacheHit"]) != 0.005 ||
 		floatValue(currentCost["inputCacheMiss"]) != 2.4 || floatValue(currentCost["output"]) != 6 ||
@@ -288,14 +291,122 @@ func TestRunEventProcessorDecoratesUsageSnapshotWithEstimatedCost(t *testing.T) 
 		t.Fatalf("unexpected current estimated cost %#v", currentCost)
 	}
 	run, _ := usage["run"].(map[string]any)
-	runCost, _ := run["estimatedCost"].(map[string]any)
-	if runCost["currency"] != "CNY" || floatValue(runCost["inputCacheHit"]) != 0 ||
-		floatValue(runCost["inputCacheMiss"]) != 3 || floatValue(runCost["output"]) != 6 ||
-		floatValue(runCost["total"]) != 9 {
-		t.Fatalf("expected run prompt tokens without cache fields to bill as miss, got %#v", runCost)
+	if run["modelKey"] != "mock-model" {
+		t.Fatalf("expected run modelKey, got %#v", run)
 	}
-	if runUsage.EstimatedCostCurrency != "CNY" || runUsage.EstimatedCostTotal != 9 {
+	runCost, _ := run["estimatedCost"].(map[string]any)
+	if runCost["currency"] != "CNY" || floatValue(runCost["inputCacheHit"]) != 0.005 ||
+		floatValue(runCost["inputCacheMiss"]) != 2.4 || floatValue(runCost["output"]) != 6 ||
+		floatValue(runCost["total"]) != 8.405 {
+		t.Fatalf("expected run cost to accumulate from current usage, got %#v", runCost)
+	}
+	if runUsage.EstimatedCostCurrency != "CNY" || runUsage.EstimatedCostTotal != 8.405 {
 		t.Fatalf("expected run usage cost to be captured, got %#v", runUsage)
+	}
+	if runUsage.ModelKey != "mock-model" {
+		t.Fatalf("expected run usage modelKey to be captured, got %#v", runUsage)
+	}
+}
+
+func TestRunEventProcessorPreservesEstimatedCostOnTerminalUsage(t *testing.T) {
+	runUsage := chat.UsageData{}
+	processor := &runEventProcessor{
+		billing:  config.BillingConfig{Currency: "CNY"},
+		models:   writeUsageCostRegistry(t),
+		runUsage: &runUsage,
+	}
+	processor.decorate(&stream.EventData{
+		Type: "usage.snapshot",
+		Payload: map[string]any{
+			"model": map[string]any{"key": "mock-model"},
+			"usage": map[string]any{
+				"current": map[string]any{
+					"promptTokens":     1_000_000,
+					"completionTokens": 1_000_000,
+					"totalTokens":      2_000_000,
+				},
+				"run": map[string]any{
+					"promptTokens":     1_000_000,
+					"completionTokens": 1_000_000,
+					"totalTokens":      2_000_000,
+				},
+			},
+		},
+	})
+	processor.decorate(&stream.EventData{
+		Type: "debug.postCall",
+		Payload: map[string]any{
+			"data": map[string]any{
+				"usage": map[string]any{
+					"runUsage": map[string]any{
+						"promptTokens":     1_000_000,
+						"completionTokens": 1_000_000,
+						"totalTokens":      2_000_000,
+					},
+				},
+			},
+		},
+	})
+	data := &stream.EventData{
+		Type: "run.complete",
+		Payload: map[string]any{
+			"runId": "run-usage",
+			"usage": map[string]any{
+				"promptTokens":     1_000_000,
+				"completionTokens": 1_000_000,
+				"totalTokens":      2_000_000,
+			},
+		},
+	}
+
+	processor.decorate(data)
+
+	usage, _ := data.Payload["usage"].(map[string]any)
+	run, _ := usage["run"].(map[string]any)
+	runCost, _ := run["estimatedCost"].(map[string]any)
+	if run["modelKey"] != "mock-model" || floatValue(runCost["total"]) != 9 {
+		t.Fatalf("expected terminal usage to preserve modelKey and cost, got %#v", run)
+	}
+}
+
+func TestRunEventProcessorAccumulatesCurrentCostAcrossModels(t *testing.T) {
+	runUsage := chat.UsageData{}
+	processor := &runEventProcessor{
+		billing:  config.BillingConfig{Currency: "CNY"},
+		models:   writeUsageCostRegistry(t),
+		runUsage: &runUsage,
+	}
+	for _, event := range []stream.EventData{
+		{
+			Type: "usage.snapshot",
+			Payload: map[string]any{
+				"model": map[string]any{"key": "mock-model"},
+				"usage": map[string]any{
+					"current": map[string]any{"promptTokens": 1_000_000, "totalTokens": 1_000_000},
+					"run":     map[string]any{"promptTokens": 1_000_000, "totalTokens": 1_000_000},
+				},
+			},
+		},
+		{
+			Type: "usage.snapshot",
+			Payload: map[string]any{
+				"model": map[string]any{"key": "expensive-model"},
+				"usage": map[string]any{
+					"current": map[string]any{"promptTokens": 1_000_000, "totalTokens": 1_000_000},
+					"run":     map[string]any{"promptTokens": 2_000_000, "totalTokens": 2_000_000},
+				},
+			},
+		},
+	} {
+		current := event
+		processor.decorate(&current)
+	}
+
+	if runUsage.ModelKey != "" {
+		t.Fatalf("expected mixed-model run to omit modelKey, got %#v", runUsage)
+	}
+	if runUsage.EstimatedCostCurrency != "CNY" || runUsage.EstimatedCostTotal != 13 {
+		t.Fatalf("expected cost to sum per current model, got %#v", runUsage)
 	}
 }
 
@@ -328,6 +439,20 @@ func writeUsageCostRegistry(t *testing.T) *models.ModelRegistry {
 		"  output: 6.00",
 	}, "\n")), 0o644); err != nil {
 		t.Fatalf("write model: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "models", "expensive.yml"), []byte(strings.Join([]string{
+		"key: expensive-model",
+		"provider: mock",
+		"protocol: OPENAI",
+		"modelId: expensive-model-id",
+		"pricing:",
+		"  currency: CNY",
+		"  unit: per_1m_tokens",
+		"  inputCacheHit: 0.00",
+		"  inputCacheMiss: 10.00",
+		"  output: 20.00",
+	}, "\n")), 0o644); err != nil {
+		t.Fatalf("write expensive model: %v", err)
 	}
 	registry, err := models.LoadModelRegistry(root)
 	if err != nil {

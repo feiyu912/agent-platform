@@ -387,7 +387,7 @@ func (w *StepWriter) captureRootUsageSnapshot(event stream.EventData) {
 			if !hasProviderUsagePayload(current) {
 				return
 			}
-			w.pendingUsage = usagePayloadFromMap(current, false)
+			w.pendingUsage = usagePayloadFromSnapshotEvent(event, current, false)
 		}
 	}
 	if cw, ok := event.Value("contextWindow").(map[string]any); ok {
@@ -405,7 +405,7 @@ func (w *StepWriter) captureTaskUsageSnapshot(buffer *taskStepBuffer, event stre
 			if !hasProviderUsagePayload(current) {
 				return
 			}
-			buffer.pendingUsage = usagePayloadFromMap(current, false)
+			buffer.pendingUsage = usagePayloadFromSnapshotEvent(event, current, false)
 		}
 	}
 	if cw, ok := event.Value("contextWindow").(map[string]any); ok {

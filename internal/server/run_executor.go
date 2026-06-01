@@ -52,6 +52,8 @@ type runEventProcessor struct {
 	models        *models.ModelRegistry
 	chatUsage     chat.UsageData
 	runUsage      *chat.UsageData
+	runModelKey   string
+	runModelMixed bool
 }
 
 type awaitingTracker struct {
@@ -98,31 +100,33 @@ func (p *runEventProcessor) decorate(data *stream.EventData) {
 		}
 		if p.runUsage != nil {
 			if ru, ok := usage["runUsage"].(map[string]any); ok {
-				applyUsageMapToData(p.runUsage, ru)
+				mergeUsageMapIntoRunData(p.runUsage, ru)
+				p.applyRunModelKey()
 			}
 		}
-		usage["chatUsage"] = usageDataMap(addUsageData(p.chatUsage, *p.runUsage))
+		if p.runUsage != nil {
+			chatUsage := addUsageData(p.chatUsage, *p.runUsage)
+			chatUsage.ModelKey = ""
+			usage["chatUsage"] = usageDataMap(chatUsage)
+		}
 	case "usage.snapshot":
 		usage, ok := data.Payload["usage"].(map[string]any)
 		if !ok {
 			return
 		}
-		p.decorateUsageCost(data)
+		p.decorateUsageSnapshot(data)
 		if p.runUsage != nil {
-			if run, ok := usage["run"].(map[string]any); ok {
-				applyUsageMapToData(p.runUsage, run)
-			}
-		}
-		if p.runUsage != nil {
-			usage["chat"] = usageDataMap(addUsageData(p.chatUsage, *p.runUsage))
+			chatUsage := addUsageData(p.chatUsage, *p.runUsage)
+			chatUsage.ModelKey = ""
+			usage["chat"] = usageDataMap(chatUsage)
 		}
 	case "run.complete", "run.error", "run.cancel":
 		if p.runUsage != nil {
 			if usage, ok := data.Payload["usage"].(map[string]any); ok {
 				if run, ok := usage["run"].(map[string]any); ok {
-					applyUsageMapToData(p.runUsage, run)
+					mergeUsageMapIntoRunData(p.runUsage, run)
 				} else {
-					applyUsageMapToData(p.runUsage, usage)
+					mergeUsageMapIntoRunData(p.runUsage, usage)
 				}
 			}
 		}
@@ -130,42 +134,92 @@ func (p *runEventProcessor) decorate(data *stream.EventData) {
 	}
 }
 
-func (p *runEventProcessor) decorateUsageCost(data *stream.EventData) {
-	if p == nil || data == nil || p.models == nil {
+func (p *runEventProcessor) decorateUsageSnapshot(data *stream.EventData) {
+	if p == nil || data == nil {
 		return
 	}
 	usage, _ := data.Payload["usage"].(map[string]any)
 	if usage == nil {
 		return
 	}
-	pricing, ok := p.modelPricingFromEvent(data)
-	if !ok {
-		return
-	}
-	for _, key := range []string{"current", "run"} {
-		node, _ := usage[key].(map[string]any)
-		if node == nil {
-			continue
+	modelKey := p.modelKeyFromEvent(data)
+	if current, _ := usage["current"].(map[string]any); current != nil {
+		currentUsage := usageDataFromMap(current)
+		if modelKey == "" {
+			modelKey = currentUsage.ModelKey
 		}
-		usageData := usageDataFromMap(node)
-		usageData = estimateUsageCost(usageData, pricing, p.billing)
-		if estimated := usageEstimatedCostFromData(usageData); estimated != nil {
-			node["estimatedCost"] = estimated
+		if modelKey != "" {
+			currentUsage.ModelKey = modelKey
+			current["modelKey"] = modelKey
+			p.recordRunModelKey(modelKey)
+		}
+		currentUsage = p.estimateUsageCostForModel(currentUsage)
+		if estimated := usageEstimatedCostFromData(currentUsage); estimated != nil {
+			current["estimatedCost"] = estimated
+			if p.runUsage != nil {
+				addEstimatedUsageCost(p.runUsage, currentUsage)
+			}
+		}
+	}
+	if run, _ := usage["run"].(map[string]any); run != nil {
+		if modelKey != "" {
+			run["modelKey"] = modelKey
+		}
+		if p.runUsage != nil {
+			mergeUsageMapIntoRunData(p.runUsage, run)
+			p.applyRunModelKey()
+			usage["run"] = usageDataMap(*p.runUsage)
 		}
 	}
 }
 
-func (p *runEventProcessor) modelPricingFromEvent(data *stream.EventData) (models.ModelPricing, bool) {
+func (p *runEventProcessor) modelKeyFromEvent(data *stream.EventData) string {
 	modelNode, _ := data.Payload["model"].(map[string]any)
-	modelKey := strings.TrimSpace(contracts.AnyStringNode(modelNode["key"]))
+	return strings.TrimSpace(contracts.AnyStringNode(modelNode["key"]))
+}
+
+func (p *runEventProcessor) estimateUsageCostForModel(usage chat.UsageData) chat.UsageData {
+	if p == nil || p.models == nil {
+		return usage
+	}
+	modelKey := strings.TrimSpace(usage.ModelKey)
 	if modelKey == "" {
-		return models.ModelPricing{}, false
+		return usage
 	}
 	model, err := p.models.GetModel(modelKey)
 	if err != nil || !modelPricingEnabled(model.Pricing) {
-		return models.ModelPricing{}, false
+		return usage
 	}
-	return model.Pricing, true
+	return estimateUsageCost(usage, model.Pricing, p.billing)
+}
+
+func (p *runEventProcessor) recordRunModelKey(modelKey string) {
+	if p == nil || p.runModelMixed {
+		return
+	}
+	modelKey = strings.TrimSpace(modelKey)
+	if modelKey == "" {
+		return
+	}
+	if p.runModelKey == "" {
+		p.runModelKey = modelKey
+		return
+	}
+	if p.runModelKey != modelKey {
+		p.runModelKey = ""
+		p.runModelMixed = true
+	}
+}
+
+func (p *runEventProcessor) applyRunModelKey() {
+	if p == nil || p.runUsage == nil {
+		return
+	}
+	if p.runModelMixed {
+		p.runUsage.ModelKey = ""
+		return
+	}
+	p.runUsage.ModelKey = strings.TrimSpace(p.runModelKey)
 }
 
 func (p *runEventProcessor) decorateTerminalUsage(data *stream.EventData) {
@@ -177,8 +231,11 @@ func (p *runEventProcessor) decorateTerminalUsage(data *stream.EventData) {
 		delete(data.Payload, "usage")
 		return
 	}
+	p.applyRunModelKey()
+	chatUsage := addUsageData(p.chatUsage, *p.runUsage)
+	chatUsage.ModelKey = ""
 	data.Payload["usage"] = map[string]any{
-		"chat": usageDataMap(addUsageData(p.chatUsage, *p.runUsage)),
+		"chat": usageDataMap(chatUsage),
 		"run":  usageDataMap(*p.runUsage),
 	}
 }
@@ -192,6 +249,7 @@ func applyUsageMapToData(target *chat.UsageData, usage map[string]any) {
 
 func usageDataFromMap(usage map[string]any) chat.UsageData {
 	out := chat.UsageData{
+		ModelKey:               strings.TrimSpace(contracts.FirstNonEmptyString(usage["modelKey"], usage["model_key"])),
 		PromptTokens:           contracts.AnyIntNode(usage["promptTokens"]),
 		CompletionTokens:       contracts.AnyIntNode(usage["completionTokens"]),
 		TotalTokens:            contracts.AnyIntNode(usage["totalTokens"]),
@@ -211,6 +269,50 @@ func usageDataFromMap(usage map[string]any) chat.UsageData {
 		out.EstimatedCostTotal = floatValue(estimatedCost["total"])
 	}
 	return out
+}
+
+func mergeUsageMapIntoRunData(target *chat.UsageData, usage map[string]any) {
+	if target == nil || usage == nil {
+		return
+	}
+	incoming := usageDataFromMap(usage)
+	mergeRunUsageData(target, incoming)
+}
+
+func mergeRunUsageData(target *chat.UsageData, incoming chat.UsageData) {
+	if target == nil {
+		return
+	}
+	modelKey := target.ModelKey
+	currency := target.EstimatedCostCurrency
+	inputHit := target.EstimatedCostInputHit
+	inputMiss := target.EstimatedCostInputMiss
+	output := target.EstimatedCostOutput
+	total := target.EstimatedCostTotal
+	*target = incoming
+	if strings.TrimSpace(incoming.ModelKey) == "" {
+		target.ModelKey = modelKey
+	}
+	if strings.TrimSpace(incoming.EstimatedCostCurrency) == "" {
+		target.EstimatedCostCurrency = currency
+		target.EstimatedCostInputHit = inputHit
+		target.EstimatedCostInputMiss = inputMiss
+		target.EstimatedCostOutput = output
+		target.EstimatedCostTotal = total
+	}
+}
+
+func addEstimatedUsageCost(target *chat.UsageData, delta chat.UsageData) {
+	if target == nil || strings.TrimSpace(delta.EstimatedCostCurrency) == "" {
+		return
+	}
+	if strings.TrimSpace(target.EstimatedCostCurrency) == "" {
+		target.EstimatedCostCurrency = strings.ToUpper(strings.TrimSpace(delta.EstimatedCostCurrency))
+	}
+	target.EstimatedCostInputHit += delta.EstimatedCostInputHit
+	target.EstimatedCostInputMiss += delta.EstimatedCostInputMiss
+	target.EstimatedCostOutput += delta.EstimatedCostOutput
+	target.EstimatedCostTotal += delta.EstimatedCostTotal
 }
 
 func estimatedCostFromMap(usage map[string]any) map[string]any {
@@ -261,6 +363,7 @@ func usageDetailInt(usage map[string]any, detailKey string, valueKey string) int
 
 func addUsageData(base chat.UsageData, delta chat.UsageData) chat.UsageData {
 	return chat.UsageData{
+		ModelKey:               mergedUsageModelKey(base, delta),
 		PromptTokens:           base.PromptTokens + delta.PromptTokens,
 		CompletionTokens:       base.CompletionTokens + delta.CompletionTokens,
 		TotalTokens:            base.TotalTokens + delta.TotalTokens,
@@ -283,6 +386,9 @@ func usageDataMap(usage chat.UsageData) map[string]any {
 		"promptTokens":     usage.PromptTokens,
 		"completionTokens": usage.CompletionTokens,
 		"totalTokens":      usage.TotalTokens,
+	}
+	if modelKey := strings.TrimSpace(usage.ModelKey); modelKey != "" {
+		out["modelKey"] = modelKey
 	}
 	if usage.CachedTokens > 0 {
 		out["promptTokensDetails"] = map[string]any{"cacheHitTokens": usage.CachedTokens}
@@ -314,6 +420,27 @@ func usageDataMap(usage chat.UsageData) map[string]any {
 		out["estimatedCost"] = estimated
 	}
 	return out
+}
+
+func mergedUsageModelKey(base chat.UsageData, delta chat.UsageData) string {
+	baseKey := strings.TrimSpace(base.ModelKey)
+	deltaKey := strings.TrimSpace(delta.ModelKey)
+	if baseKey == "" && !usageHasData(base) {
+		return deltaKey
+	}
+	if deltaKey == "" && !usageHasData(delta) {
+		return baseKey
+	}
+	if baseKey != "" && baseKey == deltaKey {
+		return baseKey
+	}
+	return ""
+}
+
+func usageHasData(usage chat.UsageData) bool {
+	return usage.TotalTokens > 0 || usage.PromptTokens > 0 || usage.CompletionTokens > 0 ||
+		usage.LlmChatCompletionCount > 0 || usage.ToolCallCount > 0 ||
+		usage.EstimatedCostTotal > 0 || strings.TrimSpace(usage.EstimatedCostCurrency) != ""
 }
 
 func isClientVisibleEvent(eventType string, streamCfg config.StreamConfig) bool {

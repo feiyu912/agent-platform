@@ -49,7 +49,7 @@ func TestChatUsageBreakdownPrefersLatestRunAndHistoricalChatUsage(t *testing.T) 
 	breakdown := chatUsageBreakdown(
 		&chat.UsageData{PromptTokens: 111, CompletionTokens: 22, TotalTokens: 133, LlmChatCompletionCount: 2, ToolCallCount: 4},
 		[]chat.RunSummary{
-			{RunID: "run-2", Usage: chat.UsageData{PromptTokens: 11, CompletionTokens: 5, TotalTokens: 16, ReasoningTokens: 3, LlmChatCompletionCount: 1, ToolCallCount: 2}},
+			{RunID: "run-2", Usage: chat.UsageData{ModelKey: "mock-model", PromptTokens: 11, CompletionTokens: 5, TotalTokens: 16, ReasoningTokens: 3, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.12, LlmChatCompletionCount: 1, ToolCallCount: 2}},
 			{RunID: "run-1", Usage: chat.UsageData{PromptTokens: 100, CompletionTokens: 17, TotalTokens: 117, LlmChatCompletionCount: 1}},
 		},
 		[]stream.EventData{
@@ -85,6 +85,9 @@ func TestChatUsageBreakdownPrefersLatestRunAndHistoricalChatUsage(t *testing.T) 
 	}
 	if breakdown.LastRun.ToolCallCount != 2 {
 		t.Fatalf("expected latest run tool call count, got %#v", breakdown.LastRun)
+	}
+	if breakdown.LastRun.ModelKey != "mock-model" || breakdown.LastRun.EstimatedCost == nil || breakdown.LastRun.EstimatedCost.Total != 0.12 {
+		t.Fatalf("expected latest run modelKey and cost, got %#v", breakdown.LastRun)
 	}
 	if breakdown.Chat.PromptTokens != 111 || breakdown.Chat.CompletionTokens != 22 || breakdown.Chat.TotalTokens != 133 ||
 		breakdown.Chat.LlmChatCompletionCount != 2 || breakdown.Chat.ToolCallCount != 4 {

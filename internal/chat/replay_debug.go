@@ -88,6 +88,9 @@ func synthesizeUsageSnapshotEvent(runID, chatID string, taskID string, usage map
 			"current": usagePayloadFromMap(usage, false),
 		},
 	}
+	if modelKey := firstStringFromKeys(usage, "modelKey", "model_key"); modelKey != "" {
+		payload["model"] = map[string]any{"key": modelKey}
+	}
 	if cw := synthesizedUsageSnapshotContextWindow(contextWindow); len(cw) > 0 {
 		payload["contextWindow"] = cw
 	}
@@ -165,11 +168,26 @@ func synthesizePostCallEvent(runID, chatID string, taskID string, usage map[stri
 	}
 }
 
+func usagePayloadFromSnapshotEvent(event stream.EventData, usage map[string]any, includeLLMChatCompletionCount bool) map[string]any {
+	out := usagePayloadFromMap(usage, includeLLMChatCompletionCount)
+	if _, ok := out["modelKey"]; ok {
+		return out
+	}
+	model, _ := event.Value("model").(map[string]any)
+	if modelKey := strings.TrimSpace(stringFromAny(model["key"])); modelKey != "" {
+		out["modelKey"] = modelKey
+	}
+	return out
+}
+
 func usagePayloadFromMap(usage map[string]any, includeLLMChatCompletionCount bool) map[string]any {
 	out := map[string]any{
 		"promptTokens":     toIntFromKeys(usage, "promptTokens", "prompt_tokens"),
 		"completionTokens": toIntFromKeys(usage, "completionTokens", "completion_tokens"),
 		"totalTokens":      toIntFromKeys(usage, "totalTokens", "total_tokens"),
+	}
+	if modelKey := firstStringFromKeys(usage, "modelKey", "model_key"); modelKey != "" {
+		out["modelKey"] = modelKey
 	}
 	addUsageDetailsToMap(
 		out,
@@ -190,6 +208,18 @@ func usagePayloadFromMap(usage map[string]any, includeLLMChatCompletionCount boo
 		out["estimatedCost"] = cloneStringAnyMap(estimatedCost)
 	}
 	return out
+}
+
+func firstStringFromKeys(values map[string]any, keys ...string) string {
+	if values == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if text := strings.TrimSpace(stringFromAny(values[key])); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func hasProviderUsagePayload(usage map[string]any) bool {

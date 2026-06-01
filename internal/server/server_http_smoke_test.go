@@ -125,6 +125,21 @@ func TestServeHTTPLogsHideTokenQueryValues(t *testing.T) {
 	if !strings.Contains(logText, "GET /ws?token=<HIDDEN_TOKEN>&mode=test ->") {
 		t.Fatalf("expected hidden token in completion log, got %q", logText)
 	}
+
+	monitorReq := httptest.NewRequest(http.MethodGet, "/monitor?access_token="+token+"&mode=test", nil)
+	monitorRec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(monitorRec, monitorReq)
+
+	logText = buffer.String()
+	if strings.Contains(logText, token) {
+		t.Fatalf("expected access_token to be hidden, got %q", logText)
+	}
+	if !strings.Contains(logText, "GET /monitor?access_token=<HIDDEN_TOKEN>&mode=test (arrived)") {
+		t.Fatalf("expected hidden access_token in arrival log, got %q", logText)
+	}
+	if !strings.Contains(logText, "GET /monitor?access_token=<HIDDEN_TOKEN>&mode=test ->") {
+		t.Fatalf("expected hidden access_token in completion log, got %q", logText)
+	}
 }
 
 func TestMonitorStaticRoutes(t *testing.T) {
@@ -136,6 +151,7 @@ func TestMonitorStaticRoutes(t *testing.T) {
 		wantStatus    int
 		wantType      string
 		wantBodyParts []string
+		wantAbsent    []string
 	}{
 		{
 			method:     http.MethodGet,
@@ -144,9 +160,14 @@ func TestMonitorStaticRoutes(t *testing.T) {
 			wantType:   "text/html",
 			wantBodyParts: []string{
 				"智能体平台监控",
-				"access_token",
+				`name="referrer" content="no-referrer"`,
 				"/monitor/monitor.css",
 				"/monitor/monitor.js",
+			},
+			wantAbsent: []string{
+				"token-input",
+				"apply-token",
+				"clear-token",
 			},
 		},
 		{
@@ -161,7 +182,7 @@ func TestMonitorStaticRoutes(t *testing.T) {
 			path:          "/monitor/monitor.js",
 			wantStatus:    http.StatusOK,
 			wantType:      "text/javascript",
-			wantBodyParts: []string{"requestJSON", "Authorization", "sessionId"},
+			wantBodyParts: []string{"requestJSON", "Authorization", "access_token", "history.replaceState", "sessionId"},
 		},
 		{
 			method:     http.MethodGet,
@@ -190,6 +211,11 @@ func TestMonitorStaticRoutes(t *testing.T) {
 			for _, part := range tt.wantBodyParts {
 				if !strings.Contains(rec.Body.String(), part) {
 					t.Fatalf("expected response body to contain %q, got %q", part, rec.Body.String())
+				}
+			}
+			for _, part := range tt.wantAbsent {
+				if strings.Contains(rec.Body.String(), part) {
+					t.Fatalf("expected response body not to contain %q, got %q", part, rec.Body.String())
 				}
 			}
 		})
