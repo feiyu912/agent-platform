@@ -59,6 +59,7 @@ type ErrorFrame struct {
 type AuthSession struct {
 	Context     context.Context
 	Subject     string
+	DeviceID    string
 	ExpiresAt   int64
 	Subprotocol string
 }

@@ -16,6 +16,8 @@ const (
 	monitorConnectionCapacity = 500
 	monitorMessageCapacity    = 100
 	monitorPreviewMaxRunes    = 512
+	monitorSourceMaxRunes     = 64
+	monitorDeviceIDMaxRunes   = 128
 	monitorUserAgentMaxRunes  = 200
 )
 
@@ -43,6 +45,12 @@ type MonitorMessagesSnapshot struct {
 	Messages    []MonitorMessage `json:"messages"`
 }
 
+type MonitorFilter struct {
+	SessionID string
+	Source    string
+	DeviceID  string
+}
+
 type MonitorConnection struct {
 	SessionID        string `json:"sessionId"`
 	Kind             string `json:"kind"`
@@ -50,6 +58,8 @@ type MonitorConnection struct {
 	Subject          string `json:"subject"`
 	GatewayID        string `json:"gatewayId"`
 	Channel          string `json:"channel"`
+	Source           string `json:"source"`
+	DeviceID         string `json:"deviceId"`
 	RemoteAddr       string `json:"remoteAddr"`
 	UserAgent        string `json:"userAgent"`
 	ConnectedAt      int64  `json:"connectedAt"`
@@ -68,6 +78,8 @@ type MonitorMessage struct {
 	Seq            int64  `json:"seq"`
 	Timestamp      int64  `json:"timestamp"`
 	SessionID      string `json:"sessionId"`
+	Source         string `json:"source"`
+	DeviceID       string `json:"deviceId"`
 	Direction      string `json:"direction"`
 	Frame          string `json:"frame"`
 	Type           string `json:"type"`
@@ -85,6 +97,8 @@ type monitorConnectionState struct {
 	Subject          string
 	GatewayID        string
 	Channel          string
+	Source           string
+	DeviceID         string
 	RemoteAddr       string
 	UserAgent        string
 	ConnectedAt      int64
@@ -103,9 +117,46 @@ type monitorRuntimeDetails struct {
 	WriteQueueDepth  int
 }
 
+func (filter MonitorFilter) normalized() MonitorFilter {
+	return MonitorFilter{
+		SessionID: strings.TrimSpace(filter.SessionID),
+		Source:    monitorNormalizeSource(filter.Source),
+		DeviceID:  monitorNormalizeDeviceID(filter.DeviceID),
+	}
+}
+
+func (filter MonitorFilter) matchesConnection(state *monitorConnectionState) bool {
+	if state == nil {
+		return false
+	}
+	if filter.SessionID != "" && state.SessionID != filter.SessionID {
+		return false
+	}
+	if filter.Source != "" && state.Source != filter.Source {
+		return false
+	}
+	if filter.DeviceID != "" && state.DeviceID != filter.DeviceID {
+		return false
+	}
+	return true
+}
+
+func (filter MonitorFilter) matchesMessage(msg MonitorMessage) bool {
+	if filter.SessionID != "" && msg.SessionID != filter.SessionID {
+		return false
+	}
+	if filter.Source != "" && msg.Source != filter.Source {
+		return false
+	}
+	if filter.DeviceID != "" && msg.DeviceID != filter.DeviceID {
+		return false
+	}
+	return true
+}
+
 func (h *Hub) MonitorOverview(messageLimit int) MonitorOverview {
 	generatedAt := time.Now().UnixMilli()
-	connectionCount, connections := h.monitorConnectionSnapshots(1, "")
+	connectionCount, connections := h.monitorConnectionSnapshots(1, MonitorFilter{})
 	var latest *MonitorConnection
 	if len(connections) > 0 {
 		latestCopy := connections[0]
@@ -116,14 +167,14 @@ func (h *Hub) MonitorOverview(messageLimit int) MonitorOverview {
 		WS: MonitorWSSummary{
 			ConnectionCount:  connectionCount,
 			LatestConnection: latest,
-			RecentMessages:   h.monitorMessageSnapshots(normalizeMonitorLimit(messageLimit, 5, 50), ""),
+			RecentMessages:   h.monitorMessageSnapshots(normalizeMonitorLimit(messageLimit, 5, 50), MonitorFilter{}),
 		},
 	}
 }
 
-func (h *Hub) MonitorConnections(limit int, sessionID string) MonitorConnectionsSnapshot {
+func (h *Hub) MonitorConnections(limit int, filter MonitorFilter) MonitorConnectionsSnapshot {
 	generatedAt := time.Now().UnixMilli()
-	connectionCount, connections := h.monitorConnectionSnapshots(normalizeMonitorLimit(limit, 100, 500), sessionID)
+	connectionCount, connections := h.monitorConnectionSnapshots(normalizeMonitorLimit(limit, 100, 500), filter.normalized())
 	return MonitorConnectionsSnapshot{
 		GeneratedAt:     generatedAt,
 		ConnectionCount: connectionCount,
@@ -131,10 +182,10 @@ func (h *Hub) MonitorConnections(limit int, sessionID string) MonitorConnections
 	}
 }
 
-func (h *Hub) MonitorMessages(limit int, sessionID string) MonitorMessagesSnapshot {
+func (h *Hub) MonitorMessages(limit int, filter MonitorFilter) MonitorMessagesSnapshot {
 	return MonitorMessagesSnapshot{
 		GeneratedAt: time.Now().UnixMilli(),
-		Messages:    h.monitorMessageSnapshots(normalizeMonitorLimit(limit, 5, 50), sessionID),
+		Messages:    h.monitorMessageSnapshots(normalizeMonitorLimit(limit, 5, 50), filter.normalized()),
 	}
 }
 
@@ -144,7 +195,7 @@ func (h *Hub) monitorRegister(conn *Conn) {
 	}
 	now := time.Now().UnixMilli()
 	kind, subject, gatewayID, channel := conn.monitorIdentity()
-	remoteAddr, userAgent := conn.monitorClientInfo()
+	remoteAddr, userAgent, source, deviceID := conn.monitorClientInfo()
 
 	h.monitorMu.Lock()
 	h.monitorConnSeq++
@@ -155,6 +206,8 @@ func (h *Hub) monitorRegister(conn *Conn) {
 		Subject:       monitorSanitizeText(subject, monitorUserAgentMaxRunes),
 		GatewayID:     monitorSanitizeText(gatewayID, monitorUserAgentMaxRunes),
 		Channel:       monitorSanitizeText(channel, monitorUserAgentMaxRunes),
+		Source:        monitorNormalizeSource(source),
+		DeviceID:      monitorNormalizeDeviceID(deviceID),
 		RemoteAddr:    monitorSanitizeRemoteAddr(remoteAddr),
 		UserAgent:     monitorSanitizeText(userAgent, monitorUserAgentMaxRunes),
 		ConnectedAt:   now,
@@ -194,9 +247,33 @@ func (h *Hub) recordMonitorMessage(msg MonitorMessage) {
 	if msg.Timestamp == 0 {
 		msg.Timestamp = time.Now().UnixMilli()
 	}
+	msg.Source = monitorNormalizeSource(msg.Source)
+	msg.DeviceID = monitorNormalizeDeviceID(msg.DeviceID)
 	msg.Error = monitorSanitizeText(msg.Error, monitorPreviewMaxRunes)
 
 	h.monitorMu.Lock()
+	state := h.monitorConns[msg.SessionID]
+	if state == nil {
+		state = &monitorConnectionState{
+			SessionID:   msg.SessionID,
+			Source:      msg.Source,
+			DeviceID:    msg.DeviceID,
+			ConnectedAt: msg.Timestamp,
+			LastSeenAt:  msg.Timestamp,
+		}
+		h.monitorConns[msg.SessionID] = state
+	}
+	if msg.Source == "" {
+		msg.Source = state.Source
+	} else if state.Source == "" {
+		state.Source = msg.Source
+	}
+	if msg.DeviceID == "" {
+		msg.DeviceID = state.DeviceID
+	} else if state.DeviceID == "" {
+		state.DeviceID = msg.DeviceID
+	}
+
 	h.monitorSeq++
 	msg.Seq = h.monitorSeq
 	h.monitorMessages = append(h.monitorMessages, msg)
@@ -204,11 +281,6 @@ func (h *Hub) recordMonitorMessage(msg MonitorMessage) {
 		h.monitorMessages = append([]MonitorMessage(nil), h.monitorMessages[overflow:]...)
 	}
 
-	state := h.monitorConns[msg.SessionID]
-	if state == nil {
-		state = &monitorConnectionState{SessionID: msg.SessionID, ConnectedAt: msg.Timestamp, LastSeenAt: msg.Timestamp}
-		h.monitorConns[msg.SessionID] = state
-	}
 	state.LastSeenAt = msg.Timestamp
 	state.LastMessageAt = msg.Timestamp
 	switch msg.Direction {
@@ -223,7 +295,7 @@ func (h *Hub) recordMonitorMessage(msg MonitorMessage) {
 	h.monitorMu.Unlock()
 }
 
-func (h *Hub) monitorConnectionSnapshots(limit int, sessionID string) (int, []MonitorConnection) {
+func (h *Hub) monitorConnectionSnapshots(limit int, filter MonitorFilter) (int, []MonitorConnection) {
 	if h == nil {
 		return 0, []MonitorConnection{}
 	}
@@ -233,12 +305,15 @@ func (h *Hub) monitorConnectionSnapshots(limit int, sessionID string) (int, []Mo
 	defer h.monitorMu.RUnlock()
 
 	states := make([]*monitorConnectionState, 0, len(h.monitorConns))
-	if sessionID != "" {
-		if state := h.monitorConns[sessionID]; state != nil {
+	if filter.SessionID != "" {
+		if state := h.monitorConns[filter.SessionID]; state != nil && filter.matchesConnection(state) {
 			states = append(states, state)
 		}
 	} else {
 		for _, state := range h.monitorConns {
+			if !filter.matchesConnection(state) {
+				continue
+			}
 			states = append(states, state)
 		}
 	}
@@ -265,7 +340,7 @@ func (h *Hub) monitorConnectionSnapshots(limit int, sessionID string) (int, []Mo
 	return len(runtimeDetails), connections
 }
 
-func (h *Hub) monitorMessageSnapshots(limit int, sessionID string) []MonitorMessage {
+func (h *Hub) monitorMessageSnapshots(limit int, filter MonitorFilter) []MonitorMessage {
 	if h == nil {
 		return []MonitorMessage{}
 	}
@@ -275,7 +350,7 @@ func (h *Hub) monitorMessageSnapshots(limit int, sessionID string) []MonitorMess
 	messages := make([]MonitorMessage, 0, limit)
 	for i := len(h.monitorMessages) - 1; i >= 0 && len(messages) < limit; i-- {
 		msg := h.monitorMessages[i]
-		if sessionID != "" && msg.SessionID != sessionID {
+		if !filter.matchesMessage(msg) {
 			continue
 		}
 		messages = append(messages, msg)
@@ -334,6 +409,8 @@ func (state *monitorConnectionState) snapshot() MonitorConnection {
 		Subject:          state.Subject,
 		GatewayID:        state.GatewayID,
 		Channel:          state.Channel,
+		Source:           state.Source,
+		DeviceID:         state.DeviceID,
 		RemoteAddr:       state.RemoteAddr,
 		UserAgent:        state.UserAgent,
 		ConnectedAt:      state.ConnectedAt,
@@ -356,13 +433,32 @@ func (c *Conn) SetClientInfo(remoteAddr string, userAgent string) {
 	c.clientInfoMu.Unlock()
 }
 
-func (c *Conn) monitorClientInfo() (string, string) {
+func (c *Conn) SetClientMetadata(source string, deviceID string) {
+	if c == nil {
+		return
+	}
+	c.clientInfoMu.Lock()
+	c.source = monitorNormalizeSource(source)
+	c.deviceID = monitorNormalizeDeviceID(deviceID)
+	c.clientInfoMu.Unlock()
+}
+
+func (c *Conn) monitorClientInfo() (string, string, string, string) {
+	if c == nil {
+		return "", "", "", ""
+	}
+	c.clientInfoMu.RLock()
+	defer c.clientInfoMu.RUnlock()
+	return c.remoteAddr, c.userAgent, c.source, c.deviceID
+}
+
+func (c *Conn) monitorClientMetadata() (string, string) {
 	if c == nil {
 		return "", ""
 	}
 	c.clientInfoMu.RLock()
 	defer c.clientInfoMu.RUnlock()
-	return c.remoteAddr, c.userAgent
+	return c.source, c.deviceID
 }
 
 func (c *Conn) monitorIdentity() (string, string, string, string) {
@@ -410,10 +506,13 @@ func (c *Conn) recordInboundMessage(raw []byte, req RequestFrame, errorText stri
 	if c == nil || c.hub == nil || monitorSkipFrame(req.Frame, req.Type) {
 		return
 	}
+	source, deviceID := c.monitorClientMetadata()
 	preview, truncated := monitorPayloadPreview(raw)
 	c.hub.recordMonitorMessage(MonitorMessage{
 		Timestamp:      time.Now().UnixMilli(),
 		SessionID:      c.SessionID(),
+		Source:         source,
+		DeviceID:       deviceID,
 		Direction:      "in",
 		Frame:          req.Frame,
 		Type:           req.Type,
@@ -429,14 +528,15 @@ func (c *Conn) recordOutboundMessage(frame any) {
 	if c == nil || c.hub == nil {
 		return
 	}
-	msg, ok := monitorMessageFromOutboundFrame(c.SessionID(), frame)
+	source, deviceID := c.monitorClientMetadata()
+	msg, ok := monitorMessageFromOutboundFrame(c.SessionID(), source, deviceID, frame)
 	if !ok {
 		return
 	}
 	c.hub.recordMonitorMessage(msg)
 }
 
-func monitorMessageFromOutboundFrame(sessionID string, frame any) (MonitorMessage, bool) {
+func monitorMessageFromOutboundFrame(sessionID string, source string, deviceID string, frame any) (MonitorMessage, bool) {
 	frameName, frameType, id := monitorFrameMetadata(frame)
 	if monitorSkipFrame(frameName, frameType) {
 		return MonitorMessage{}, false
@@ -453,6 +553,8 @@ func monitorMessageFromOutboundFrame(sessionID string, frame any) (MonitorMessag
 	return MonitorMessage{
 		Timestamp:      time.Now().UnixMilli(),
 		SessionID:      sessionID,
+		Source:         source,
+		DeviceID:       deviceID,
 		Direction:      "out",
 		Frame:          frameName,
 		Type:           frameType,
@@ -568,6 +670,15 @@ func monitorPayloadPreview(data []byte) (string, bool) {
 func monitorSanitizeText(text string, maxRunes int) string {
 	preview, _ := monitorPreviewString(text, maxRunes)
 	return preview
+}
+
+func monitorNormalizeSource(source string) string {
+	source = strings.ToLower(strings.TrimSpace(source))
+	return monitorSanitizeText(source, monitorSourceMaxRunes)
+}
+
+func monitorNormalizeDeviceID(deviceID string) string {
+	return monitorSanitizeText(deviceID, monitorDeviceIDMaxRunes)
 }
 
 func monitorPreviewString(text string, maxRunes int) (string, bool) {

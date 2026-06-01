@@ -25,8 +25,7 @@ func (s *Server) handleMonitorWSConnections(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
 		return
 	}
-	sessionID := strings.TrimSpace(r.URL.Query().Get("sessionId"))
-	writeJSON(w, http.StatusOK, api.Success(s.monitorHub().MonitorConnections(limit, sessionID)))
+	writeJSON(w, http.StatusOK, api.Success(s.monitorHub().MonitorConnections(limit, monitorFilterFromRequest(r))))
 }
 
 func (s *Server) handleMonitorWSMessages(w http.ResponseWriter, r *http.Request) {
@@ -35,8 +34,7 @@ func (s *Server) handleMonitorWSMessages(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, err.Error()))
 		return
 	}
-	sessionID := strings.TrimSpace(r.URL.Query().Get("sessionId"))
-	writeJSON(w, http.StatusOK, api.Success(s.monitorHub().MonitorMessages(limit, sessionID)))
+	writeJSON(w, http.StatusOK, api.Success(s.monitorHub().MonitorMessages(limit, monitorFilterFromRequest(r))))
 }
 
 func (s *Server) monitorHub() *ws.Hub {
@@ -63,4 +61,20 @@ func parseMonitorLimit(r *http.Request, name string, fallback int, min int, max 
 		return 0, fmt.Errorf("%s must be between %d and %d", name, min, max)
 	}
 	return limit, nil
+}
+
+func monitorFilterFromRequest(r *http.Request) ws.MonitorFilter {
+	if r == nil {
+		return ws.MonitorFilter{}
+	}
+	query := r.URL.Query()
+	deviceID := strings.TrimSpace(query.Get("deviceId"))
+	if deviceID == "" {
+		deviceID = strings.TrimSpace(query.Get("device_id"))
+	}
+	return ws.MonitorFilter{
+		SessionID: strings.TrimSpace(query.Get("sessionId")),
+		Source:    strings.TrimSpace(query.Get("source")),
+		DeviceID:  deviceID,
+	}
 }

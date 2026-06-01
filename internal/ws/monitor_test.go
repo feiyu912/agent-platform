@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ func TestHubMonitorTracksConnectionLifecycle(t *testing.T) {
 	hub := NewHub()
 	conn := NewConn(nil, hub, config.WebSocketConfig{WriteQueueSize: 4}, time.Second, AuthSession{Subject: "tester"})
 	conn.SetClientInfo("192.168.1.42:4815", "monitor-test-agent")
+	conn.SetClientMetadata("WebClient", "device-123")
 
 	hub.register(conn)
 
@@ -33,6 +35,9 @@ func TestHubMonitorTracksConnectionLifecycle(t *testing.T) {
 	if latest.UserAgent != "monitor-test-agent" {
 		t.Fatalf("unexpected user agent: %q", latest.UserAgent)
 	}
+	if latest.Source != "webclient" || latest.DeviceID != "device-123" {
+		t.Fatalf("unexpected client metadata: %#v", latest)
+	}
 
 	hub.unregister(conn)
 
@@ -47,15 +52,19 @@ func TestHubMonitorTracksConnectionLifecycle(t *testing.T) {
 		t.Fatalf("expected closedAt to be populated, got %#v", overview.WS.LatestConnection)
 	}
 
-	connections := hub.MonitorConnections(10, conn.SessionID()).Connections
+	connections := hub.MonitorConnections(10, MonitorFilter{SessionID: conn.SessionID(), Source: "webclient", DeviceID: "device-123"}).Connections
 	if len(connections) != 1 || connections[0].SessionID != conn.SessionID() {
 		t.Fatalf("expected session filter to return closed connection, got %#v", connections)
+	}
+	if filtered := hub.MonitorConnections(10, MonitorFilter{Source: "desktop"}).Connections; len(filtered) != 0 {
+		t.Fatalf("expected source filter mismatch, got %#v", filtered)
 	}
 }
 
 func TestHubMonitorRecordsRecentMessagesAndSanitizesPreview(t *testing.T) {
 	hub := NewHub()
 	conn := NewConn(nil, hub, config.WebSocketConfig{WriteQueueSize: 8}, time.Second, AuthSession{})
+	conn.SetClientMetadata("APP", "device-message")
 	hub.register(conn)
 
 	conn.recordOutboundMessage(PushFrame{Frame: FramePush, Type: "heartbeat", Data: map[string]any{"timestamp": 1}})
@@ -63,13 +72,16 @@ func TestHubMonitorRecordsRecentMessagesAndSanitizesPreview(t *testing.T) {
 	raw := []byte(`{"frame":"request","type":"/api/agents","id":"req_1","payload":{"token":"secret-value","message":"` + strings.Repeat("x", 600) + `"}}`)
 	conn.recordInboundMessage(raw, RequestFrame{Frame: FrameRequest, Type: "/api/agents", ID: "req_1"}, "")
 
-	messages := hub.MonitorMessages(5, "").Messages
+	messages := hub.MonitorMessages(5, MonitorFilter{}).Messages
 	if len(messages) != 2 {
 		t.Fatalf("expected heartbeat to be skipped and two messages to remain, got %#v", messages)
 	}
 	latest := messages[0]
 	if latest.Direction != "in" || latest.Frame != FrameRequest || latest.Type != "/api/agents" || latest.ID != "req_1" {
 		t.Fatalf("unexpected latest message: %#v", latest)
+	}
+	if latest.Source != "app" || latest.DeviceID != "device-message" {
+		t.Fatalf("unexpected message metadata: %#v", latest)
 	}
 	if !latest.Truncated || len([]rune(latest.PayloadPreview)) > monitorPreviewMaxRunes {
 		t.Fatalf("expected truncated preview capped at %d runes, got %#v", monitorPreviewMaxRunes, latest)
@@ -78,11 +90,32 @@ func TestHubMonitorRecordsRecentMessagesAndSanitizesPreview(t *testing.T) {
 		t.Fatalf("expected sensitive payload to be hidden, got %q", latest.PayloadPreview)
 	}
 
-	connections := hub.MonitorConnections(10, conn.SessionID()).Connections
+	connections := hub.MonitorConnections(10, MonitorFilter{SessionID: conn.SessionID()}).Connections
 	if len(connections) != 1 {
 		t.Fatalf("expected connection snapshot, got %#v", connections)
 	}
 	if connections[0].ReceivedMessages != 1 || connections[0].SentMessages != 1 || connections[0].Errors != 0 {
 		t.Fatalf("unexpected message counters: %#v", connections[0])
+	}
+	filtered := hub.MonitorMessages(5, MonitorFilter{Source: "app", DeviceID: "device-message"}).Messages
+	if len(filtered) != 2 {
+		t.Fatalf("expected metadata filters to return two messages, got %#v", filtered)
+	}
+}
+
+func TestWSClientMetadataFromRequestNormalizesAndFallsBackToAuthDeviceID(t *testing.T) {
+	req := httptest.NewRequest("GET", "/ws?source=WebClient&device_id=device-query", nil)
+	source, deviceID := wsClientMetadataFromRequest(req, AuthSession{DeviceID: "device-claim"})
+	if source != "webclient" || deviceID != "device-query" {
+		t.Fatalf("unexpected query metadata: source=%q deviceId=%q", source, deviceID)
+	}
+
+	req = httptest.NewRequest("GET", "/ws?source="+strings.Repeat("A", monitorSourceMaxRunes+5), nil)
+	source, deviceID = wsClientMetadataFromRequest(req, AuthSession{DeviceID: strings.Repeat("d", monitorDeviceIDMaxRunes+5)})
+	if len([]rune(source)) != monitorSourceMaxRunes || source != strings.Repeat("a", monitorSourceMaxRunes) {
+		t.Fatalf("expected normalized and truncated source, got %q", source)
+	}
+	if len([]rune(deviceID)) != monitorDeviceIDMaxRunes {
+		t.Fatalf("expected truncated deviceId, got %q", deviceID)
 	}
 }

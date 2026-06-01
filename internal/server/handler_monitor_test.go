@@ -28,7 +28,7 @@ func TestMonitorEndpointsExposeWebSocketSnapshot(t *testing.T) {
 	server := httptest.NewServer(fixture.server)
 	defer server.Close()
 
-	conn, _, err := gws.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
+	conn, _, err := gws.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws?source=WebClient&deviceId=device-123", nil)
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
 	}
@@ -67,11 +67,17 @@ func TestMonitorEndpointsExposeWebSocketSnapshot(t *testing.T) {
 	if overview.WS.LatestConnection == nil || overview.WS.LatestConnection.SessionID != sessionID {
 		t.Fatalf("expected latest connection for %s, got %#v", sessionID, overview.WS.LatestConnection)
 	}
+	if overview.WS.LatestConnection.Source != "webclient" || overview.WS.LatestConnection.DeviceID != "device-123" {
+		t.Fatalf("unexpected latest connection metadata: %#v", overview.WS.LatestConnection)
+	}
 	if len(overview.WS.RecentMessages) == 0 {
 		t.Fatalf("expected recent websocket messages, got %#v", overview)
 	}
+	if overview.WS.RecentMessages[0].Source != "webclient" || overview.WS.RecentMessages[0].DeviceID != "device-123" {
+		t.Fatalf("unexpected recent message metadata: %#v", overview.WS.RecentMessages[0])
+	}
 
-	connections := getMonitorData[ws.MonitorConnectionsSnapshot](t, server.URL+"/api/monitor/ws/connections?limit=1&sessionId="+sessionID)
+	connections := getMonitorData[ws.MonitorConnectionsSnapshot](t, server.URL+"/api/monitor/ws/connections?limit=1&sessionId="+sessionID+"&source=webclient&deviceId=device-123")
 	if connections.ConnectionCount != 1 || len(connections.Connections) != 1 {
 		t.Fatalf("expected filtered connection snapshot, got %#v", connections)
 	}
@@ -79,14 +85,18 @@ func TestMonitorEndpointsExposeWebSocketSnapshot(t *testing.T) {
 		t.Fatalf("unexpected filtered connection: %#v", connections.Connections)
 	}
 
-	messages := getMonitorData[ws.MonitorMessagesSnapshot](t, server.URL+"/api/monitor/ws/messages?limit=5&sessionId="+sessionID)
+	messages := getMonitorData[ws.MonitorMessagesSnapshot](t, server.URL+"/api/monitor/ws/messages?limit=5&sessionId="+sessionID+"&source=webclient&deviceId=device-123")
 	if len(messages.Messages) == 0 {
 		t.Fatalf("expected filtered messages, got %#v", messages)
 	}
 	for _, msg := range messages.Messages {
-		if msg.SessionID != sessionID {
+		if msg.SessionID != sessionID || msg.Source != "webclient" || msg.DeviceID != "device-123" {
 			t.Fatalf("expected only messages for %s, got %#v", sessionID, messages.Messages)
 		}
+	}
+	mismatched := getMonitorData[ws.MonitorMessagesSnapshot](t, server.URL+"/api/monitor/ws/messages?limit=5&source=desktop")
+	if len(mismatched.Messages) != 0 {
+		t.Fatalf("expected mismatched source filter to return no messages, got %#v", mismatched)
 	}
 }
 

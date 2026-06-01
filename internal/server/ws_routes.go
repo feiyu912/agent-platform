@@ -39,6 +39,7 @@ func (a wsTokenAuthenticator) VerifyToken(ctx context.Context, token string) (ws
 	return ws.AuthSession{
 		Context:   WithPrincipal(ctx, principal),
 		Subject:   principal.Subject,
+		DeviceID:  firstStringClaim(principal.Claims, "deviceId", "device_id"),
 		ExpiresAt: numericDate(principal.Claims["exp"]) * 1000,
 	}, nil
 }

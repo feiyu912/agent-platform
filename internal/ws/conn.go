@@ -42,6 +42,8 @@ type Conn struct {
 	clientInfoMu      sync.RWMutex
 	remoteAddr        string
 	userAgent         string
+	source            string
+	deviceID          string
 
 	// silent=true 时：Run 不主动发 push.connected，writeLoop 不发 push.heartbeat / auth.expiring。
 	// 用于 agent-platform 反向连出到网关的场景——网关按自己的节奏发注册 ACK，我们只做被动应答。

@@ -182,8 +182,8 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 | Method | Path | 参数 | 响应 |
 |---|---|---|---|
 | GET | `/api/monitor` | query: `messageLimit` 可选，默认 5，范围 1..50 | 总览与 WS 摘要 |
-| GET | `/api/monitor/ws/connections` | query: `limit` 默认 100，范围 1..500；`sessionId` 可选 | 当前/最近 WS 连接列表 |
-| GET | `/api/monitor/ws/messages` | query: `limit` 默认 5，范围 1..50；`sessionId` 可选 | 最近 WS 消息列表 |
+| GET | `/api/monitor/ws/connections` | query: `limit` 默认 100，范围 1..500；`sessionId`、`source`、`deviceId` 可选 | 当前/最近 WS 连接列表 |
+| GET | `/api/monitor/ws/messages` | query: `limit` 默认 5，范围 1..50；`sessionId`、`source`、`deviceId` 可选 | 最近 WS 消息列表 |
 
 `/api/monitor` 返回：
 
@@ -198,9 +198,9 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 }
 ```
 
-连接项包含 `sessionId`、`kind`、`active`、`subject`、`gatewayId`、`channel`、`remoteAddr`、`userAgent`、`connectedAt`、`closedAt`、`lastSeenAt`、`lastMessageAt`、`receivedMessages`、`sentMessages`、`errors`、`inflightRequests`、`activeStreams`、`writeQueueDepth`。
+连接项包含 `sessionId`、`kind`、`active`、`subject`、`gatewayId`、`channel`、`source`、`deviceId`、`remoteAddr`、`userAgent`、`connectedAt`、`closedAt`、`lastSeenAt`、`lastMessageAt`、`receivedMessages`、`sentMessages`、`errors`、`inflightRequests`、`activeStreams`、`writeQueueDepth`。
 
-消息项包含 `seq`、`timestamp`、`sessionId`、`direction`、`frame`、`type`、`id`、`sizeBytes`、`payloadPreview`、`truncated`、`error`。`payloadPreview` 只保存脱敏后的截断摘要，最多 512 字符；不会记录完整 payload，不记录 ping/pong/control frame，并跳过 `push.heartbeat`。
+消息项包含 `seq`、`timestamp`、`sessionId`、`source`、`deviceId`、`direction`、`frame`、`type`、`id`、`sizeBytes`、`payloadPreview`、`truncated`、`error`。`payloadPreview` 只保存脱敏后的截断摘要，最多 512 字符；不会记录完整 payload，不记录 ping/pong/control frame，并跳过 `push.heartbeat`。
 
 ## WebSocket 定义
 
@@ -209,6 +209,7 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 - 入口：`GET /ws`，HTTP upgrade 为 WebSocket。
 - 鉴权：复用 HTTP token 校验链路。
 - token 可通过 `Sec-WebSocket-Protocol: bearer.<token>` 或 query token 传递；服务端会在握手成功时回写匹配的 subprotocol。
+- 客户端可通过 query 自报监控元数据：`source` 与 `deviceId`，例如 `/ws?source=webclient&deviceId=device-123`；`source` 转小写后展示，`deviceId` 兼容 `device_id`，缺省时可从 JWT claim `deviceId` / `device_id` 兜底。
 - WebSocket 控制面常开；没有单独的关闭开关。
 
 ### 帧类型

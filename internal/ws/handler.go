@@ -78,6 +78,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn := NewConn(socket, h.hub, h.cfg, h.heartbeatInterval, auth)
 	conn.SetRequestBaseURL(wsRequestBaseURL(r))
 	conn.SetClientInfo(r.RemoteAddr, r.UserAgent())
+	conn.SetClientMetadata(wsClientMetadataFromRequest(r, auth))
 	dispatch := h.Dispatch
 	if h.dispatch != nil {
 		dispatch = h.dispatch
@@ -162,6 +163,21 @@ func wsRequestBaseURL(r *http.Request) string {
 		}
 	}
 	return strings.TrimRight(proto+"://"+host, "/")
+}
+
+func wsClientMetadataFromRequest(r *http.Request, auth AuthSession) (string, string) {
+	deviceID := auth.DeviceID
+	source := ""
+	if r != nil {
+		query := r.URL.Query()
+		source = query.Get("source")
+		if queryDeviceID := strings.TrimSpace(query.Get("deviceId")); queryDeviceID != "" {
+			deviceID = queryDeviceID
+		} else if queryDeviceID := strings.TrimSpace(query.Get("device_id")); queryDeviceID != "" {
+			deviceID = queryDeviceID
+		}
+	}
+	return monitorNormalizeSource(source), monitorNormalizeDeviceID(deviceID)
 }
 
 func MarshalPayload(value any) json.RawMessage {
