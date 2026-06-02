@@ -63,10 +63,11 @@ func (s *Server) loadChatDetail(ctx context.Context, chatID string, includeRawMe
 	s.enrichToolMetadata(detail.Events, summaryAgentKey(summary))
 
 	response := api.ChatDetailResponse{
-		ChatID:     detail.ChatID,
-		ChatName:   detail.ChatName,
-		Events:     detail.Events,
-		References: nil,
+		ChatID:        detail.ChatID,
+		ChatName:      detail.ChatName,
+		Events:        detail.Events,
+		ContextWindow: mapChatContextWindow(detail.ContextWindow),
+		References:    nil,
 	}
 	runs, err := s.deps.Chats.ListRuns(chatID)
 	if err != nil {

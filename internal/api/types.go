@@ -581,6 +581,12 @@ type ChatUsageBreakdown struct {
 	Chat    *ChatUsageData `json:"chat,omitempty"`
 }
 
+type ChatContextWindow struct {
+	MaxSize               int `json:"maxSize,omitempty"`
+	CurrentSize           int `json:"currentSize,omitempty"`
+	EstimatedNextCallSize int `json:"estimatedNextCallSize,omitempty"`
+}
+
 type PromptTokenDetails struct {
 	CacheHitTokens  int `json:"cacheHitTokens,omitempty"`
 	CacheMissTokens int `json:"cacheMissTokens,omitempty"`
@@ -626,6 +632,7 @@ type ChatDetailResponse struct {
 	Artifact       any                 `json:"artifact,omitempty"`
 	References     []Reference         `json:"references,omitempty"`
 	Usage          *ChatUsageBreakdown `json:"usage,omitempty"`
+	ContextWindow  *ChatContextWindow  `json:"contextWindow,omitempty"`
 }
 
 type ArchivedChatDetailResponse struct {

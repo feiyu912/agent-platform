@@ -111,6 +111,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 	var chatTotalCachedTokens, chatTotalReasoningTokens, chatTotalPromptCacheHitTokens, chatTotalPromptCacheMissTokens int
 	var chatTotalLlmChatCompletionCount int
 	var chatTotalToolCallCount int
+	var latestContextWindow map[string]any
 	taskQueries := map[string]replayedSubTaskQuery{}
 	legacyConfirmIDs := map[string]bool{}
 	for _, line := range lines {
@@ -219,6 +220,9 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			awaitingReplay := newStepAwaitingReplay(line["awaiting"], runID)
 			stepUsage, _ := line["usage"].(map[string]any)
 			stepContextWindow, _ := line["contextWindow"].(map[string]any)
+			if cw := synthesizedUsageSnapshotContextWindow(stepContextWindow); len(cw) > 0 {
+				latestContextWindow = cw
+			}
 			stepSystem, _ := line["system"].(map[string]any)
 			stepDebug, _ := line["debug"].(map[string]any)
 			stepPreCallData := debugPreCallData(stepDebug, stepSystem)
@@ -293,33 +297,6 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.chatTotalPromptCacheMissTokens = chatTotalPromptCacheMissTokens
 				rd.chatTotalLlmChatCompletionCount = chatTotalLlmChatCompletionCount
 				rd.chatTotalToolCallCount = chatTotalToolCallCount
-			}
-			if hasProviderUsagePayload(stepUsage) {
-				runCumulativePost := map[string]int{
-					"promptTokens":           rd.totalPromptTokens,
-					"completionTokens":       rd.totalCompletionTokens,
-					"totalTokens":            rd.totalTotalTokens,
-					"cachedTokens":           rd.totalCachedTokens,
-					"reasoningTokens":        rd.totalReasoningTokens,
-					"promptCacheHitTokens":   rd.totalPromptCacheHitTokens,
-					"promptCacheMissTokens":  rd.totalPromptCacheMissTokens,
-					"llmChatCompletionCount": rd.totalLlmChatCompletionCount,
-					"toolCallCount":          rd.totalToolCallCount,
-				}
-				chatCumulativePost := map[string]int{
-					"promptTokens":           chatTotalPromptTokens,
-					"completionTokens":       chatTotalCompletionTokens,
-					"totalTokens":            chatTotalTotalTokens,
-					"cachedTokens":           chatTotalCachedTokens,
-					"reasoningTokens":        chatTotalReasoningTokens,
-					"promptCacheHitTokens":   chatTotalPromptCacheHitTokens,
-					"promptCacheMissTokens":  chatTotalPromptCacheMissTokens,
-					"llmChatCompletionCount": chatTotalLlmChatCompletionCount,
-					"toolCallCount":          chatTotalToolCallCount,
-				}
-				if ev := synthesizeUsageSnapshotEvent(runID, chatID, taskID, stepUsage, runCumulativePost, chatCumulativePost, stepContextWindow, ts, nextSeq); ev != nil {
-					rd.events = append(rd.events, *ev)
-				}
 			}
 			if replayDebugEvents && (hasProviderUsagePayload(stepUsage) || len(stepContextWindow) > 0) {
 				runCumulativePost := map[string]int{
@@ -450,13 +427,14 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 	}
 
 	return Detail{
-		ChatID:      summary.ChatID,
-		ChatName:    summary.ChatName,
-		RawMessages: rawMessages,
-		Events:      allEvents,
-		Plan:        plan,
-		Planning:    planning,
-		Artifact:    artifact,
+		ChatID:        summary.ChatID,
+		ChatName:      summary.ChatName,
+		RawMessages:   rawMessages,
+		Events:        allEvents,
+		ContextWindow: latestContextWindow,
+		Plan:          plan,
+		Planning:      planning,
+		Artifact:      artifact,
 	}, nil
 }
 

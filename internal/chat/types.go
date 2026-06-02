@@ -251,14 +251,15 @@ type PersistedAwaitingSubmit struct {
 }
 
 type Detail struct {
-	ChatID      string
-	ChatName    string
-	RawMessages []map[string]any
-	Events      []stream.EventData
-	References  []map[string]any
-	Plan        *PlanState
-	Planning    *PlanningState
-	Artifact    *ArtifactState
+	ChatID        string
+	ChatName      string
+	RawMessages   []map[string]any
+	Events        []stream.EventData
+	ContextWindow map[string]any
+	References    []map[string]any
+	Plan          *PlanState
+	Planning      *PlanningState
+	Artifact      *ArtifactState
 }
 
 type UsageData struct {

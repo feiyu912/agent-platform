@@ -93,6 +93,21 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, ev
 	}
 }
 
+func mapChatContextWindow(contextWindow map[string]any) *api.ChatContextWindow {
+	if len(contextWindow) == 0 {
+		return nil
+	}
+	out := api.ChatContextWindow{
+		MaxSize:               contracts.AnyIntNode(contextWindow["maxSize"]),
+		CurrentSize:           contracts.AnyIntNode(contextWindow["currentSize"]),
+		EstimatedNextCallSize: contracts.AnyIntNode(contextWindow["estimatedNextCallSize"]),
+	}
+	if out.MaxSize == 0 && out.CurrentSize == 0 && out.EstimatedNextCallSize == 0 {
+		return nil
+	}
+	return &out
+}
+
 func mapUsageDataFromPayload(usage map[string]any) *api.ChatUsageData {
 	if usage == nil {
 		return nil

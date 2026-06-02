@@ -4789,7 +4789,6 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 		"request.query",
 		"debug.preCall",
 		"content.snapshot",
-		"usage.snapshot",
 		"debug.postCall",
 		"run.complete",
 	}
@@ -4829,45 +4828,27 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 		t.Fatalf("did not expect usage in debug.preCall payload %#v", detail.Events[3])
 	}
 
-	usageSnapshotUsage, _ := detail.Events[5].Value("usage").(map[string]any)
-	usageSnapshotCurrent, _ := usageSnapshotUsage["current"].(map[string]any)
-	if toIntValue(usageSnapshotCurrent["promptTokens"]) != 100 || toIntValue(usageSnapshotCurrent["completionTokens"]) != 50 || toIntValue(usageSnapshotCurrent["totalTokens"]) != 150 {
-		t.Fatalf("unexpected usage.snapshot current usage %#v", detail.Events[5])
-	}
-	if _, exists := usageSnapshotCurrent["llmChatCompletionCount"]; exists {
-		t.Fatalf("did not expect usage.snapshot current llmChatCompletionCount %#v", detail.Events[5])
-	}
-	if toIntValue(usageSnapshotCurrent["toolCallCount"]) != 2 {
-		t.Fatalf("expected usage.snapshot current toolCallCount %#v", detail.Events[5])
-	}
-	if _, exists := usageSnapshotUsage["run"]; exists {
-		t.Fatalf("did not expect usage.snapshot run usage %#v", detail.Events[5])
-	}
-	if _, exists := usageSnapshotUsage["chat"]; exists {
-		t.Fatalf("did not expect usage.snapshot chat usage %#v", detail.Events[5])
-	}
-	usageSnapshotCW, _ := detail.Events[5].Value("contextWindow").(map[string]any)
-	if toIntValue(usageSnapshotCW["maxSize"]) != 128000 || toIntValue(usageSnapshotCW["currentSize"]) != 100 || toIntValue(usageSnapshotCW["estimatedNextCallSize"]) != 200 {
-		t.Fatalf("unexpected usage.snapshot context window %#v", detail.Events[5])
+	if toIntValue(detail.ContextWindow["maxSize"]) != 128000 || toIntValue(detail.ContextWindow["currentSize"]) != 100 || toIntValue(detail.ContextWindow["estimatedNextCallSize"]) != 200 {
+		t.Fatalf("unexpected detail context window %#v", detail.ContextWindow)
 	}
 
-	postCallData, _ := detail.Events[6].Value("data").(map[string]any)
+	postCallData, _ := detail.Events[5].Value("data").(map[string]any)
 	postCallUsage, _ := postCallData["usage"].(map[string]any)
 	llmUsage, _ := postCallUsage["llmReturnUsage"].(map[string]any)
 	if toIntValue(llmUsage["promptTokens"]) != 100 || toIntValue(llmUsage["completionTokens"]) != 50 || toIntValue(llmUsage["totalTokens"]) != 150 {
-		t.Fatalf("unexpected debug.postCall usage %#v", detail.Events[6])
+		t.Fatalf("unexpected debug.postCall usage %#v", detail.Events[5])
 	}
 	if toIntValue(llmUsage["toolCallCount"]) != 2 {
-		t.Fatalf("unexpected debug.postCall toolCallCount %#v", detail.Events[6])
+		t.Fatalf("unexpected debug.postCall toolCallCount %#v", detail.Events[5])
 	}
 	if _, exists := postCallUsage["runUsage"]; exists {
-		t.Fatalf("did not expect debug.postCall run usage %#v", detail.Events[6])
+		t.Fatalf("did not expect debug.postCall run usage %#v", detail.Events[5])
 	}
 	if _, exists := postCallUsage["chatUsage"]; exists {
-		t.Fatalf("did not expect debug.postCall chat usage %#v", detail.Events[6])
+		t.Fatalf("did not expect debug.postCall chat usage %#v", detail.Events[5])
 	}
-	if _, exists := detail.Events[7].Value("usage").(map[string]any); exists {
-		t.Fatalf("did not expect synthesized run.complete usage %#v", detail.Events[7])
+	if _, exists := detail.Events[6].Value("usage").(map[string]any); exists {
+		t.Fatalf("did not expect synthesized run.complete usage %#v", detail.Events[6])
 	}
 }
 
@@ -4933,6 +4914,9 @@ func TestLoadChatDoesNotSynthesizeEmptyUsageSnapshot(t *testing.T) {
 	if _, ok := complete.Value("usage").(map[string]any); ok {
 		t.Fatalf("did not expect terminal usage from empty step usage, got %#v", complete)
 	}
+	if toIntValue(detail.ContextWindow["maxSize"]) != 128000 || toIntValue(detail.ContextWindow["estimatedNextCallSize"]) != 5703 {
+		t.Fatalf("expected detail context window from empty step usage, got %#v", detail.ContextWindow)
+	}
 }
 
 func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
@@ -4986,31 +4970,19 @@ func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load chat: %v", err)
 	}
-	if len(detail.Events) != 6 {
+	if len(detail.Events) != 5 {
 		t.Fatalf("expected legacy usage replay events, got %#v", detail.Events)
 	}
 	for _, event := range detail.Events {
-		if event.Type == "debug.preCall" || event.Type == "debug.postCall" {
+		if event.Type == "debug.preCall" || event.Type == "debug.postCall" || event.Type == "usage.snapshot" {
 			t.Fatalf("did not expect usage-only legacy step to synthesize debug event, got %#v", detail.Events)
 		}
 	}
-	usageSnapshotUsage, _ := detail.Events[4].Value("usage").(map[string]any)
-	usageSnapshotCurrent, _ := usageSnapshotUsage["current"].(map[string]any)
-	usageSnapshotPromptDetails, _ := usageSnapshotCurrent["promptTokensDetails"].(map[string]any)
-	if detail.Events[4].Type != "usage.snapshot" || toIntValue(usageSnapshotPromptDetails["cacheHitTokens"]) != 32 || toIntValue(usageSnapshotPromptDetails["cacheMissTokens"]) != 68 {
-		t.Fatalf("expected usage.snapshot with DeepSeek cache fields, got %#v", detail.Events)
+	if toIntValue(detail.ContextWindow["maxSize"]) != 128000 || toIntValue(detail.ContextWindow["currentSize"]) != 100 || toIntValue(detail.ContextWindow["estimatedNextCallSize"]) != 200 {
+		t.Fatalf("expected detail context window from legacy step usage, got %#v", detail.ContextWindow)
 	}
-	if _, exists := usageSnapshotCurrent["llmChatCompletionCount"]; exists {
-		t.Fatalf("did not expect usage.snapshot current llmChatCompletionCount %#v", detail.Events[4])
-	}
-	if _, exists := usageSnapshotUsage["run"]; exists {
-		t.Fatalf("did not expect usage.snapshot run usage %#v", detail.Events[4])
-	}
-	if _, exists := usageSnapshotUsage["chat"]; exists {
-		t.Fatalf("did not expect usage.snapshot chat usage %#v", detail.Events[4])
-	}
-	if _, exists := detail.Events[5].Value("usage").(map[string]any); exists {
-		t.Fatalf("did not expect synthesized run.complete usage %#v", detail.Events[5])
+	if _, exists := detail.Events[4].Value("usage").(map[string]any); exists {
+		t.Fatalf("did not expect synthesized run.complete usage %#v", detail.Events[4])
 	}
 }
 

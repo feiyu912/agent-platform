@@ -409,14 +409,20 @@ func TestChatSnapshotDeduplicatesChatStartAcrossMultipleQueries(t *testing.T) {
 	if runStartCount != 2 {
 		t.Fatalf("expected two run.start events, got %d events=%#v", runStartCount, chatResp.Data.Events)
 	}
-	if usageSnapshotCount != 2 {
-		t.Fatalf("expected two usage.snapshot events, got %d events=%#v", usageSnapshotCount, chatResp.Data.Events)
+	if usageSnapshotCount != 0 {
+		t.Fatalf("expected no historical usage.snapshot events, got %d events=%#v", usageSnapshotCount, chatResp.Data.Events)
 	}
-	if len(chatResp.Data.Events) != 11 {
-		t.Fatalf("expected 11 persisted events for two turns, got %d events=%#v", len(chatResp.Data.Events), chatResp.Data.Events)
+	if len(chatResp.Data.Events) != 9 {
+		t.Fatalf("expected 9 persisted events for two turns, got %d events=%#v", len(chatResp.Data.Events), chatResp.Data.Events)
 	}
 	if len(chatResp.Data.RawMessages) != 4 {
 		t.Fatalf("expected four raw messages for two turns, got %#v", chatResp.Data.RawMessages)
+	}
+	if chatResp.Data.Usage == nil || chatResp.Data.Usage.LastRun == nil || chatResp.Data.Usage.Chat == nil {
+		t.Fatalf("expected outer usage breakdown, got %#v", chatResp.Data.Usage)
+	}
+	if chatResp.Data.ContextWindow == nil || chatResp.Data.ContextWindow.MaxSize == 0 || chatResp.Data.ContextWindow.CurrentSize == 0 {
+		t.Fatalf("expected outer context window, got %#v", chatResp.Data.ContextWindow)
 	}
 }
 
@@ -611,7 +617,10 @@ func TestQueryAndRunDebugEventsDisabledByDefault(t *testing.T) {
 		t.Fatalf("decode chat detail: %v", err)
 	}
 	assertEventTypesExclude(t, chatResp.Data.Events, "debug.preCall", "debug.postCall")
-	assertEventTypesInclude(t, chatResp.Data.Events, "usage.snapshot")
+	assertEventTypesExclude(t, chatResp.Data.Events, "usage.snapshot")
+	if chatResp.Data.Usage == nil || chatResp.Data.ContextWindow == nil {
+		t.Fatalf("expected outer usage and context window, got usage=%#v contextWindow=%#v", chatResp.Data.Usage, chatResp.Data.ContextWindow)
+	}
 }
 
 func TestQueryAndRunDebugEventsEnabledWhenEnabled(t *testing.T) {
@@ -705,7 +714,10 @@ func TestQueryAndRunDebugEventsEnabledWhenEnabled(t *testing.T) {
 		t.Fatalf("decode chat detail: %v", err)
 	}
 	assertEventTypesExclude(t, chatResp.Data.Events, "debug.preCall", "debug.postCall")
-	assertEventTypesInclude(t, chatResp.Data.Events, "usage.snapshot")
+	assertEventTypesExclude(t, chatResp.Data.Events, "usage.snapshot")
+	if chatResp.Data.Usage == nil || chatResp.Data.ContextWindow == nil {
+		t.Fatalf("expected outer usage and context window, got usage=%#v contextWindow=%#v", chatResp.Data.Usage, chatResp.Data.ContextWindow)
+	}
 }
 
 func TestPlanExecutePlanStageOnlyUsesPlanAddTasksBeforeSequentialTaskExecution(t *testing.T) {
