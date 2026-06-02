@@ -968,14 +968,14 @@ Plan first, then check the current time before reporting.
 				`[DONE]`,
 			)
 		case 4:
-			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_glob", "file_grep", "datetime")
+			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_glob", "file_grep", "datetime", "regex")
 			assertStringSliceExcludes(t, toolNames, "plan_add_tasks", "planning_write", "ask_user_question", "plan_update_task")
 			writeProviderSSE(t, w,
 				providerToolCallFrame(t, "tool_time", "datetime", map[string]any{}),
 				`[DONE]`,
 			)
 		case 5:
-			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_glob", "file_grep", "datetime")
+			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_glob", "file_grep", "datetime", "regex")
 			assertStringSliceExcludes(t, toolNames, "plan_add_tasks", "planning_write", "ask_user_question", "plan_update_task")
 			writeProviderSSE(t, w,
 				`{"choices":[{"delta":{"content":"execution completed"},"finish_reason":"stop"}]}`,
@@ -1464,7 +1464,7 @@ Revised plan with explicit test coverage.
 				`[DONE]`,
 			)
 		case 3:
-			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_glob", "file_grep", "datetime")
+			assertStringSliceContains(t, toolNames, "bash", "file_read", "file_write", "file_edit", "file_glob", "file_grep", "datetime", "regex")
 			assertStringSliceExcludes(t, toolNames, "planning_write", "ask_user_question")
 			writeProviderSSE(t, w,
 				`{"choices":[{"delta":{"content":"executed revised plan"},"finish_reason":"stop"}]}`,
@@ -1733,10 +1733,10 @@ func writeProviderSSEFrame(t *testing.T, w io.Writer, frame string) {
 
 func assertCoderPlanningToolSet(t *testing.T, got []string) {
 	t.Helper()
-	if len(got) != 6 {
+	if len(got) != 7 {
 		t.Fatalf("coder planning tools length=%d tools=%#v", len(got), got)
 	}
-	assertStringSliceContains(t, got, "file_read", "file_glob", "file_grep", "datetime", "ask_user_question", "planning_write")
+	assertStringSliceContains(t, got, "file_read", "file_glob", "file_grep", "datetime", "regex", "ask_user_question", "planning_write")
 	assertStringSliceExcludes(t, got, "bash", "file_write", "file_edit", "desktop_action", "desktop_cdp", "agent_invoke", "plan_add_tasks", "plan_update_task")
 }
 

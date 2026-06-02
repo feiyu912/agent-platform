@@ -34,6 +34,7 @@ var requiredBuiltinToolNames = []string{
 	"plan_get_tasks",
 	"plan_update_task",
 	"planning_write",
+	"regex",
 	"vision_recognize",
 	"bash_sandbox",
 	"ask_user_question",

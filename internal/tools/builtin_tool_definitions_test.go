@@ -26,6 +26,46 @@ func TestLoadEmbeddedToolDefinitionsIncludesAskUserBuiltins(t *testing.T) {
 	if !byName["agent_invoke"] {
 		t.Fatal("expected agent_invoke builtin tool definition")
 	}
+	if !byName["regex"] {
+		t.Fatal("expected regex builtin tool definition")
+	}
+}
+
+func TestRegexToolSchemaMatchesContract(t *testing.T) {
+	defs, err := LoadEmbeddedToolDefinitions()
+	if err != nil {
+		t.Fatalf("load embedded tool definitions: %v", err)
+	}
+
+	var regexDef map[string]any
+	for _, def := range defs {
+		if def.Name == "regex" {
+			regexDef = def.Parameters
+			break
+		}
+	}
+	if regexDef == nil {
+		t.Fatal("expected regex builtin tool definition")
+	}
+
+	properties := mapChild(t, regexDef, "properties")
+	for _, want := range []string{"count", "matches"} {
+		if !enumContains(t, properties["operation"], want) {
+			t.Fatalf("expected regex operation enum to include %q", want)
+		}
+	}
+	for _, want := range []string{"operation", "text", "pattern"} {
+		if _, ok := properties[want]; !ok {
+			t.Fatalf("expected regex property %q", want)
+		}
+	}
+	required, ok := regexDef["required"].([]any)
+	if !ok {
+		t.Fatalf("expected regex required array, got %#v", regexDef["required"])
+	}
+	if len(required) != 3 || required[0] != "operation" || required[1] != "text" || required[2] != "pattern" {
+		t.Fatalf("unexpected regex required fields: %#v", required)
+	}
 }
 
 func TestAskUserToolSchemasMatchContract(t *testing.T) {

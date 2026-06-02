@@ -23,6 +23,7 @@ var coderAgentProfile = agentModeProfile{
 		"file_glob",
 		"file_grep",
 		"datetime",
+		"regex",
 	},
 	ContextTags: []string{"system", "session"},
 	Budget: map[string]any{

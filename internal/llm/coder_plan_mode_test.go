@@ -20,7 +20,7 @@ func TestResolveAgentModeCoder(t *testing.T) {
 
 func TestCoderPlanningStageToolsAreReadOnlyPlusQuestionsAndPlan(t *testing.T) {
 	stream := &coderPlanningStream{}
-	want := []string{"file_read", "file_glob", "file_grep", "datetime", "ask_user_question", "planning_write"}
+	want := []string{"file_read", "file_glob", "file_grep", "datetime", "regex", "ask_user_question", "planning_write"}
 	if got := stream.planStageTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("planStageTools()=%#v want %#v", got, want)
 	}
@@ -71,7 +71,7 @@ func TestCoderPlanningPromptUsesCoderPromptsConfig(t *testing.T) {
 	if !strings.Contains(prompt, "Use planning_write.") {
 		t.Fatalf("expected configured planning_write instructions, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "file_read, file_glob, file_grep, datetime, ask_user_question, planning_write") {
+	if !strings.Contains(prompt, "file_read, file_glob, file_grep, datetime, regex, ask_user_question, planning_write") {
 		t.Fatalf("expected rendered plan stage tools, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "bash, file_read, file_write, file_edit, datetime") {

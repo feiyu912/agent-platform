@@ -16,6 +16,7 @@ var coderPlanningModePlanTools = []string{
 	"file_glob",
 	"file_grep",
 	"datetime",
+	"regex",
 	"ask_user_question",
 	"planning_write",
 }
