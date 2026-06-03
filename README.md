@@ -153,7 +153,6 @@ RUN_SOCKET_TESTS=1 make test-integration
 - `DEBUG_EVENTS_ENABLED`
 - `AGENT_DEFAULT_*`
 - `RUNTIME_DIR` / `REGISTRIES_DIR` / `CHATS_DIR` / `MEMORY_DIR` / `PAN_DIR`
-- `PROVIDER_APIKEY_KEY_PART`
 
 以下环境变量仍受 Go runtime 支持，但为了降低最终用户理解成本，默认不再出现在 `.env.example` 中：
 
@@ -165,12 +164,10 @@ RUN_SOCKET_TESTS=1 make test-integration
 
 LLM 交互日志、SSE/H2A 传输参数、WebSocket 调优项和 memory/chat storage 细粒度参数的默认值、适用人群和注意事项统一见 [配置化说明](./docs/配置化说明.md)。
 
-Provider `apiKey` 支持两种写法：
+Provider `apiKey` 按明文字符串读取：
 
-- 明文：`apiKey: sk-...`
-- 弱对抗密文：`apiKey: AES(...)`
-
-当使用 `AES(...)` 时，runtime 会在加载 provider registry 时自动解密，并继续把还原后的真实 key 用于上游请求头。需要同时满足程序内置 code part 和环境变量 `PROVIDER_APIKEY_KEY_PART`。这套方案只用于“防直接看配置文件”，不等同于真正的 secret manager；明文 `apiKey` 仍然兼容，便于渐进迁移和回滚。旧的 `AES(v1:...)` 已不再支持，需要重新生成密文。
+- 示例：`apiKey: sk-...`
+- runtime 不再支持 provider `apiKey` 加密或解密；包括 `AES(...)` 在内的任何值都会作为普通字符串使用。
 
 ### `configs/` 目录
 
@@ -295,7 +292,6 @@ docker compose logs -f
 
 - 服务无法启动：先检查环境里是否设置了已废弃的旧变量，或鉴权公钥 / JWKS 配置是否不完整。
 - Query 无法调用模型：检查 `REGISTRIES_DIR/providers`、`REGISTRIES_DIR/models` 是否存在，并确认 provider `apiKey` / `baseUrl` 可用。
-- 若 provider 使用 `apiKey: AES(...)`：确认 `.env` 或进程环境中已提供 `PROVIDER_APIKEY_KEY_PART`，且与当前密文匹配；旧 `AES(v1:...)` 需先重生成。
 - Automation 看起来没有触发：先确认服务进程本身正在运行；如果是本地 `make run`，日志不会出现在 `docker compose logs` 里。随后检查 stdout 中是否有 `automation orchestrator started`、`[automation] registered ...`、`[automation] dispatch ...`。
 - Query 看起来不像真流式：先检查是否启用了 `AGENT_H2A_RENDER_FLUSH_INTERVAL_MS`、`AGENT_H2A_RENDER_MAX_BUFFERED_CHARS` 或 `AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS` 这类传输层缓冲参数；默认 SSE writer 会逐事件 flush。
 - `bash` 执行失败：检查 `CONTAINER_HUB_BASE_URL`、`default-environment-id`，以及 `.env` 中的目录变量是否为宿主机真实路径。

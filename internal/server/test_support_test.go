@@ -2,8 +2,6 @@ package server
 
 import (
 	"crypto"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -485,27 +483,6 @@ func providerToolCallsFrame(t *testing.T, calls []providerToolCallSpec) string {
 		t.Fatalf("marshal provider tool call frame: %v", err)
 	}
 	return string(frame)
-}
-
-func mustEncryptProviderAPIKeyForServerTest(t *testing.T, envPart string, plaintext string) string {
-	t.Helper()
-
-	const providerAPIKeyCodePart = "zenmind-provider"
-
-	sum := sha256.Sum256([]byte(providerAPIKeyCodePart + ":" + envPart))
-	block, err := aes.NewCipher(sum[:])
-	if err != nil {
-		t.Fatalf("new cipher: %v", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		t.Fatalf("new gcm: %v", err)
-	}
-
-	nonce := []byte("0123456789ab")
-	data := gcm.Seal(nil, nonce, []byte(plaintext), nil)
-	payload := append(append([]byte{}, nonce...), data...)
-	return "AES(" + base64.RawURLEncoding.EncodeToString(payload) + ")"
 }
 
 func assertPersistedEventTypes(t *testing.T, events []stream.EventData, want ...string) {

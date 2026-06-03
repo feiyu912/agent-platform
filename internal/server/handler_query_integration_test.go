@@ -527,15 +527,12 @@ func TestQueryCanExecuteBackendToolLoop(t *testing.T) {
 	)
 }
 
-func TestQueryDecryptsAESProviderAPIKeyBeforeSendingAuthorizationHeader(t *testing.T) {
-	const envPart = "server-test-env-secret"
+func TestQuerySendsPlaintextProviderAPIKeyAuthorizationHeader(t *testing.T) {
 	const plainAPIKey = "test-key"
-
-	t.Setenv("PROVIDER_APIKEY_KEY_PART", envPart)
 
 	fixture := newTestFixtureWithModelHandlerAndOptions(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer "+plainAPIKey {
-			t.Fatalf("expected decrypted Authorization header, got %q", got)
+			t.Fatalf("expected Authorization header, got %q", got)
 		}
 		writeProviderSSE(t, w,
 			`{"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}`,
@@ -546,12 +543,12 @@ func TestQueryDecryptsAESProviderAPIKeyBeforeSendingAuthorizationHeader(t *testi
 			providerConfig := strings.Join([]string{
 				"key: mock",
 				"baseUrl: http://placeholder.invalid",
-				"apiKey: " + mustEncryptProviderAPIKeyForServerTest(t, envPart, plainAPIKey),
+				"apiKey: " + plainAPIKey,
 				"defaultModel: mock-model",
 			}, "\n")
 			providerPath := filepath.Join(root, "registries", "providers", "mock.yml")
 			if err := os.WriteFile(providerPath, []byte(providerConfig), 0o644); err != nil {
-				t.Fatalf("write encrypted provider config: %v", err)
+				t.Fatalf("write provider config: %v", err)
 			}
 		},
 	})

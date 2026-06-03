@@ -25,10 +25,9 @@ func TestLoadModelRegistryKeepsPlaintextProviderAPIKey(t *testing.T) {
 	}
 }
 
-func TestLoadModelRegistryDecryptsProviderAPIKey(t *testing.T) {
+func TestLoadModelRegistryKeepsAESLikeProviderAPIKeyUnchanged(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv(providerAPIKeyEnvPartKey, "env-secret")
-	writeTestProviderAndModel(t, root, "apiKey: "+mustEncryptProviderAPIKeyForTest(t, "env-secret", "plain-text"))
+	writeTestProviderAndModel(t, root, "apiKey: AES(v1:not-base64)")
 
 	registry, err := LoadModelRegistry(root)
 	if err != nil {
@@ -39,21 +38,8 @@ func TestLoadModelRegistryDecryptsProviderAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry.Get returned error: %v", err)
 	}
-	if provider.APIKey != "plain-text" {
-		t.Fatalf("expected decrypted apiKey, got %q", provider.APIKey)
-	}
-}
-
-func TestLoadModelRegistryReturnsDecryptErrorForInvalidAESProviderAPIKey(t *testing.T) {
-	root := t.TempDir()
-	writeTestProviderAndModel(t, root, "apiKey: AES(v1:not-base64)")
-
-	_, err := LoadModelRegistry(root)
-	if err == nil {
-		t.Fatal("expected LoadModelRegistry to fail")
-	}
-	if !strings.Contains(err.Error(), "resolve provider mock apiKey") || !strings.Contains(err.Error(), "invalid AES payload format") {
-		t.Fatalf("expected decrypt error, got %v", err)
+	if provider.APIKey != "AES(v1:not-base64)" {
+		t.Fatalf("expected AES-like apiKey to stay unchanged, got %q", provider.APIKey)
 	}
 }
 
