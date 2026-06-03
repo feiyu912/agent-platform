@@ -2,8 +2,8 @@ package automation
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,8 +15,8 @@ import (
 
 	"agent-platform/internal/catalog"
 	"agent-platform/internal/config"
+	runtimewatch "agent-platform/internal/watch"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/robfig/cron/v3"
 )
 
@@ -279,70 +279,34 @@ func (o *Orchestrator) fire(reg *Registration) (bool, error) {
 }
 
 func (o *Orchestrator) startWatcher(ctx context.Context) error {
-	fsw, err := fsnotify.NewWatcher()
+	watcher, err := runtimewatch.Start(ctx, runtimewatch.Spec{
+		LogPrefix: "[automation]",
+		Roots: []runtimewatch.Root{{
+			Path:           o.registry.root,
+			Label:          "automations",
+			Recursive:      true,
+			ShouldTraverse: automationWatchShouldTraverse,
+		}},
+		Debounce: reloadDebounce,
+		Ignore:   catalog.ShouldIgnoreRuntimeWatchPath,
+		Include: func(event runtimewatch.Event) bool {
+			return shouldReloadAutomationPath(o.registry.root, event.Path)
+		},
+		OnDebounce: func(context.Context) error {
+			return o.Reload()
+		},
+	})
 	if err != nil {
+		if errors.Is(err, runtimewatch.ErrNoWatchedRoots) {
+			log.Printf("[automation] no directories to watch, file watching disabled")
+			return nil
+		}
 		return err
 	}
-	watchedDirs, err := watchAutomationDirTree(fsw, o.registry.root)
-	if err != nil {
-		_ = fsw.Close()
-		return err
-	}
-
-	log.Printf("[automation] watching: %s", o.registry.root)
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		defer func() {
-			_ = fsw.Close()
-			log.Printf("[automation] file watcher stopped")
-		}()
-
-		var timer *time.Timer
-		for {
-			select {
-			case <-ctx.Done():
-				if timer != nil {
-					timer.Stop()
-				}
-				return
-			case event, ok := <-fsw.Events:
-				if !ok {
-					return
-				}
-				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
-					continue
-				}
-				changedPath := filepath.Clean(event.Name)
-				if catalog.ShouldIgnoreRuntimeWatchPath(changedPath) {
-					continue
-				}
-				if event.Op&fsnotify.Create != 0 {
-					if err := refreshAutomationWatchTree(fsw, o.registry.root, changedPath, watchedDirs); err != nil {
-						log.Printf("[automation] watcher register failed for %s: %v", changedPath, err)
-					}
-				}
-				if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
-					pruneAutomationWatchDir(changedPath, watchedDirs)
-				}
-				if !shouldReloadAutomationPath(o.registry.root, changedPath) {
-					continue
-				}
-				if timer != nil {
-					timer.Stop()
-				}
-				timer = time.AfterFunc(reloadDebounce, func() {
-					if err := o.Reload(); err != nil {
-						log.Printf("[automation] reload failed after %s: %v", filepath.Base(changedPath), err)
-					}
-				})
-			case err, ok := <-fsw.Errors:
-				if !ok {
-					return
-				}
-				log.Printf("[automation] watcher error: %v", err)
-			}
-		}
+		<-watcher.Done()
 	}()
 	return nil
 }
@@ -366,83 +330,8 @@ func (o *Orchestrator) releaseDispatchSlot() {
 	<-o.dispatchSlots
 }
 
-func watchAutomationDirTree(fsw *fsnotify.Watcher, root string) (map[string]struct{}, error) {
-	watched := map[string]struct{}{}
-	root = filepath.Clean(root)
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if path != root && !shouldTraverseAutomationDir(d.Name()) {
-			return filepath.SkipDir
-		}
-		return addAutomationWatchDir(fsw, path, watched)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return watched, nil
-}
-
-func refreshAutomationWatchTree(fsw *fsnotify.Watcher, root string, path string, watched map[string]struct{}) error {
-	info, err := os.Stat(path)
-	if err != nil || !info.IsDir() {
-		return nil
-	}
-	if !insideDir(root, path) {
-		return nil
-	}
-	base := filepath.Base(path)
-	if !shouldTraverseAutomationDir(base) {
-		return nil
-	}
-	_, err = watchAutomationDirTreeFrom(fsw, root, path, watched)
-	return err
-}
-
-func watchAutomationDirTreeFrom(fsw *fsnotify.Watcher, root string, start string, watched map[string]struct{}) (map[string]struct{}, error) {
-	root = filepath.Clean(root)
-	start = filepath.Clean(start)
-	err := filepath.WalkDir(start, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if path != root && path != start && !shouldTraverseAutomationDir(d.Name()) {
-			return filepath.SkipDir
-		}
-		return addAutomationWatchDir(fsw, path, watched)
-	})
-	if err != nil {
-		return watched, err
-	}
-	return watched, nil
-}
-
-func addAutomationWatchDir(fsw *fsnotify.Watcher, path string, watched map[string]struct{}) error {
-	path = filepath.Clean(path)
-	if _, ok := watched[path]; ok {
-		return nil
-	}
-	if err := fsw.Add(path); err != nil {
-		return err
-	}
-	watched[path] = struct{}{}
-	return nil
-}
-
-func pruneAutomationWatchDir(path string, watched map[string]struct{}) {
-	path = filepath.Clean(path)
-	for dir := range watched {
-		if dir == path || strings.HasPrefix(dir, path+string(os.PathSeparator)) {
-			delete(watched, dir)
-		}
-	}
+func automationWatchShouldTraverse(path string) bool {
+	return shouldTraverseAutomationDir(filepath.Base(filepath.Clean(path)))
 }
 
 func shouldReloadAutomationPath(root string, path string) bool {

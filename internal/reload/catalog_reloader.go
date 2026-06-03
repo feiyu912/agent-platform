@@ -2,19 +2,18 @@ package reload
 
 import (
 	"context"
+	"errors"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
-
 	"agent-platform/internal/catalog"
 	"agent-platform/internal/config"
 	"agent-platform/internal/contracts"
 	"agent-platform/internal/models"
+	runtimewatch "agent-platform/internal/watch"
 )
 
 const reloadDebounce = 500 * time.Millisecond
@@ -183,98 +182,53 @@ func StartBackgroundReloaders(ctx context.Context, cfg config.Config, reloader c
 
 	entries := backgroundWatchEntries(cfg)
 
-	fsw, err := fsnotify.NewWatcher()
+	var pendingReason string
+	var pendingPath string // last path printed in the current debounce window
+
+	roots := make([]runtimewatch.Root, 0, len(entries))
+	for _, entry := range entries {
+		roots = append(roots, runtimewatch.Root{
+			Path:      entry.path,
+			Label:     entry.reason,
+			Recursive: true,
+		})
+	}
+
+	_, err := runtimewatch.Start(ctx, runtimewatch.Spec{
+		LogPrefix: "[reload]",
+		Roots:     roots,
+		Debounce:  reloadDebounce,
+		Ignore: func(path string) bool {
+			return catalog.ShouldIgnoreRuntimeWatchPath(path) || isAgentSkillsSubpath(path, cfg.Paths.AgentsDir)
+		},
+		OnEvent: func(event runtimewatch.Event) {
+			reason := resolveChangeReason(event.Path, entries)
+			// Dedupe: editors often emit multiple write events per save.
+			// Only log once per (path, reason) within the debounce window.
+			if pendingPath != event.Path || pendingReason != reason {
+				log.Printf("[reload] change detected: %s (%s)", filepath.Base(event.Path), reason)
+				pendingPath = event.Path
+			}
+			pendingReason = mergePendingReloadReason(pendingReason, reason)
+		},
+		OnDebounce: func(ctx context.Context) error {
+			reloadReason := pendingReason
+			pendingPath = ""
+			pendingReason = ""
+			if err := reloader.Reload(ctx, reloadReason); err != nil {
+				return err
+			}
+			return nil
+		},
+	})
 	if err != nil {
+		if errors.Is(err, runtimewatch.ErrNoWatchedRoots) {
+			log.Printf("[reload] no directories to watch, file watching disabled")
+			return
+		}
 		log.Printf("[reload] fsnotify init failed, file watching disabled: %v", err)
 		return
 	}
-
-	watched := 0
-	for _, entry := range entries {
-		if err := addRecursive(fsw, entry.path); err != nil {
-			log.Printf("[reload] skip watch %s (%s): %v", entry.path, entry.reason, err)
-			continue
-		}
-		watched++
-		log.Printf("[reload] watching: %s (%s)", entry.path, entry.reason)
-	}
-	if watched == 0 {
-		_ = fsw.Close()
-		log.Printf("[reload] no directories to watch, file watching disabled")
-		return
-	}
-
-	go func() {
-		defer func() {
-			_ = fsw.Close()
-			log.Printf("[reload] file watcher stopped")
-		}()
-
-		var timer *time.Timer
-		var pendingReason string
-		var pendingPath string // last path printed in the current debounce window
-
-		for {
-			select {
-			case <-ctx.Done():
-				if timer != nil {
-					timer.Stop()
-				}
-				return
-
-			case event, ok := <-fsw.Events:
-				if !ok {
-					return
-				}
-				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
-					continue
-				}
-				if catalog.ShouldIgnoreRuntimeWatchPath(event.Name) {
-					continue
-				}
-
-				// When a new directory is created, start watching it too.
-				if event.Op&fsnotify.Create != 0 {
-					if info, statErr := os.Stat(event.Name); statErr == nil && info.IsDir() {
-						_ = fsw.Add(event.Name)
-					}
-				}
-
-				// Ignore changes inside per-agent skills/ subdirs — those are
-				// written by reconcileDeclaredSkills and would cause an infinite
-				// reload loop. Pattern: {agentsDir}/{agentKey}/skills/...
-				if isAgentSkillsSubpath(event.Name, cfg.Paths.AgentsDir) {
-					continue
-				}
-
-				reason := resolveChangeReason(event.Name, entries)
-				// Dedupe: editors often emit multiple write events per save.
-				// Only log once per (path, reason) within the debounce window.
-				if pendingPath != event.Name || pendingReason != reason {
-					log.Printf("[reload] change detected: %s (%s)", filepath.Base(event.Name), reason)
-					pendingPath = event.Name
-				}
-				pendingReason = mergePendingReloadReason(pendingReason, reason)
-				if timer != nil {
-					timer.Stop()
-				}
-				reloadReason := pendingReason
-				timer = time.AfterFunc(reloadDebounce, func() {
-					if err := reloader.Reload(ctx, reloadReason); err != nil {
-						log.Printf("[reload] %s reload failed: %v", reloadReason, err)
-					}
-					pendingPath = ""
-					pendingReason = ""
-				})
-
-			case watchErr, ok := <-fsw.Errors:
-				if !ok {
-					return
-				}
-				log.Printf("[reload] watcher error: %v", watchErr)
-			}
-		}
-	}()
 }
 
 func mergePendingReloadReason(pending string, next string) string {
@@ -301,28 +255,6 @@ func backgroundWatchEntries(cfg config.Config) []watchEntry {
 		{filepath.Join(cfg.Paths.RegistriesDir, "mcp-servers"), "mcp-servers"},
 		{filepath.Join(cfg.Paths.RegistriesDir, "viewport-servers"), "viewport-servers"},
 	}
-}
-
-// addRecursive adds a directory and all its immediate subdirectories to the watcher.
-func addRecursive(fsw *fsnotify.Watcher, root string) error {
-	info, err := os.Stat(root)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fsw.Add(root)
-	}
-	if err := fsw.Add(root); err != nil {
-		return err
-	}
-	entries, _ := os.ReadDir(root)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			sub := filepath.Join(root, entry.Name())
-			_ = fsw.Add(sub)
-		}
-	}
-	return nil
 }
 
 // isAgentSkillsSubpath returns true if changedPath is inside

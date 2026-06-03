@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"agent-platform/internal/retry"
 )
 
 func TestToolSyncLoadsStaticAndDiscoveredTools(t *testing.T) {
@@ -178,4 +180,27 @@ func TestAvailabilityGateReadyToRetryNormalizesKeys(t *testing.T) {
 	if len(ready) != 1 || ready[0] != "demo" {
 		t.Fatalf("expected normalized ready key, got %#v", ready)
 	}
+}
+
+func TestAvailabilityGateBackoffPolicyAndReset(t *testing.T) {
+	gate := NewAvailabilityGateWithPolicy(retryPolicyForTest(10*time.Millisecond, 80*time.Millisecond))
+	gate.MarkFailure(" Demo ")
+	if got := gate.currentBackoff["demo"]; got != 10*time.Millisecond {
+		t.Fatalf("first backoff = %s, want 10ms", got)
+	}
+	gate.MarkFailure("demo")
+	if got := gate.currentBackoff["demo"]; got != 20*time.Millisecond {
+		t.Fatalf("second backoff = %s, want 20ms", got)
+	}
+	gate.MarkSuccess(" demo ")
+	if gate.IsUnavailable("demo") {
+		t.Fatal("expected success to clear unavailable state")
+	}
+	if got := gate.currentBackoff["demo"]; got != 0 {
+		t.Fatalf("expected success to reset backoff, got %s", got)
+	}
+}
+
+func retryPolicyForTest(min time.Duration, max time.Duration) retry.BackoffPolicy {
+	return retry.BackoffPolicy{Min: min, Max: max, Factor: 2}
 }

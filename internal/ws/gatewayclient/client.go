@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agent-platform/internal/config"
+	"agent-platform/internal/retry"
 	"agent-platform/internal/ws"
 
 	gws "github.com/gorilla/websocket"
@@ -48,6 +49,7 @@ type Client struct {
 	stopOnce  sync.Once
 	rng       *rand.Rand
 	rngMu     sync.Mutex
+	backoff   retry.BackoffPolicy
 }
 
 func New(cfg Config, wsCfg config.WebSocketConfig, heartbeat time.Duration, hub *ws.Hub, dispatch ws.RouteHandler) *Client {
@@ -71,6 +73,12 @@ func New(cfg Config, wsCfg config.WebSocketConfig, heartbeat time.Duration, hub 
 		dispatch:  dispatch,
 		done:      make(chan struct{}),
 		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		backoff: retry.BackoffPolicy{
+			Min:         cfg.ReconnectMin,
+			Max:         cfg.ReconnectMax,
+			Factor:      2,
+			JitterRatio: 0.2,
+		},
 	}
 }
 
@@ -211,26 +219,11 @@ func (c *Client) sleep(delay time.Duration) bool {
 }
 
 func (c *Client) nextBackoff(current time.Duration) time.Duration {
-	if current <= 0 {
-		return c.cfg.ReconnectMin
-	}
-	next := current * 2
-	if next > c.cfg.ReconnectMax {
-		return c.cfg.ReconnectMax
-	}
-	return next
+	return c.backoff.Next(current)
 }
 
 func (c *Client) jitter(base time.Duration) time.Duration {
-	if base <= 0 {
-		return 0
-	}
-	delta := int64(base) / 5
-	if delta <= 0 {
-		return base
-	}
 	c.rngMu.Lock()
-	offset := c.rng.Int63n(2*delta+1) - delta
-	c.rngMu.Unlock()
-	return time.Duration(int64(base) + offset)
+	defer c.rngMu.Unlock()
+	return c.backoff.Jitter(base, c.rng)
 }
