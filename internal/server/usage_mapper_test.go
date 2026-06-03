@@ -7,6 +7,43 @@ import (
 	"agent-platform/internal/stream"
 )
 
+func TestUsageCacheTokensKeepsConsistentDetails(t *testing.T) {
+	hit, miss := usageCacheTokens(chat.UsageData{
+		PromptTokens:          100,
+		PromptCacheHitTokens:  40,
+		PromptCacheMissTokens: 60,
+	})
+
+	if hit != 40 || miss != 60 {
+		t.Fatalf("expected consistent cache details to remain unchanged, got hit=%d miss=%d", hit, miss)
+	}
+}
+
+func TestUsageCacheTokensDerivesMissingCacheMissTokens(t *testing.T) {
+	hit, miss := usageCacheTokens(chat.UsageData{
+		PromptTokens:         100,
+		PromptCacheHitTokens: 40,
+	})
+
+	if hit != 40 || miss != 60 {
+		t.Fatalf("expected missing cache miss to derive from prompt minus hit, got hit=%d miss=%d", hit, miss)
+	}
+}
+
+func TestUsageCacheTokensRecomputesInconsistentCacheMissTokens(t *testing.T) {
+	hit, miss := usageCacheTokensFromMap(map[string]any{
+		"promptTokens": 16929,
+		"promptTokensDetails": map[string]any{
+			"cacheHitTokens":  8059,
+			"cacheMissTokens": 692,
+		},
+	})
+
+	if hit != 8059 || miss != 8870 {
+		t.Fatalf("expected inconsistent cache miss to derive from prompt minus hit, got hit=%d miss=%d", hit, miss)
+	}
+}
+
 func TestLatestChatUsageFromEventsReadsHistoricalUsageSnapshot(t *testing.T) {
 	usage := latestChatUsageFromEvents([]stream.EventData{
 		{

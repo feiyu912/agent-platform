@@ -247,6 +247,61 @@ func TestRunEventProcessorDecoratesUsageSnapshotWithChatUsage(t *testing.T) {
 	}
 }
 
+func TestRunEventProcessorNormalizesCumulativeUsageSnapshotCacheMissTokens(t *testing.T) {
+	runUsage := chat.UsageData{}
+	processor := &runEventProcessor{
+		runUsage: &runUsage,
+	}
+	data := &stream.EventData{
+		Type: "usage.snapshot",
+		Payload: map[string]any{
+			"runId":  "run-minimax-usage",
+			"chatId": "chat-minimax-usage",
+			"usage": map[string]any{
+				"current": map[string]any{
+					"promptTokens":     8751,
+					"completionTokens": 1461,
+					"totalTokens":      10212,
+					"promptTokensDetails": map[string]any{
+						"cacheHitTokens":  8059,
+						"cacheMissTokens": 692,
+					},
+				},
+				"run": map[string]any{
+					"promptTokens":     16929,
+					"completionTokens": 1670,
+					"totalTokens":      18599,
+					"promptTokensDetails": map[string]any{
+						"cacheHitTokens":  8059,
+						"cacheMissTokens": 692,
+					},
+				},
+			},
+		},
+	}
+
+	processor.decorate(data)
+
+	usage, _ := data.Payload["usage"].(map[string]any)
+	current, _ := usage["current"].(map[string]any)
+	currentPromptDetails, _ := current["promptTokensDetails"].(map[string]any)
+	if AnyIntNode(currentPromptDetails["cacheHitTokens"]) != 8059 || AnyIntNode(currentPromptDetails["cacheMissTokens"]) != 692 {
+		t.Fatalf("expected current usage details to remain unchanged, got %#v", usage)
+	}
+	run, _ := usage["run"].(map[string]any)
+	runPromptDetails, _ := run["promptTokensDetails"].(map[string]any)
+	if AnyIntNode(run["promptTokens"]) != 16929 || AnyIntNode(runPromptDetails["cacheHitTokens"]) != 8059 ||
+		AnyIntNode(runPromptDetails["cacheMissTokens"]) != 8870 {
+		t.Fatalf("expected run cache miss to be normalized from cumulative prompt tokens, got %#v", usage)
+	}
+	chatUsage, _ := usage["chat"].(map[string]any)
+	chatPromptDetails, _ := chatUsage["promptTokensDetails"].(map[string]any)
+	if AnyIntNode(chatUsage["promptTokens"]) != 16929 || AnyIntNode(chatPromptDetails["cacheHitTokens"]) != 8059 ||
+		AnyIntNode(chatPromptDetails["cacheMissTokens"]) != 8870 {
+		t.Fatalf("expected chat cache miss to be normalized from cumulative prompt tokens, got %#v", usage)
+	}
+}
+
 func TestRunEventProcessorDecoratesUsageSnapshotWithEstimatedCost(t *testing.T) {
 	runUsage := chat.UsageData{}
 	processor := &runEventProcessor{
