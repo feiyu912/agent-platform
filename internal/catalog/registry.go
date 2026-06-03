@@ -46,6 +46,7 @@ type AgentDefinition struct {
 	Skills           []string
 	Controls         []map[string]any
 	Runtime          map[string]any
+	HostAccess       AgentHostAccessConfig
 	Workspace        AgentWorkspaceConfig
 	Project          AgentProjectConfig
 	ReactMaxSteps    int
@@ -74,6 +75,11 @@ type AgentDefinition struct {
 
 type AgentWorkspaceConfig struct {
 	Root string
+}
+
+type AgentHostAccessConfig struct {
+	ReadRoots  []string
+	WriteRoots []string
 }
 
 type AgentProjectConfig struct {

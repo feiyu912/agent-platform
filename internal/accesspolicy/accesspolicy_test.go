@@ -93,6 +93,53 @@ func TestDefaultLevelAllowsChatReadWriteWithExplicitWorkspace(t *testing.T) {
 	}
 }
 
+func TestSessionHostAccessRootsAllowOwnerReadWrite(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	owner := filepath.Join(root, "owner")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.MkdirAll(owner, 0o755); err != nil {
+		t.Fatalf("mkdir owner: %v", err)
+	}
+	session := contracts.QuerySession{
+		AccessLevel:   contracts.AccessLevelDefault,
+		WorkspaceRoot: workspace,
+		RuntimeContext: contracts.RuntimeRequestContext{
+			LocalPaths: contracts.LocalPaths{
+				WorkspaceDir: workspace,
+				OwnerDir:     owner,
+			},
+		},
+		RuntimeHostAccess: contracts.HostAccessRoots{
+			ReadRoots:  []string{"@owner"},
+			WriteRoots: []string{"@owner"},
+		},
+	}
+	cfg := config.AccessPolicyConfig{}
+	ownerFile := filepath.Join(owner, "OWNER.md")
+
+	readPlan, err := BuildPathPlan(cfg, session, ReadAccess, ownerFile)
+	if err != nil {
+		t.Fatalf("build owner read plan: %v", err)
+	}
+	if !readPlan.Allowed() || readPlan.RequiresApproval() {
+		t.Fatalf("expected owner read allowed by hostAccess, got %#v", readPlan)
+	}
+	writePlan, err := BuildPathPlan(cfg, session, WriteAccess, ownerFile)
+	if err != nil {
+		t.Fatalf("build owner write plan: %v", err)
+	}
+	if !writePlan.Allowed() || writePlan.RequiresApproval() {
+		t.Fatalf("expected owner write allowed by hostAccess, got %#v", writePlan)
+	}
+	bashPlan := ReviewBashCommand(cfg, session, "touch "+ownerFile, workspace, nil)
+	if !bashPlan.Allowed() || bashPlan.RequiresApproval() {
+		t.Fatalf("expected owner bash write allowed by hostAccess, got %#v", bashPlan)
+	}
+}
+
 func TestAutoApproveAndFullAccessLevels(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")

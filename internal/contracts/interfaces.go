@@ -212,6 +212,7 @@ type QuerySession struct {
 	RuntimeEnvironmentID   string
 	RuntimeLevel           string
 	RuntimeExtraMounts     []SandboxExtraMount
+	RuntimeHostAccess      HostAccessRoots
 	AgentHasRuntimeSandbox bool
 	AgentHasMemoryConfig   bool
 	WorkspaceRoot          string
@@ -232,6 +233,11 @@ type SandboxExtraMount struct {
 	Source      string
 	Destination string
 	Mode        string
+}
+
+type HostAccessRoots struct {
+	ReadRoots  []string
+	WriteRoots []string
 }
 
 type ReadFileSnapshot struct {

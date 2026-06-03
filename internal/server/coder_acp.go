@@ -21,7 +21,7 @@ func (s *Server) applyProxyRoutingConfig(def *catalog.AgentDefinition) *statusEr
 	if proxyID == "" {
 		return &statusError{
 			status:  http.StatusServiceUnavailable,
-			message: "runtimeConfig.acpProxyId is required for CODER agents using runtimeConfig.coderBackend: acp",
+			message: "runtimeConfig.acpProxyId is required for ACP CODER",
 		}
 	}
 	proxy, ok := s.deps.Config.CoderSettings.ACPProxies[proxyID]

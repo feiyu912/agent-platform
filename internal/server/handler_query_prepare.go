@@ -120,7 +120,7 @@ func (s *Server) prepareQueryAdmission(r *http.Request, requireMessage bool) (qu
 	if catalog.AgentUsesACPCoderBackend(agentDef) && req.PlanningMode != nil && *req.PlanningMode {
 		return queryAdmission{}, &statusError{
 			status:  http.StatusBadRequest,
-			message: "planningMode is not supported for CODER agents using runtimeConfig.coderBackend: acp",
+			message: "planningMode is not supported for ACP CODER",
 		}
 	}
 	if statusErr := s.applyProxyRoutingConfig(&agentDef); statusErr != nil {
@@ -650,6 +650,7 @@ func (s *Server) newAssemblerAndMapper(prepared preparedQuery) (*stream.StreamEv
 		Params:             prepared.req.Params,
 		Model:              prepared.req.Model,
 		PlanningMode:       prepared.session.PlanningMode,
+		AccessLevel:        prepared.session.AccessLevel,
 		Created:            prepared.created,
 		ContinueRun:        prepared.continueRun,
 		MemoryUsageSummary: memoryUsageEventPayload(prepared.memoryUsageSummary, prepared.req.ChatID, prepared.req.RunID, prepared.req.AgentKey),

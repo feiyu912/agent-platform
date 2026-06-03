@@ -175,6 +175,10 @@ func PathInSessionWorkspace(session QuerySession, path string) bool {
 	return accesspolicy.PathInSessionWorkspace(session, path)
 }
 
+func PathInSessionHostWriteRoot(session QuerySession, path string) bool {
+	return accesspolicy.PathInSessionHostAccessRoot(session, accesspolicy.WriteAccess, path)
+}
+
 func sessionWorkspaceRoot(session QuerySession) string {
 	return SessionWorkspaceRoot(session)
 }

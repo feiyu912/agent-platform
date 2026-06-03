@@ -166,7 +166,7 @@ func (t *RuntimeToolExecutor) invokeWrite(ctx context.Context, args map[string]a
 	if err != nil {
 		return fileToolError("file_write_invalid_plan", err.Error()), nil
 	}
-	requiresWriteApproval := t.cfg.FileTools.RequireWriteApproval && !writeAllowedBySessionWorkspace(execCtx, plan.FilePath) && !writeAutoApprovedByAccessLevel(access)
+	requiresWriteApproval := t.cfg.FileTools.RequireWriteApproval && !writeAllowedBySessionHostAccess(execCtx, plan.FilePath) && !writeAllowedBySessionWorkspace(execCtx, plan.FilePath) && !writeAutoApprovedByAccessLevel(access)
 	if requiresWriteApproval && !filetools.ConsumeWriteApproval(execCtx, plan) {
 		result := structuredResultWithExit(map[string]any{
 			"error":       "file_write_approval_required",
@@ -251,7 +251,7 @@ func (t *RuntimeToolExecutor) invokeEdit(ctx context.Context, args map[string]an
 	if err != nil {
 		return fileToolError("file_edit_invalid_plan", err.Error()), nil
 	}
-	requiresWriteApproval := t.cfg.FileTools.RequireWriteApproval && !writeAllowedBySessionWorkspace(execCtx, plan.FilePath) && !writeAutoApprovedByAccessLevel(access)
+	requiresWriteApproval := t.cfg.FileTools.RequireWriteApproval && !writeAllowedBySessionHostAccess(execCtx, plan.FilePath) && !writeAllowedBySessionWorkspace(execCtx, plan.FilePath) && !writeAutoApprovedByAccessLevel(access)
 	if requiresWriteApproval && !filetools.ConsumeWriteApproval(execCtx, plan) {
 		result := structuredResultWithExit(map[string]any{
 			"error":       "file_edit_approval_required",
@@ -416,6 +416,13 @@ func writeAllowedBySessionWorkspace(execCtx *ExecutionContext, path string) bool
 		return false
 	}
 	return filetools.PathInSessionWorkspace(execCtx.Session, path)
+}
+
+func writeAllowedBySessionHostAccess(execCtx *ExecutionContext, path string) bool {
+	if execCtx == nil {
+		return false
+	}
+	return filetools.PathInSessionHostWriteRoot(execCtx.Session, path)
 }
 
 func accessPolicySession(execCtx *ExecutionContext) QuerySession {

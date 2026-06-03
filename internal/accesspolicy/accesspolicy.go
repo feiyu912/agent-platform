@@ -89,6 +89,7 @@ func BuildPathPlan(cfg config.AccessPolicyConfig, session QuerySession, mode Acc
 		roots = level.WriteRoots
 		action = level.Approvals.WriteOutsideRoots
 	}
+	roots = appendSessionHostAccessRoots(roots, session, mode)
 	root, ok := firstAllowedRoot(session, workingDir, roots, realCandidate)
 	if mode == WriteAccess && ok {
 		if readonlyRoot, readonly := firstAllowedRoot(session, workingDir, level.ReadonlyRoots, realCandidate); readonly {
@@ -180,6 +181,36 @@ func PathInSessionWorkspace(session QuerySession, path string) bool {
 		}
 	}
 	return false
+}
+
+func PathInSessionHostAccessRoot(session QuerySession, mode AccessMode, path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	roots := session.RuntimeHostAccess.ReadRoots
+	if mode == WriteAccess {
+		roots = session.RuntimeHostAccess.WriteRoots
+	}
+	if len(roots) == 0 {
+		return false
+	}
+	workingDir := SessionWorkspaceRoot(session)
+	if workingDir == "" {
+		workingDir = SessionChatDir(session)
+	}
+	if workingDir == "" {
+		workingDir = "."
+	}
+	candidate := expandHome(path)
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(workingDir, candidate)
+	}
+	candidate, ok := normalizeExistingOrFuturePath(candidate)
+	if !ok {
+		return false
+	}
+	_, ok = firstAllowedRoot(session, workingDir, roots, candidate)
+	return ok
 }
 
 func SessionChatDir(session QuerySession) string {
@@ -390,9 +421,24 @@ func expandRootAlias(root string, session QuerySession) string {
 		return cleanAbs(session.RuntimeContext.LocalPaths.SkillsDir)
 	case "@skills-market":
 		return cleanAbs(session.RuntimeContext.LocalPaths.SkillsMarketDir)
+	case "@owner":
+		return cleanAbs(session.RuntimeContext.LocalPaths.OwnerDir)
 	default:
 		return ""
 	}
+}
+
+func appendSessionHostAccessRoots(roots []string, session QuerySession, mode AccessMode) []string {
+	extra := session.RuntimeHostAccess.ReadRoots
+	if mode == WriteAccess {
+		extra = session.RuntimeHostAccess.WriteRoots
+	}
+	if len(extra) == 0 {
+		return roots
+	}
+	out := append([]string(nil), roots...)
+	out = append(out, extra...)
+	return out
 }
 
 func cleanAbs(path string) string {

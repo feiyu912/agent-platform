@@ -17,6 +17,7 @@ type StreamRequest struct {
 	Params             map[string]any
 	Model              any
 	PlanningMode       bool
+	AccessLevel        string
 	Created            bool
 	ContinueRun        bool
 	MemoryUsageSummary map[string]any
@@ -51,6 +52,9 @@ func (a *StreamEventAssembler) Bootstrap() []StreamEvent {
 		"agentKey":  a.request.AgentKey,
 		"role":      a.request.Role,
 		"message":   a.request.Message,
+	}
+	if a.request.AccessLevel != "" {
+		queryPayload["accessLevel"] = a.request.AccessLevel
 	}
 	if !isEmptyValue(a.request.References) {
 		queryPayload["references"] = a.request.References

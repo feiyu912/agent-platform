@@ -327,7 +327,10 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		if err != nil {
 			return AgentDefinition{}, nil, err
 		}
-		if strings.TrimSpace(rawCoderBackend) == "" && strings.TrimSpace(def.ACPProxyID) != "" {
+		if strings.EqualFold(strings.TrimSpace(rawCoderBackend), AgentCoderBackendNative) && strings.TrimSpace(def.ACPProxyID) != "" {
+			return AgentDefinition{}, nil, fmt.Errorf("runtimeConfig.coderBackend: native conflicts with runtimeConfig.acpProxyId; omit coderBackend for native CODER or omit acpProxyId")
+		}
+		if strings.TrimSpace(def.ACPProxyID) != "" {
 			coderBackend = AgentCoderBackendACP
 		}
 		def.CoderBackend = coderBackend
@@ -343,7 +346,15 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		if len(runtimeEnv) > 0 {
 			def.Runtime["env"] = runtimeEnv
 		}
-		if mounts := listMaps(runtimeConfig["extraMounts"]); len(mounts) > 0 {
+		def.HostAccess, err = parseAgentHostAccess(runtimeConfig["hostAccess"])
+		if err != nil {
+			return AgentDefinition{}, nil, err
+		}
+		mounts := listMaps(runtimeConfig["sandboxMounts"])
+		if len(mounts) == 0 {
+			mounts = listMaps(runtimeConfig["extraMounts"])
+		}
+		if len(mounts) > 0 {
 			def.Runtime["extraMounts"] = cloneListMaps(mounts)
 		}
 	}
@@ -408,6 +419,64 @@ func resolveProxyToken(proxyRaw map[string]any) string {
 		return ""
 	}
 	return strings.TrimSpace(os.Getenv(envName))
+}
+
+func parseAgentHostAccess(value any) (AgentHostAccessConfig, error) {
+	node := mapNode(value)
+	if len(node) == 0 {
+		return AgentHostAccessConfig{}, nil
+	}
+	readRoots, err := parseAgentHostAccessRoots(node["readRoots"])
+	if err != nil {
+		return AgentHostAccessConfig{}, fmt.Errorf("runtimeConfig.hostAccess.readRoots: %w", err)
+	}
+	writeRoots, err := parseAgentHostAccessRoots(node["writeRoots"])
+	if err != nil {
+		return AgentHostAccessConfig{}, fmt.Errorf("runtimeConfig.hostAccess.writeRoots: %w", err)
+	}
+	return AgentHostAccessConfig{
+		ReadRoots:  readRoots,
+		WriteRoots: writeRoots,
+	}, nil
+}
+
+func parseAgentHostAccessRoots(value any) ([]string, error) {
+	roots := listStrings(value)
+	out := make([]string, 0, len(roots))
+	seen := map[string]struct{}{}
+	for _, root := range roots {
+		cleaned, err := cleanAgentHostAccessRoot(root)
+		if err != nil {
+			return nil, err
+		}
+		if cleaned == "" {
+			continue
+		}
+		if _, ok := seen[cleaned]; ok {
+			continue
+		}
+		seen[cleaned] = struct{}{}
+		out = append(out, cleaned)
+	}
+	return out, nil
+}
+
+func cleanAgentHostAccessRoot(root string) (string, error) {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return "", nil
+	}
+	switch strings.ToLower(root) {
+	case "@workspace", "@chat", "@agent", "@skills", "@skills-market", "@owner":
+		return strings.ToLower(root), nil
+	}
+	if root == "~" || strings.HasPrefix(root, "~/") {
+		return filepath.Clean(expandHomeWorkspaceRoot(root)), nil
+	}
+	if filepath.IsAbs(root) {
+		return filepath.Clean(root), nil
+	}
+	return "", fmt.Errorf("%q must be an absolute path, ~/ path, or a supported alias", root)
 }
 
 func parseAgentMemoryConfig(value any) AgentMemoryConfig {

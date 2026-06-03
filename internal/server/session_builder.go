@@ -156,6 +156,7 @@ func (s *Server) BuildQuerySession(ctx context.Context, req api.QueryRequest, su
 		RuntimeEnvironmentID:   extractRuntimeField(agentDef.Runtime, "environmentId"),
 		RuntimeLevel:           extractRuntimeField(agentDef.Runtime, "level"),
 		RuntimeExtraMounts:     runtimeExtraMounts(agentDef.Runtime["extraMounts"]),
+		RuntimeHostAccess:      runtimeHostAccess(agentDef.HostAccess),
 		AgentHasRuntimeSandbox: hasRuntimeSandbox(agentDef.Runtime),
 		AgentHasMemoryConfig:   agentDef.MemoryEnabled,
 		WorkspaceRoot:          resolvedWorkspaceRoot,
@@ -256,6 +257,13 @@ func normalizedAccessLevel(value string) string {
 		return contracts.AccessLevelDefault
 	}
 	return normalized
+}
+
+func runtimeHostAccess(cfg catalog.AgentHostAccessConfig) contracts.HostAccessRoots {
+	return contracts.HostAccessRoots{
+		ReadRoots:  append([]string(nil), cfg.ReadRoots...),
+		WriteRoots: append([]string(nil), cfg.WriteRoots...),
+	}
 }
 
 func resolveProjectPromptPath(agentDef catalog.AgentDefinition, workspaceRoot string, promptFile catalog.AgentProjectPromptFile) (string, string, string, error) {

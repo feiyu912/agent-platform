@@ -394,6 +394,43 @@ func TestInvokeWriteInsideSessionWorkspaceBypassesWriteApproval(t *testing.T) {
 	}
 }
 
+func TestInvokeWriteInsideSessionHostAccessBypassesApprovals(t *testing.T) {
+	root := t.TempDir()
+	owner := t.TempDir()
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{Session: contracts.QuerySession{
+		WorkspaceRoot: root,
+		RuntimeContext: contracts.RuntimeRequestContext{
+			LocalPaths: contracts.LocalPaths{
+				WorkspaceDir: root,
+				OwnerDir:     owner,
+			},
+		},
+		RuntimeHostAccess: contracts.HostAccessRoots{
+			WriteRoots: []string{"@owner"},
+		},
+	}}
+
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
+		"file_path":   filepath.Join(owner, "greeting.md"),
+		"content":     "hello",
+		"description": "写入 owner 文件",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeWrite: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected hostAccess write success, got %#v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(owner, "greeting.md"))
+	if err != nil {
+		t.Fatalf("read written file: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("unexpected content: %q", string(data))
+	}
+}
+
 func TestInvokeWriteInsideSessionChatDirBypassesWriteApproval(t *testing.T) {
 	root := t.TempDir()
 	chatDir := filepath.Join(t.TempDir(), "chat-1")

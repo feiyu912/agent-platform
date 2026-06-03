@@ -536,6 +536,25 @@ func TestParseAgentFileInfersACPBackendFromProxyID(t *testing.T) {
 	}
 }
 
+func TestParseAgentFileRejectsNativeCoderBackendWithProxyID(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: coder\n" +
+		"mode: CODER\n" +
+		"runtimeConfig:\n" +
+		"  coderBackend: native\n" +
+		"  acpProxyId: codex\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil || !strings.Contains(err.Error(), "runtimeConfig.coderBackend: native conflicts with runtimeConfig.acpProxyId") {
+		t.Fatalf("expected native/acpProxyId conflict rejection, got %v", err)
+	}
+}
+
 func TestParseAgentFileAppliesCoderProfileDefaults(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "project")
@@ -722,6 +741,99 @@ func TestParseAgentFileAcceptsChatWorkspaceRoot(t *testing.T) {
 	}
 	if def.Workspace.Root != AgentWorkspaceRootChat {
 		t.Fatalf("workspace root = %q, want %q", def.Workspace.Root, AgentWorkspaceRootChat)
+	}
+}
+
+func TestParseAgentFileReadsHostAccessAndSandboxMounts(t *testing.T) {
+	root := t.TempDir()
+	owner := filepath.Join(root, "owner")
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: bootstrap\n" +
+		"mode: REACT\n" +
+		"runtimeConfig:\n" +
+		"  workspaceRoot: \"@chat\"\n" +
+		"  hostAccess:\n" +
+		"    readRoots:\n" +
+		"      - \"@owner\"\n" +
+		"      - " + filepath.ToSlash(owner) + "\n" +
+		"    writeRoots:\n" +
+		"      - \"@owner\"\n" +
+		"  sandboxMounts:\n" +
+		"    - platform: owner\n" +
+		"      target: /owner\n" +
+		"      mode: rw\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	if !reflect.DeepEqual(def.HostAccess.ReadRoots, []string{"@owner", filepath.Clean(owner)}) {
+		t.Fatalf("host read roots = %#v", def.HostAccess.ReadRoots)
+	}
+	if !reflect.DeepEqual(def.HostAccess.WriteRoots, []string{"@owner"}) {
+		t.Fatalf("host write roots = %#v", def.HostAccess.WriteRoots)
+	}
+	mounts, _ := def.Runtime["extraMounts"].([]map[string]any)
+	if len(mounts) != 1 || mounts[0]["platform"] != "owner" || mounts[0]["mode"] != "rw" {
+		t.Fatalf("expected sandboxMounts to populate runtime extraMounts, got %#v", def.Runtime["extraMounts"])
+	}
+}
+
+func TestParseAgentFileSandboxMountsOverrideLegacyExtraMounts(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: mount-demo\n" +
+		"mode: REACT\n" +
+		"runtimeConfig:\n" +
+		"  sandboxMounts:\n" +
+		"    - platform: owner\n" +
+		"      target: /owner\n" +
+		"      mode: rw\n" +
+		"  extraMounts:\n" +
+		"    - platform: memory\n" +
+		"      target: /memory\n" +
+		"      mode: ro\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	mounts, _ := def.Runtime["extraMounts"].([]map[string]any)
+	if len(mounts) != 1 || mounts[0]["platform"] != "owner" {
+		t.Fatalf("expected sandboxMounts to override extraMounts, got %#v", def.Runtime["extraMounts"])
+	}
+}
+
+func TestParseAgentFileKeepsLegacyExtraMountsWhenSandboxMountsMissing(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: mount-demo\n" +
+		"mode: REACT\n" +
+		"runtimeConfig:\n" +
+		"  extraMounts:\n" +
+		"    - platform: memory\n" +
+		"      target: /memory\n" +
+		"      mode: ro\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	def, err := parseAgentFile(path)
+	if err != nil {
+		t.Fatalf("parse agent file: %v", err)
+	}
+	mounts, _ := def.Runtime["extraMounts"].([]map[string]any)
+	if len(mounts) != 1 || mounts[0]["platform"] != "memory" {
+		t.Fatalf("expected legacy extraMounts fallback, got %#v", def.Runtime["extraMounts"])
 	}
 }
 

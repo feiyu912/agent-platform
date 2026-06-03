@@ -81,6 +81,7 @@ func TestAssemblerBootstrapIncludesOptionalQueryContext(t *testing.T) {
 			"key":             "qwen3-max",
 			"reasoningEffort": "HIGH",
 		},
+		AccessLevel: "auto_approve",
 	})
 
 	bootstrap := assembler.Bootstrap()
@@ -96,6 +97,9 @@ func TestAssemblerBootstrapIncludesOptionalQueryContext(t *testing.T) {
 	model, _ := requestQuery["model"].(map[string]any)
 	if model["key"] != "qwen3-max" || model["reasoningEffort"] != "HIGH" {
 		t.Fatalf("expected request.query model, got %#v", requestQuery)
+	}
+	if requestQuery["accessLevel"] != "auto_approve" {
+		t.Fatalf("expected request.query accessLevel, got %#v", requestQuery)
 	}
 }
 
