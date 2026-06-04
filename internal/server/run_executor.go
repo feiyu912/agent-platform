@@ -638,7 +638,7 @@ func handleAwaitingLifecycle(params RunExecutorParams, data stream.EventData, tr
 			if viewportKey := strings.TrimSpace(data.String("viewportKey")); viewportKey != "" {
 				payload["viewportKey"] = viewportKey
 			}
-			params.Notifications.Broadcast("awaiting.ask", payload)
+			params.Notifications.Broadcast("awaiting.asking", payload)
 		}
 	case "awaiting.answer":
 		awaitingID := strings.TrimSpace(data.String("awaitingId"))
@@ -671,7 +671,7 @@ func handleAwaitingLifecycle(params RunExecutorParams, data stream.EventData, tr
 			payload["errorCode"] = errorCode
 		}
 		if params.Notifications != nil {
-			params.Notifications.Broadcast("awaiting.answer", payload)
+			params.Notifications.Broadcast("awaiting.answered", payload)
 		}
 	}
 }
@@ -692,7 +692,7 @@ func maybeBroadcastInterruptedAwaiting(params RunExecutorParams, tracker *awaiti
 		_ = params.Chats.ClearPendingAwaiting(params.Session.ChatID, tracker.pendingAwaitingID)
 	}
 	if params.Notifications != nil {
-		params.Notifications.Broadcast("awaiting.answer", map[string]any{
+		params.Notifications.Broadcast("awaiting.answered", map[string]any{
 			"chatId":     params.Session.ChatID,
 			"runId":      params.Session.RunID,
 			"awaitingId": tracker.pendingAwaitingID,

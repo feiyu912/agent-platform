@@ -36,6 +36,8 @@ tool.start
 - `request.submit`
 - `awaiting.answer`
 
+以上事件名是实时 stream / chat replay 的时间线事件。WebSocket `frame:"push"` 的摘要通知使用 `awaiting.asking` 与 `awaiting.answered`，payload 只携带等待项状态摘要；完整问题、审批项、表单和 plan 定义仍以 stream `awaiting.ask` 为准。
+
 约束：
 
 - `params` 顶层永远是数组。

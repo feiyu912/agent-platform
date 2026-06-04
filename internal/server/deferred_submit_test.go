@@ -96,8 +96,8 @@ func TestDeferredSubmitHTTPRestoresPendingAwaitingAfterRestart(t *testing.T) {
 	if !foundSubmit || !foundAnswer {
 		t.Fatalf("expected submit replay in chat detail, got %#v", detail.Events)
 	}
-	if eventTypes := notifications.EventTypes(); len(eventTypes) < 2 || eventTypes[0] != "awaiting.answer" || eventTypes[1] != "run.started" {
-		t.Fatalf("expected awaiting.answer then run.started notifications, got %#v", eventTypes)
+	if eventTypes := notifications.EventTypes(); len(eventTypes) < 2 || eventTypes[0] != "awaiting.answered" || eventTypes[1] != "run.started" {
+		t.Fatalf("expected awaiting.answered then run.started notifications, got %#v", eventTypes)
 	}
 }
 
@@ -204,13 +204,13 @@ func TestDeferredSubmitWSRestoresPendingAwaitingAfterRestart(t *testing.T) {
 			if err := json.Unmarshal(raw, &frame); err != nil {
 				t.Fatalf("decode push frame: %v", err)
 			}
-			if frame.Type == "awaiting.answer" {
+			if frame.Type == "awaiting.answered" {
 				gotPush = true
 			}
 		}
 	}
 	if !gotResponse || !gotPush {
-		t.Fatalf("expected websocket response and awaiting.answer push, got response=%v push=%v", gotResponse, gotPush)
+		t.Fatalf("expected websocket response and awaiting.answered push, got response=%v push=%v", gotResponse, gotPush)
 	}
 
 	summary, err := fixture.chats.Summary("chat-ws")

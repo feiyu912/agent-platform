@@ -1,6 +1,12 @@
 package artifactpusher
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 type recordingNotifications struct {
 	eventType string
@@ -12,16 +18,105 @@ func (r *recordingNotifications) Broadcast(eventType string, data map[string]any
 	r.data = data
 }
 
-func TestNotifyArtifactOutgoingUsesResourcePushType(t *testing.T) {
+type staticResolver struct {
+	baseURL string
+}
+
+func (r staticResolver) Resolve(string) (string, string, bool) {
+	return r.baseURL, "", true
+}
+
+func TestPushOneSendsResourcePushedAfterUploadSuccess(t *testing.T) {
+	uploadCalled := false
+	var uploadMethod, uploadPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uploadCalled = true
+		uploadMethod = r.Method
+		uploadPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	chatsDir := t.TempDir()
+	writeArtifactFile(t, chatsDir, "chat-1/report.txt", []byte("hello"))
+
 	notifications := &recordingNotifications{}
-	pusher := &Pusher{notifications: notifications}
-
-	pusher.notifyArtifactOutgoing("chat-1", "artifact-1", "report.txt", "text/plain", "abc123", 12)
-
-	if notifications.eventType != "resource.push" {
-		t.Fatalf("expected resource.push notification, got %q", notifications.eventType)
+	pusher := &Pusher{
+		resolver:      staticResolver{baseURL: server.URL},
+		uploadPath:    "/upload",
+		chatsDir:      chatsDir,
+		http:          server.Client(),
+		notifications: notifications,
 	}
-	if notifications.data["chatId"] != "chat-1" || notifications.data["name"] != "report.txt" || notifications.data["mimeType"] != "text/plain" {
+
+	pusher.pushOne("chat-1", map[string]any{
+		"artifactId": "artifact-1",
+		"name":       "report.txt",
+		"mimeType":   "text/plain",
+		"type":       "file",
+		"url":        "/api/resource?file=chat-1/report.txt",
+	})
+
+	if !uploadCalled {
+		t.Fatalf("expected upload request")
+	}
+	if uploadMethod != http.MethodPost || uploadPath != "/upload" {
+		t.Fatalf("unexpected upload request %s %s", uploadMethod, uploadPath)
+	}
+	if notifications.eventType != "resource.pushed" {
+		t.Fatalf("expected resource.pushed notification, got %q", notifications.eventType)
+	}
+	if notifications.data["chatId"] != "chat-1" || notifications.data["artifactId"] != "artifact-1" || notifications.data["name"] != "report.txt" || notifications.data["mimeType"] != "text/plain" {
 		t.Fatalf("unexpected notification data: %#v", notifications.data)
+	}
+	if notifications.data["sha256"] == "" || notifications.data["sizeBytes"] != 5 {
+		t.Fatalf("expected sha and size in notification data: %#v", notifications.data)
+	}
+	if timestamp, ok := notifications.data["timestamp"].(int64); !ok || timestamp <= 0 {
+		t.Fatalf("expected timestamp in notification data: %#v", notifications.data)
+	}
+}
+
+func TestPushOneDoesNotSendResourcePushedAfterUploadFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("nope"))
+	}))
+	defer server.Close()
+
+	chatsDir := t.TempDir()
+	writeArtifactFile(t, chatsDir, "chat-1/report.txt", []byte("hello"))
+
+	notifications := &recordingNotifications{}
+	pusher := &Pusher{
+		resolver:      staticResolver{baseURL: server.URL},
+		uploadPath:    "/upload",
+		chatsDir:      chatsDir,
+		http:          server.Client(),
+		notifications: notifications,
+	}
+
+	pusher.pushOne("chat-1", map[string]any{
+		"artifactId": "artifact-1",
+		"name":       "report.txt",
+		"mimeType":   "text/plain",
+		"type":       "file",
+		"url":        "/api/resource?file=chat-1/report.txt",
+	})
+
+	if notifications.eventType != "" || notifications.data != nil {
+		t.Fatalf("did not expect notification after failed upload, got type=%q data=%#v", notifications.eventType, notifications.data)
+	}
+}
+
+func writeArtifactFile(t *testing.T, root string, relative string, data []byte) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir artifact dir: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write artifact file: %v", err)
 	}
 }

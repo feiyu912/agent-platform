@@ -257,6 +257,28 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 {"frame":"error","type":"invalid_request","id":"req-1","code":400,"msg":"...","data":{}}
 ```
 
+当前 platform 主动发送的 `push.type`：
+
+| Push type | data |
+|---|---|
+| `connected` | `sessionId` |
+| `heartbeat` | `timestamp` |
+| `auth.expiring` | `expiresAt` |
+| `run.started` | `runId`、`chatId`、`agentKey` |
+| `run.finished` | `runId`、`chatId` |
+| `chat.created` | `chatId`、`chatName`、`agentKey`、`timestamp` |
+| `chat.updated` | `chatId`、`lastRunId`、`lastRunContent`、`updatedAt` |
+| `chat.unread` / `chat.read` | `chatId`、`agentKey`、`lastRunId`、`readAt`、`readRunId`、`agentUnreadCount` |
+| `chat.read_all` | `agentKey`、`updatedCount`、`agentUnreadCount` |
+| `chat.deleted` | `chatId` |
+| `chat.renamed` | `chatId`、`chatName`、`agentKey` |
+| `chat.archived` | `chatId`、`agentKey` |
+| `archive.deleted` | `chatId` |
+| `catalog.updated` | `reason`、可选 `timestamp` |
+| `awaiting.asking` | `chatId`、`runId`、`agentKey`、`awaitingId`、`mode`、`timeout`、`createdAt`、可选 `viewportType` / `viewportKey` |
+| `awaiting.answered` | `chatId`、`runId`、`awaitingId`、`mode`、`status`、`resolvedAt`、可选 `errorCode` / `submitId` |
+| `resource.pushed` | `chatId`、`artifactId`、`name`、`mimeType`、`sha256`、`sizeBytes`、`timestamp` |
+
 字段说明：
 
 | 字段 | 适用帧 | 说明 |

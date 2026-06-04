@@ -124,10 +124,6 @@ func (p *Pusher) pushOne(chatID string, artifact map[string]any) {
 	}
 	sha := sha256Hex(data)
 
-	// 先发 push frame 给网关做预告（纯 metadata，字节走 HTTP POST）。
-	// push 失败不阻塞 POST —— Broadcast 是 best-effort 的 fan-out。
-	p.notifyArtifactOutgoing(chatID, artifactID, fileName, mimeType, sha, len(data))
-
 	baseURL, token, ok := p.resolver.Resolve(chatID)
 	if !ok || strings.TrimSpace(baseURL) == "" {
 		log.Printf("[artifact-pusher] skip: no gateway route for chatId=%s artifactId=%s", chatID, artifactID)
@@ -142,13 +138,14 @@ func (p *Pusher) pushOne(chatID string, artifact map[string]any) {
 	}
 	log.Printf("[artifact-pusher] upload ok chatId=%s artifactId=%s name=%s bytes=%d response=%s",
 		chatID, artifactID, fileName, len(data), truncate(string(respBody), 256))
+	p.notifyArtifactPushed(chatID, artifactID, fileName, mimeType, sha, len(data))
 }
 
-func (p *Pusher) notifyArtifactOutgoing(chatID, artifactID, name, mimeType, sha string, sizeBytes int) {
+func (p *Pusher) notifyArtifactPushed(chatID, artifactID, name, mimeType, sha string, sizeBytes int) {
 	if p.notifications == nil {
 		return
 	}
-	p.notifications.Broadcast("resource.push", map[string]any{
+	p.notifications.Broadcast("resource.pushed", map[string]any{
 		"chatId":     chatID,
 		"artifactId": artifactID,
 		"name":       name,
@@ -157,7 +154,7 @@ func (p *Pusher) notifyArtifactOutgoing(chatID, artifactID, name, mimeType, sha 
 		"sizeBytes":  sizeBytes,
 		"timestamp":  time.Now().UnixMilli(),
 	})
-	log.Printf("[artifact-pusher] push sent chatId=%s artifactId=%s name=%s", chatID, artifactID, name)
+	log.Printf("[artifact-pusher] pushed notification sent chatId=%s artifactId=%s name=%s", chatID, artifactID, name)
 }
 
 func sha256Hex(data []byte) string {

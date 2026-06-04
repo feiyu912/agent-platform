@@ -253,7 +253,7 @@ func (s *Server) broadcastDeferredAwaitingAnswer(deferred DeferredAwaiting, norm
 	if payload["mode"] == "" {
 		payload["mode"] = deferred.Mode
 	}
-	s.deps.Notifications.Broadcast("awaiting.answer", payload)
+	s.deps.Notifications.Broadcast("awaiting.answered", payload)
 }
 
 func (s *Server) resolvePersistedAwaitingSubmit(req api.SubmitRequest) (api.SubmitResponse, bool, error) {

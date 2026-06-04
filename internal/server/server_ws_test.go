@@ -604,25 +604,25 @@ func TestWebSocketPushAwaitingAskAndAnswerSyncPendingChatSummary(t *testing.T) {
 	defer flow.resp.Body.Close()
 	defer flow.server.Close()
 
-	awaitAsk := waitForPushFrameType(t, flow.conn, "awaiting.ask")
+	awaitAsk := waitForPushFrameType(t, flow.conn, "awaiting.asking")
 	awaitAskData := pushFrameDataMap(t, awaitAsk)
 	if awaitAskData["chatId"] != flow.chatID {
-		t.Fatalf("expected chatId=%s in awaiting.ask push, got %#v", flow.chatID, awaitAskData)
+		t.Fatalf("expected chatId=%s in awaiting.asking push, got %#v", flow.chatID, awaitAskData)
 	}
 	if awaitAskData["runId"] != flow.runID {
-		t.Fatalf("expected runId=%s in awaiting.ask push, got %#v", flow.runID, awaitAskData)
+		t.Fatalf("expected runId=%s in awaiting.asking push, got %#v", flow.runID, awaitAskData)
 	}
 	if awaitAskData["agentKey"] != "mock-agent" {
-		t.Fatalf("expected agentKey in awaiting.ask push, got %#v", awaitAskData)
+		t.Fatalf("expected agentKey in awaiting.asking push, got %#v", awaitAskData)
 	}
 	if awaitAskData["awaitingId"] != flow.awaitingID || awaitAskData["mode"] != "question" {
-		t.Fatalf("unexpected awaiting.ask push payload %#v", awaitAskData)
+		t.Fatalf("unexpected awaiting.asking push payload %#v", awaitAskData)
 	}
 	if timeout, ok := awaitAskData["timeout"].(float64); !ok || timeout <= 0 {
-		t.Fatalf("expected positive timeout in awaiting.ask push, got %#v", awaitAskData)
+		t.Fatalf("expected positive timeout in awaiting.asking push, got %#v", awaitAskData)
 	}
 	if createdAt, ok := awaitAskData["createdAt"].(float64); !ok || createdAt <= 0 {
-		t.Fatalf("expected createdAt in awaiting.ask push, got %#v", awaitAskData)
+		t.Fatalf("expected createdAt in awaiting.asking push, got %#v", awaitAskData)
 	}
 
 	summaries := loadChatSummariesForTest(t, flow.fixture.server)
@@ -661,19 +661,19 @@ func TestWebSocketPushAwaitingAskAndAnswerSyncPendingChatSummary(t *testing.T) {
 		t.Fatalf("submit expected 200, got %d: %s", submitRec.Code, submitRec.Body.String())
 	}
 
-	awaitAnswer := waitForPushFrameType(t, flow.conn, "awaiting.answer")
+	awaitAnswer := waitForPushFrameType(t, flow.conn, "awaiting.answered")
 	awaitAnswerData := pushFrameDataMap(t, awaitAnswer)
 	if awaitAnswerData["chatId"] != flow.chatID || awaitAnswerData["runId"] != flow.runID || awaitAnswerData["awaitingId"] != flow.awaitingID {
-		t.Fatalf("unexpected awaiting.answer push identity %#v", awaitAnswerData)
+		t.Fatalf("unexpected awaiting.answered push identity %#v", awaitAnswerData)
 	}
 	if awaitAnswerData["mode"] != "question" || awaitAnswerData["status"] != "answered" {
-		t.Fatalf("unexpected awaiting.answer push payload %#v", awaitAnswerData)
+		t.Fatalf("unexpected awaiting.answered push payload %#v", awaitAnswerData)
 	}
 	if _, exists := awaitAnswerData["errorCode"]; exists {
-		t.Fatalf("did not expect errorCode on answered awaiting.answer push, got %#v", awaitAnswerData)
+		t.Fatalf("did not expect errorCode on answered awaiting.answered push, got %#v", awaitAnswerData)
 	}
 	if resolvedAt, ok := awaitAnswerData["resolvedAt"].(float64); !ok || resolvedAt <= 0 {
-		t.Fatalf("expected resolvedAt in awaiting.answer push, got %#v", awaitAnswerData)
+		t.Fatalf("expected resolvedAt in awaiting.answered push, got %#v", awaitAnswerData)
 	}
 
 	drainAwaitingPushQuestionStream(t, flow.reader, flow.streamBody)
@@ -717,7 +717,7 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 			act: func(t *testing.T, flow *awaitingPushQuestionFlow, awaitAskData map[string]any) {
 				t.Helper()
 				if timeout, ok := awaitAskData["timeout"].(float64); !ok || timeout != 20 {
-					t.Fatalf("expected awaiting.ask timeout 20, got %#v", awaitAskData)
+					t.Fatalf("expected awaiting.asking timeout 20, got %#v", awaitAskData)
 				}
 			},
 			errorCode: "timeout",
@@ -731,16 +731,16 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 			defer flow.resp.Body.Close()
 			defer flow.server.Close()
 
-			awaitAsk := waitForPushFrameType(t, flow.conn, "awaiting.ask")
+			awaitAsk := waitForPushFrameType(t, flow.conn, "awaiting.asking")
 			tc.act(t, &flow, pushFrameDataMap(t, awaitAsk))
 
-			awaitAnswer := waitForPushFrameType(t, flow.conn, "awaiting.answer")
+			awaitAnswer := waitForPushFrameType(t, flow.conn, "awaiting.answered")
 			awaitAnswerData := pushFrameDataMap(t, awaitAnswer)
 			if awaitAnswerData["chatId"] != flow.chatID || awaitAnswerData["runId"] != flow.runID || awaitAnswerData["awaitingId"] != flow.awaitingID {
-				t.Fatalf("unexpected awaiting.answer push identity %#v", awaitAnswerData)
+				t.Fatalf("unexpected awaiting.answered push identity %#v", awaitAnswerData)
 			}
 			if awaitAnswerData["status"] != "error" || awaitAnswerData["errorCode"] != tc.errorCode {
-				t.Fatalf("unexpected awaiting.answer error payload %#v", awaitAnswerData)
+				t.Fatalf("unexpected awaiting.answered error payload %#v", awaitAnswerData)
 			}
 
 			drainAwaitingPushQuestionStream(t, flow.reader, flow.streamBody)
@@ -754,7 +754,7 @@ func TestWebSocketPushAwaitingAnswerRunInterruptedClearsPendingChatSummary(t *te
 	defer flow.resp.Body.Close()
 	defer flow.server.Close()
 
-	waitForPushFrameType(t, flow.conn, "awaiting.ask")
+	waitForPushFrameType(t, flow.conn, "awaiting.asking")
 
 	summaries := loadChatSummariesForTest(t, flow.fixture.server)
 	if len(summaries) != 1 || summaries[0].Awaiting == nil {
@@ -769,13 +769,13 @@ func TestWebSocketPushAwaitingAnswerRunInterruptedClearsPendingChatSummary(t *te
 		t.Fatalf("interrupt expected 200, got %d: %s", interruptRec.Code, interruptRec.Body.String())
 	}
 
-	awaitAnswer := waitForPushFrameType(t, flow.conn, "awaiting.answer")
+	awaitAnswer := waitForPushFrameType(t, flow.conn, "awaiting.answered")
 	awaitAnswerData := pushFrameDataMap(t, awaitAnswer)
 	if awaitAnswerData["chatId"] != flow.chatID || awaitAnswerData["runId"] != flow.runID || awaitAnswerData["awaitingId"] != flow.awaitingID {
-		t.Fatalf("unexpected interrupt awaiting.answer push identity %#v", awaitAnswerData)
+		t.Fatalf("unexpected interrupt awaiting.answered push identity %#v", awaitAnswerData)
 	}
 	if awaitAnswerData["status"] != "error" || awaitAnswerData["errorCode"] != "run_interrupted" {
-		t.Fatalf("unexpected interrupt awaiting.answer push payload %#v", awaitAnswerData)
+		t.Fatalf("unexpected interrupt awaiting.answered push payload %#v", awaitAnswerData)
 	}
 
 	drainAwaitingPushQuestionStream(t, flow.reader, flow.streamBody)

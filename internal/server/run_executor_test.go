@@ -201,7 +201,7 @@ func TestHandleAwaitingLifecycleBroadcastsViewportMetadata(t *testing.T) {
 		},
 	}, tracker)
 
-	if eventTypes := notifications.EventTypes(); !reflect.DeepEqual(eventTypes, []string{"awaiting.ask"}) {
+	if eventTypes := notifications.EventTypes(); !reflect.DeepEqual(eventTypes, []string{"awaiting.asking"}) {
 		t.Fatalf("unexpected event types: %#v", eventTypes)
 	}
 	payloads := notifications.Payloads()
@@ -210,7 +210,7 @@ func TestHandleAwaitingLifecycleBroadcastsViewportMetadata(t *testing.T) {
 	}
 	payload := payloads[0]
 	if payload["viewportType"] != "html" || payload["viewportKey"] != "leave_form" {
-		t.Fatalf("expected viewport metadata in awaiting.ask notification, got %#v", payload)
+		t.Fatalf("expected viewport metadata in awaiting.asking notification, got %#v", payload)
 	}
 }
 
