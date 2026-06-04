@@ -1466,7 +1466,58 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 			} else if !strings.Contains(noticeText, "[System audit — HITL approval batch]") || !strings.Contains(noticeText, `tool=bash command="git push origin main" decision=approve`) {
 				t.Fatalf("expected HITL audit notice content, got %#v", hitlNotice)
 			}
+			if !strings.Contains(noticeText, "Approval decisions only record authorization/review decisions") ||
+				!strings.Contains(noticeText, "error") ||
+				!strings.Contains(noticeText, "exitCode") {
+				t.Fatalf("expected HITL audit notice to warn that approval is not execution success, got %#v", hitlNotice)
+			}
 		})
+	}
+}
+
+func TestPrepareToolCallBlocksBashSecurityHardBlockBeforeApproval(t *testing.T) {
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools:    executor,
+			frontend: frontendtools.NewDefaultRegistry(),
+		},
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{},
+	}
+	command := "echo one\necho two"
+
+	invocation, deltas, toolMsg := stream.prepareToolCall(openAIToolCall{
+		ID:   "tool_1",
+		Type: "function",
+		Function: openAIFunctionCall{
+			Name:      "bash",
+			Arguments: fmt.Sprintf(`{"command":%q,"description":"多行命令"}`, command),
+		},
+	})
+
+	if invocation != nil {
+		t.Fatalf("expected hard-blocked bash command not to be queued, got %#v", invocation)
+	}
+	if len(deltas) != 1 {
+		t.Fatalf("expected one immediate tool result delta, got %#v", deltas)
+	}
+	result, ok := deltas[0].(contracts.DeltaToolResult)
+	if !ok {
+		t.Fatalf("expected DeltaToolResult, got %#v", deltas[0])
+	}
+	if result.Result.Error != "bash_security_blocked" || result.Result.ExitCode != -1 {
+		t.Fatalf("expected bash security blocked result, got %#v", result.Result)
+	}
+	if result.Result.Structured["output"] == "" || !strings.Contains(result.Result.Output, "bash_security_blocked") {
+		t.Fatalf("expected blocked result to carry structured reason, got %#v", result.Result)
+	}
+	if toolMsg == nil || toolMsg.Role != "tool" || toolMsg.ToolCallID != "tool_1" || toolMsg.Content == "" {
+		t.Fatalf("expected immediate tool message for blocked command, got %#v", toolMsg)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected blocked command not to invoke executor, got %#v", executor.invocations)
 	}
 }
 
@@ -1526,6 +1577,54 @@ func approvalOptionsContainDecision(options []any, decision string) bool {
 		}
 	}
 	return false
+}
+
+func TestBashSecurityHardBlockQueuedInvocationSkipsApprovalAndExecutor(t *testing.T) {
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}}
+	stream := &llmRunStream{
+		ctx: context.Background(),
+		engine: &LLMAgentEngine{
+			tools:    executor,
+			frontend: frontendtools.NewDefaultRegistry(),
+		},
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{},
+		queuedToolCalls: []*preparedToolInvocation{
+			{
+				toolID:   "tool_1",
+				toolName: "bash",
+				args:     map[string]any{"command": "echo one\necho two", "description": "多行命令"},
+			},
+		},
+	}
+
+	if stream.prepareQueuedBashApprovalBatch() {
+		t.Fatalf("expected hard-blocked bash command not to prepare approval batch, got %#v", stream.pending)
+	}
+	if len(stream.pending) != 0 || stream.hitlPendingBatch != nil || stream.hitlPendingCall != nil {
+		t.Fatalf("expected no approval state for hard block, pending=%#v batch=%#v call=%#v", stream.pending, stream.hitlPendingBatch, stream.hitlPendingCall)
+	}
+
+	stream.activateNextToolCall()
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invokeActiveToolCall returned error: %v", err)
+	}
+	if len(executor.invocations) != 0 {
+		t.Fatalf("expected hard-blocked command not to invoke executor, got %#v", executor.invocations)
+	}
+	if len(stream.pending) != 1 {
+		t.Fatalf("expected one blocked tool result, got %#v", stream.pending)
+	}
+	result, ok := stream.pending[0].(contracts.DeltaToolResult)
+	if !ok {
+		t.Fatalf("expected DeltaToolResult, got %#v", stream.pending[0])
+	}
+	if result.Result.Error != "bash_security_blocked" || result.Result.ExitCode != -1 {
+		t.Fatalf("expected bash_security_blocked exitCode=-1, got %#v", result.Result)
+	}
+	if stream.hitlPendingBatch != nil || stream.hitlPendingCall != nil {
+		t.Fatalf("expected no approval state after hard block, batch=%#v call=%#v", stream.hitlPendingBatch, stream.hitlPendingCall)
+	}
 }
 
 func TestBashSecuritySoftBlockApproveExecutesOriginalCommand(t *testing.T) {

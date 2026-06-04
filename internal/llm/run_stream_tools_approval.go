@@ -18,7 +18,7 @@ func (s *llmRunStream) lookupBashSecurityReview(invocation *preparedToolInvocati
 		return *invocation.bashSecurityReview
 	}
 	review := s.reviewBashSecurity(strings.TrimSpace(mapStringArg(invocation.args, "command")))
-	if review.Decision == bashsec.ReviewRequiresApproval {
+	if review.Decision != bashsec.ReviewAllow {
 		cloned := review
 		invocation.bashSecurityReview = &cloned
 	}

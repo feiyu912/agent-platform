@@ -186,8 +186,24 @@ func (s *llmRunStream) prepareToolCall(toolCall openAIToolCall) (*preparedToolIn
 	s.refreshAccessLevelForInvocation(invocation)
 	if isBashTool(invocation.toolName) {
 		review := s.reviewBashSecurity(strings.TrimSpace(mapStringArg(invocation.args, "command")))
-		if review.Decision == bashsec.ReviewRequiresApproval {
+		switch review.Decision {
+		case bashsec.ReviewRequiresApproval:
 			invocation.bashSecurityReview = &review
+		case bashsec.ReviewBlock:
+			invocation.bashSecurityReview = &review
+			if result := s.lookupPrecheckedHITL(invocation); !result.Intercepted {
+				blocked := bashSecurityBlockedToolResult(review)
+				return nil, []AgentDelta{DeltaToolResult{
+						ToolID:   toolID,
+						ToolName: toolCall.Function.Name,
+						Result:   blocked,
+					}}, &openAIMessage{
+						Role:       "tool",
+						ToolCallID: toolID,
+						Name:       toolCall.Function.Name,
+						Content:    blocked.Output,
+					}
+			}
 		}
 	}
 	if accessPlan, ok := s.buildFileAccessPlan(invocation); ok {
@@ -293,21 +309,6 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 		s.skipPostToolHook = true
 		return s.emitBashSecurityApprovalDeltas(invocation, review)
 	}
-	if review := s.lookupBashAccessReview(invocation); review.Decision == accesspolicy.DecisionRequiresApproval {
-		if strings.TrimSpace(invocation.approvalDecision) != "" {
-			return s.executeApprovedBashAccessInvocation(invocation, review)
-		}
-		if s.isRuleWhitelisted(review.RuleKey) {
-			s.applyHITLDecision(invocation, bashAccessInterceptResult(invocation, review), "", "approve_rule_run", "", true)
-			accesspolicy.RegisterRuleApproval(s.execCtx, review.RuleKey)
-			return s.executeOriginalBash(invocation)
-		}
-		if accesspolicy.HasApproval(s.execCtx, review) {
-			return s.executeOriginalBash(invocation)
-		}
-		s.skipPostToolHook = true
-		return s.emitBashAccessApprovalDeltas(invocation, review)
-	}
 	if result := s.lookupWorkspaceHITL(invocation); result.Intercepted {
 		if strings.EqualFold(result.Rule.ViewportType, "builtin") {
 			if strings.TrimSpace(invocation.approvalDecision) != "" {
@@ -354,6 +355,25 @@ func (s *llmRunStream) invokeActiveToolCall() error {
 			}
 			return s.emitHITLConfirmDeltas(invocation, result)
 		}
+	}
+	if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewBlock {
+		s.appendOriginalToolResult(invocation, bashSecurityBlockedToolResult(review))
+		return nil
+	}
+	if review := s.lookupBashAccessReview(invocation); review.Decision == accesspolicy.DecisionRequiresApproval {
+		if strings.TrimSpace(invocation.approvalDecision) != "" {
+			return s.executeApprovedBashAccessInvocation(invocation, review)
+		}
+		if s.isRuleWhitelisted(review.RuleKey) {
+			s.applyHITLDecision(invocation, bashAccessInterceptResult(invocation, review), "", "approve_rule_run", "", true)
+			accesspolicy.RegisterRuleApproval(s.execCtx, review.RuleKey)
+			return s.executeOriginalBash(invocation)
+		}
+		if accesspolicy.HasApproval(s.execCtx, review) {
+			return s.executeOriginalBash(invocation)
+		}
+		s.skipPostToolHook = true
+		return s.emitBashAccessApprovalDeltas(invocation, review)
 	}
 
 	s.recordAccessPolicyAutoApproval(invocation)
@@ -576,6 +596,31 @@ func (s *llmRunStream) toolResultContent(toolName string, result ToolExecutionRe
 		return result.Output
 	}
 	return formatSubmitResultForLLM(toolDef, s.engine.frontend, result)
+}
+
+func bashSecurityBlockedToolResult(review bashsec.ReviewResult) ToolExecutionResult {
+	reason := strings.TrimSpace(review.Reason)
+	if reason == "" {
+		reason = "bash command blocked by security review"
+	}
+	payload := map[string]any{
+		"error":    "bash_security_blocked",
+		"exitCode": -1,
+		"output":   reason,
+	}
+	if ruleKey := strings.TrimSpace(review.RuleKey); ruleKey != "" {
+		payload["ruleKey"] = ruleKey
+	}
+	if fingerprint := strings.TrimSpace(review.Fingerprint); fingerprint != "" {
+		payload["fingerprint"] = fingerprint
+	}
+	data, _ := json.Marshal(payload)
+	return ToolExecutionResult{
+		Output:     string(data),
+		Structured: payload,
+		Error:      "bash_security_blocked",
+		ExitCode:   -1,
+	}
 }
 
 func isBashTool(name string) bool {

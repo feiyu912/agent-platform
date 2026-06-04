@@ -99,7 +99,43 @@ func (s *llmRunStream) prepareQueuedBashApprovalBatch() bool {
 		if !isBashTool(invocation.toolName) {
 			continue
 		}
-		if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewRequiresApproval {
+		if review := s.lookupBashSecurityReview(invocation); review.Decision == bashsec.ReviewBlock {
+			if result := s.lookupWorkspaceHITL(invocation); result.Intercepted {
+				if !strings.EqualFold(result.Rule.ViewportType, "builtin") {
+					continue
+				}
+				if s.isRuleWhitelisted(result.Rule.RuleKey) {
+					s.applyHITLDecision(invocation, result, "", "approve_rule_run", "", true)
+					continue
+				}
+				if s.shouldAutoApproveHITL(result) {
+					continue
+				}
+				approvals = append(approvals, s.buildApprovalAskItem(invocation))
+				invocations = append(invocations, invocation)
+				continue
+			}
+			if s.checker == nil {
+				continue
+			}
+			result := s.lookupPrecheckedHITL(invocation)
+			if !result.Intercepted {
+				continue
+			}
+			if !strings.EqualFold(result.Rule.ViewportType, "builtin") {
+				continue
+			}
+			if s.isRuleWhitelisted(result.Rule.RuleKey) {
+				s.applyHITLDecision(invocation, result, "", "approve_rule_run", "", true)
+				continue
+			}
+			if s.shouldAutoApproveHITL(result) {
+				continue
+			}
+			approvals = append(approvals, s.buildApprovalAskItem(invocation))
+			invocations = append(invocations, invocation)
+			continue
+		} else if review.Decision == bashsec.ReviewRequiresApproval {
 			if s.isRuleWhitelisted(review.RuleKey) {
 				s.applyHITLDecision(invocation, bashSecurityInterceptResult(invocation, review), "", "approve_rule_run", "", true)
 				continue
@@ -506,6 +542,7 @@ func formatHITLLLMNotice(entries []hitlNoticeEntry) string {
 	} else {
 		lines = append(lines, "The tool results above already reflect these decisions; do not re-prompt for approval and do not retry rejected calls.")
 	}
+	lines = append(lines, "Approval decisions only record authorization/review decisions and do not mean tool execution succeeded; inspect each tool result's error and exitCode before claiming success.")
 	return strings.Join(lines, "\n")
 }
 
