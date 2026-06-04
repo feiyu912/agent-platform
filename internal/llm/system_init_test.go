@@ -178,17 +178,68 @@ func TestCoderSystemInitProfileIncludesCoderSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestCoderPlanningModeDoesNotBuildCoderSystemInit(t *testing.T) {
+func TestCoderPlanningModeBuildsPlanAndExecuteSystemInit(t *testing.T) {
 	session := fingerprintTestSession()
 	session.Mode = "CODER"
 	session.PlanningMode = true
 	session.CoderSystemPrompt = "custom coder system prompt"
+	session.ResolvedStageSettings = contracts.PlanExecuteSettings{
+		MaxSteps:             12,
+		MaxWorkRoundsPerTask: 4,
+		Execute:              contracts.StageSettings{Tools: []string{"bash", "file_read", "planning_write", "ask_user_question"}},
+		Summary:              contracts.StageSettings{SystemPrompt: "summary must not get a cache profile"},
+	}
 	toolDefs := []api.ToolDetailResponse{
 		{Name: "bash", Description: "run shell", Parameters: map[string]any{"type": "object"}},
+		{Name: "file_read", Description: "read files", Parameters: map[string]any{"type": "object"}},
+		{Name: "ask_user_question", Description: "ask", Parameters: map[string]any{"type": "object"}},
+		{Name: "planning_write", Description: "write plan", Parameters: map[string]any{"type": "object"}},
 	}
-	profiles := BuildSystemInitProfiles(session, api.QueryRequest{ChatID: "chat-1", Message: "hello"}, toolDefs, 12, 4, config.PromptsConfig{})
-	if len(profiles) != 0 {
-		t.Fatalf("expected planning mode to skip system init cache, got %#v", profiles)
+	req := api.QueryRequest{ChatID: "chat-1", Message: "hello"}
+	profiles := BuildSystemInitProfiles(session, req, toolDefs, 12, 4, config.PromptsConfig{})
+	if len(profiles) != 2 {
+		t.Fatalf("expected CODER planning plan/execute profiles, got %#v", profiles)
+	}
+	byKey := map[string]contracts.SystemInitProfile{}
+	for _, profile := range profiles {
+		byKey[profile.CacheKey] = profile
+	}
+	if _, ok := byKey["coder:plan"]; !ok {
+		t.Fatalf("missing coder plan profile %#v", byKey)
+	}
+	if _, ok := byKey["coder:execute"]; !ok {
+		t.Fatalf("missing coder execute profile %#v", byKey)
+	}
+	if _, ok := byKey["coder:summary"]; ok {
+		t.Fatalf("did not expect coder summary profile %#v", byKey)
+	}
+	assertToolNames(t, byKey["coder:plan"].Tools, []string{"file_read", "ask_user_question", "planning_write"})
+	assertToolNames(t, byKey["coder:execute"].Tools, []string{"bash", "file_read"})
+	wantExecuteSystem := coderPlanningExecutionSystemPrompt(session, req, session.ResolvedStageSettings, coderPlanningModePlanTools, []string{"bash", "file_read"}, defaultCoderExecuteSystemPrompt)
+	if byKey["coder:execute"].SystemMessage["content"] != wantExecuteSystem {
+		t.Fatalf("unexpected coder execute system message %#v want %q", byKey["coder:execute"].SystemMessage, wantExecuteSystem)
+	}
+}
+
+func TestSystemInitCacheKeyMapsCoderPlanningStages(t *testing.T) {
+	cases := []struct {
+		mode  string
+		stage string
+		want  string
+	}{
+		{mode: "CODER", stage: "coder", want: "coder:main"},
+		{mode: "CODER", stage: "coder-plan", want: "coder:plan"},
+		{mode: "CODER", stage: "coder-plan-feedback", want: "coder:plan"},
+		{mode: "CODER", stage: "coder-execute", want: "coder:execute"},
+		{mode: "CODER", stage: "coder-execute-step-2", want: "coder:execute"},
+		{mode: "CODER", stage: "coder-summary", want: "coder:execute"},
+		{mode: "PLAN_EXECUTE", stage: "summary", want: "plan-execute:summary"},
+		{mode: "REACT", stage: "anything", want: "react:main"},
+	}
+	for _, tc := range cases {
+		if got := SystemInitCacheKey(tc.mode, tc.stage); got != tc.want {
+			t.Fatalf("SystemInitCacheKey(%q, %q)=%q want %q", tc.mode, tc.stage, got, tc.want)
+		}
 	}
 }
 

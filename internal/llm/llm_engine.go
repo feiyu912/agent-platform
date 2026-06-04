@@ -27,14 +27,15 @@ type LLMAgentEngine struct {
 }
 
 type runStreamOptions struct {
-	ExecCtx      *ExecutionContext
-	Messages     []openAIMessage
-	ToolNames    []string
-	ModelKey     string
-	MaxSteps     int
-	Stage        string
-	ToolChoice   string
-	PostToolHook func(toolName string, toolID string) PostToolHookResult
+	ExecCtx                      *ExecutionContext
+	Messages                     []openAIMessage
+	ToolNames                    []string
+	ModelKey                     string
+	MaxSteps                     int
+	Stage                        string
+	ToolChoice                   string
+	PreserveProvidedSystemPrompt bool
+	PostToolHook                 func(toolName string, toolID string) PostToolHookResult
 }
 
 func NewLLMAgentEngine(cfg config.Config, models *ModelRegistry, tools ToolExecutor, frontend *frontendtools.Registry, sandbox SandboxClient) *LLMAgentEngine {
@@ -87,10 +88,8 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	toolSpecs := toOpenAIToolSpecs(effectiveDefs)
 	cacheKey := SystemInitCacheKey(session.Mode, options.Stage)
 	cachedSystem, cachedTools, cacheOK := resolveCachedSystemInit(session, cacheKey)
-	if session.PlanningMode {
-		cacheOK = false
-	}
-	if cacheOK {
+	useCachedSystemInit := cacheOK && !(len(options.Messages) > 0 && options.PreserveProvidedSystemPrompt)
+	if useCachedSystemInit {
 		toolSpecs = cachedTools
 	}
 	execCtx := options.ExecCtx
@@ -125,7 +124,7 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	}
 	messages := options.Messages
 	if len(messages) == 0 {
-		if cacheOK {
+		if useCachedSystemInit {
 			messages = []openAIMessage{cachedSystem}
 		} else {
 			systemPrompt := buildSystemPrompt(session, req, model.Key, PromptBuildOptions{
@@ -153,7 +152,7 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 			Role:    "user",
 			Content: buildUserMessageContent(e.cfg.Paths.ChatsDir, req.ChatID, req.Message, req.References, model.IsVision),
 		})
-	} else if cacheOK {
+	} else if useCachedSystemInit {
 		messages = replaceSystemMessage(messages, cachedSystem)
 	}
 	maxSteps := options.MaxSteps
@@ -175,28 +174,30 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 		IncludeAfterCallHints:   true,
 	}
 	stream := &llmRunStream{
-		engine:             e,
-		protocol:           resolveProtocol(e, model),
-		ctx:                ctx,
-		req:                req,
-		session:            session,
-		runControl:         execCtx.RunControl,
-		model:              model,
-		provider:           provider,
-		toolSpecs:          toolSpecs,
-		requestedToolNames: append([]string(nil), allowedTools...),
-		messages:           append([]openAIMessage(nil), messages...),
-		protocolConfig:     protocolConfig,
-		stageSettings:      stageSettings,
-		execCtx:            execCtx,
-		maxSteps:           maxSteps,
-		budgetStage:        budgetStage,
-		toolChoice:         toolChoice,
-		postToolHook:       options.PostToolHook,
-		allowToolUse:       allowToolUse,
-		finalTurnSystem:    deriveFinalTurnSystemPrompt(messages, session, req, model.Key, promptBuildOptions),
-		promptBuildOptions: promptBuildOptions,
-		onApprovalSummary:  approvalSummarySinkFromContext(ctx),
+		engine:              e,
+		protocol:            resolveProtocol(e, model),
+		ctx:                 ctx,
+		req:                 req,
+		session:             session,
+		runControl:          execCtx.RunControl,
+		model:               model,
+		provider:            provider,
+		toolSpecs:           toolSpecs,
+		requestedToolNames:  append([]string(nil), allowedTools...),
+		messages:            append([]openAIMessage(nil), messages...),
+		protocolConfig:      protocolConfig,
+		stageSettings:       stageSettings,
+		execCtx:             execCtx,
+		maxSteps:            maxSteps,
+		budgetStage:         budgetStage,
+		toolChoice:          toolChoice,
+		postToolHook:        options.PostToolHook,
+		allowToolUse:        allowToolUse,
+		finalTurnSystem:     deriveFinalTurnSystemPrompt(messages, session, req, model.Key, promptBuildOptions),
+		promptBuildOptions:  promptBuildOptions,
+		onApprovalSummary:   approvalSummarySinkFromContext(ctx),
+		systemInitCacheKey:  cacheKey,
+		systemInitCacheUsed: useCachedSystemInit,
 	}
 	stream.syncAccessLevelFromRunControl()
 	if len(session.SkillHookDirs) > 0 {

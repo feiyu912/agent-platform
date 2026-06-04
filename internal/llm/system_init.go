@@ -20,10 +20,18 @@ func (SystemInitProfileBuilder) BuildSystemInitProfiles(session contracts.QueryS
 }
 
 func BuildSystemInitProfiles(session contracts.QuerySession, req api.QueryRequest, toolDefs []api.ToolDetailResponse, defaultPlanMaxSteps int, defaultPlanMaxWorkRoundsPerTask int, prompts config.PromptsConfig) []contracts.SystemInitProfile {
-	if session.PlanningMode {
-		return nil
-	}
 	mode := normalizedSystemInitMode(session.Mode)
+	if session.PlanningMode {
+		if mode != "coder" {
+			return nil
+		}
+		settings := resolvePlanExecuteRuntimeSettings(session, defaultPlanMaxSteps, defaultPlanMaxWorkRoundsPerTask)
+		session.ResolvedStageSettings = settings
+		return []contracts.SystemInitProfile{
+			buildCoderPlanningPlanSystemInitProfile(session, req, settings, toolDefs),
+			buildCoderPlanningExecuteSystemInitProfile(session, req, settings, toolDefs),
+		}
+	}
 	switch mode {
 	case "plan-execute":
 		settings := resolvePlanExecuteRuntimeSettings(session, defaultPlanMaxSteps, defaultPlanMaxWorkRoundsPerTask)
@@ -50,6 +58,9 @@ func SystemInitCacheKey(mode string, stage string) string {
 	normalizedMode := normalizedSystemInitMode(mode)
 	if normalizedMode == "plan-execute" {
 		return normalizedMode + ":" + normalizedPlanExecuteStage(stage)
+	}
+	if normalizedMode == "coder" {
+		return normalizedMode + ":" + normalizedCoderStage(stage)
 	}
 	return normalizedMode + ":main"
 }
@@ -168,6 +179,39 @@ func buildSummarySystemInitProfile(session contracts.QuerySession, settings cont
 	}
 }
 
+func buildCoderPlanningPlanSystemInitProfile(session contracts.QuerySession, req api.QueryRequest, _ contracts.PlanExecuteSettings, toolDefs []api.ToolDetailResponse) contracts.SystemInitProfile {
+	effectiveDefs := applyToolOverrides(filterToolDefinitions(toolDefs, coderPlanningModePlanTools), session.ToolOverrides)
+	systemPrompt := buildSystemPrompt(session, req, session.ModelKey, PromptBuildOptions{
+		Stage:                 "coder-plan",
+		ToolDefinitions:       effectiveDefs,
+		IncludeAfterCallHints: true,
+	})
+	specs := toOpenAIToolSpecs(effectiveDefs)
+	return contracts.SystemInitProfile{
+		CacheKey:      SystemInitCacheKey(session.Mode, "coder-plan"),
+		Mode:          "coder",
+		Stage:         "plan",
+		Fingerprint:   ComputeSystemInitFingerprint(session, "coder-plan", effectiveDefs),
+		SystemMessage: map[string]any{"role": "system", "content": systemPrompt},
+		Tools:         openAIToolSpecsToAny(specs),
+	}
+}
+
+func buildCoderPlanningExecuteSystemInitProfile(session contracts.QuerySession, req api.QueryRequest, settings contracts.PlanExecuteSettings, toolDefs []api.ToolDetailResponse) contracts.SystemInitProfile {
+	executeTools := coderPlanningExecuteTools(settings.Execute, session.ToolNames)
+	effectiveDefs := applyToolOverrides(filterToolDefinitions(toolDefs, executeTools), session.ToolOverrides)
+	systemPrompt := coderPlanningExecutionSystemPrompt(session, req, settings, coderPlanningModePlanTools, executeTools, defaultCoderExecuteSystemPrompt)
+	specs := toOpenAIToolSpecs(effectiveDefs)
+	return contracts.SystemInitProfile{
+		CacheKey:      SystemInitCacheKey(session.Mode, "coder-execute"),
+		Mode:          "coder",
+		Stage:         "execute",
+		Fingerprint:   ComputeSystemInitFingerprint(session, "coder-execute", effectiveDefs),
+		SystemMessage: map[string]any{"role": "system", "content": systemPrompt},
+		Tools:         openAIToolSpecsToAny(specs),
+	}
+}
+
 func resolvePlanExecuteRuntimeSettings(session contracts.QuerySession, defaultMaxSteps int, defaultMaxWorkRoundsPerTask int) contracts.PlanExecuteSettings {
 	settings := session.ResolvedStageSettings
 	if settings.MaxSteps <= 0 || settings.MaxWorkRoundsPerTask <= 0 {
@@ -207,6 +251,22 @@ func normalizedPlanExecuteStage(stage string) string {
 		return "execute"
 	default:
 		return "execute"
+	}
+}
+
+func normalizedCoderStage(stage string) string {
+	value := strings.ToLower(strings.TrimSpace(stage))
+	switch {
+	case value == "coder":
+		return "main"
+	case strings.HasPrefix(value, "coder-plan"):
+		return "plan"
+	case strings.HasPrefix(value, "coder-execute"):
+		return "execute"
+	case value == "coder-summary":
+		return "execute"
+	default:
+		return "main"
 	}
 }
 

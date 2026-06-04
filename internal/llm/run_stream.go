@@ -37,34 +37,36 @@ type llmRunStream struct {
 	postToolHook       func(string, string) PostToolHookResult
 	checker            hitl.Checker
 
-	step               int
-	stageToolCalls     int
-	pending            []AgentDelta
-	currentTurn        *providerTurnStream
-	lastTrace          *llmChatTrace
-	finished           bool
-	closed             bool
-	fallbackSent       bool
-	cancelSent         bool
-	finalTurnAttempted bool
-	allowToolUse       bool
-	finalTurnSystem    string
-	previousToolResult any
-	queuedToolCalls    []*preparedToolInvocation
-	activeToolCall     *preparedToolInvocation
-	stopAfterToolBatch bool
-	promptBuildOptions PromptBuildOptions
-	hitlPendingBatch   *pendingHITLApprovalBatch
-	hitlPendingCall    *preparedToolInvocation
-	hitlMatch          *hitl.InterceptResult
-	hitlAwaitingID     string
-	hitlAwaitArgs      map[string]any
-	hitlRuleWhitelist  map[string]struct{}
-	pendingHITLNotices []hitlNoticeEntry
-	skipPostToolHook   bool
-	onApprovalSummary  func(chat.StepApproval)
-	planningWrites     map[string]*planningWriteStreamState
-	accessLevelVersion int64
+	step                int
+	stageToolCalls      int
+	pending             []AgentDelta
+	currentTurn         *providerTurnStream
+	lastTrace           *llmChatTrace
+	finished            bool
+	closed              bool
+	fallbackSent        bool
+	cancelSent          bool
+	finalTurnAttempted  bool
+	allowToolUse        bool
+	finalTurnSystem     string
+	previousToolResult  any
+	queuedToolCalls     []*preparedToolInvocation
+	activeToolCall      *preparedToolInvocation
+	stopAfterToolBatch  bool
+	promptBuildOptions  PromptBuildOptions
+	hitlPendingBatch    *pendingHITLApprovalBatch
+	hitlPendingCall     *preparedToolInvocation
+	hitlMatch           *hitl.InterceptResult
+	hitlAwaitingID      string
+	hitlAwaitArgs       map[string]any
+	hitlRuleWhitelist   map[string]struct{}
+	pendingHITLNotices  []hitlNoticeEntry
+	skipPostToolHook    bool
+	onApprovalSummary   func(chat.StepApproval)
+	planningWrites      map[string]*planningWriteStreamState
+	accessLevelVersion  int64
+	systemInitCacheKey  string
+	systemInitCacheUsed bool
 
 	lastCallPromptTokens           int
 	lastCallCompletionTokens       int

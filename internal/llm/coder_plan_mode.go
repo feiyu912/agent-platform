@@ -23,6 +23,8 @@ var coderPlanningModePlanTools = []string{
 
 const defaultCoderSummarySystemPrompt = `Summarize the completed confirmed CODER plan execution for the user.`
 
+const defaultCoderExecuteSystemPrompt = `Execute the confirmed CODER plan for the user.`
+
 const defaultCoderSummaryUserPromptTemplate = `Please provide a final summary of the completed confirmed plan.
 
 Original request:
@@ -58,7 +60,8 @@ type coderPlanningStream struct {
 	rejectedPlanDecision string
 	rejectedPlanReason   string
 
-	executeMessages []openAIMessage
+	executeMessages     []openAIMessage
+	summaryBaseMessages []openAIMessage
 }
 
 func newCoderPlanningStream(engine *LLMAgentEngine, ctx context.Context, req api.QueryRequest, session QuerySession) (AgentStream, error) {
@@ -110,8 +113,12 @@ func (s *coderPlanningStream) Next() (AgentDelta, error) {
 		event, err := s.current.Next()
 		if err == io.EOF {
 			if llmStream, ok := s.current.(*llmRunStream); ok {
+				accumulated := llmStream.AccumulatedMessages()
 				if !s.planDone || !s.executionDone {
-					s.executeMessages = append(s.executeMessages, nonSystemMessages(llmStream.AccumulatedMessages())...)
+					s.executeMessages = append(s.executeMessages, nonSystemMessages(accumulated)...)
+				}
+				if s.planDone && !s.executionDone {
+					s.summaryBaseMessages = append([]openAIMessage(nil), accumulated...)
 				}
 			}
 			_ = s.current.Close()
@@ -228,20 +235,27 @@ func (s *coderPlanningStream) coderPromptTemplateValues(data coderPromptTemplate
 }
 
 func (s *coderPlanningStream) executionSystemPrompt(fallback string) string {
-	stagePrompt := strings.TrimSpace(s.settings.Execute.PrimaryPrompt())
+	return coderPlanningExecutionSystemPrompt(s.session, s.req, s.settings, s.planStageTools(), s.executeStageTools(), fallback)
+}
+
+func coderPlanningExecutionSystemPrompt(session QuerySession, req api.QueryRequest, settings PlanExecuteSettings, planTools []string, executeTools []string, fallback string) string {
+	if planTools == nil {
+		planTools = coderPlanningModePlanTools
+	}
+	if executeTools == nil {
+		executeTools = coderPlanningExecuteTools(settings.Execute, session.ToolNames)
+	}
+	values := coderPromptTemplateValues(session, req, coderPromptTemplateData{
+		AvailableTools:    executeTools,
+		PlanStageTools:    planTools,
+		ExecuteStageTools: executeTools,
+	})
+	stagePrompt := strings.TrimSpace(settings.Execute.PrimaryPrompt())
 	if stagePrompt == "" {
 		stagePrompt = fallback
 	}
-	stagePrompt = renderCoderPromptTemplate(stagePrompt, s.coderPromptTemplateValues(coderPromptTemplateData{
-		AvailableTools:    s.executeStageTools(),
-		PlanStageTools:    s.planStageTools(),
-		ExecuteStageTools: s.executeStageTools(),
-	}))
-	coderPrompt := renderCoderPromptTemplate(s.session.CoderSystemPrompt, s.coderPromptTemplateValues(coderPromptTemplateData{
-		AvailableTools:    s.executeStageTools(),
-		PlanStageTools:    s.planStageTools(),
-		ExecuteStageTools: s.executeStageTools(),
-	}))
+	stagePrompt = renderCoderPromptTemplate(stagePrompt, values)
+	coderPrompt := renderCoderPromptTemplate(session.CoderSystemPrompt, values)
 	return joinNonEmptyPrompts(coderPrompt, stagePrompt)
 }
 
@@ -522,6 +536,7 @@ func (s *coderPlanningStream) preparePlanningFeedback(normalized map[string]any)
 	s.confirmationDone = false
 	s.nextPlanIsFeedback = true
 	s.executeMessages = nil
+	s.summaryBaseMessages = nil
 }
 
 func firstNonBlankString(values ...string) string {
@@ -549,7 +564,7 @@ func (s *coderPlanningStream) startExecutionStage() error {
 	}
 	executePrompt := "Execute the confirmed CODER plan.\n\nOriginal request:\n" + s.req.Message + "\n\nConfirmed plan:\n" + planningMarkdown
 	messages := make([]openAIMessage, 0, len(s.executeMessages)+2)
-	systemPrompt := s.executionSystemPrompt("Execute the confirmed CODER plan for the user.")
+	systemPrompt := s.executionSystemPrompt(defaultCoderExecuteSystemPrompt)
 	messages = append(messages, openAIMessage{Role: "system", Content: systemPrompt})
 	messages = append(messages, s.executeMessages...)
 	messages = append(messages, openAIMessage{Role: "user", Content: executePrompt})
@@ -597,7 +612,7 @@ func (s *coderPlanningStream) startTaskStream(task *PlanTask) error {
 		"task_description": task.Description,
 	})
 	messages := make([]openAIMessage, 0, len(s.executeMessages)+2)
-	systemPrompt := s.executionSystemPrompt("Execute the current confirmed CODER plan task.")
+	systemPrompt := s.executionSystemPrompt(defaultCoderExecuteSystemPrompt)
 	messages = append(messages, openAIMessage{Role: "system", Content: systemPrompt})
 	messages = append(messages, s.executeMessages...)
 	messages = append(messages, openAIMessage{Role: "user", Content: taskPrompt})
@@ -632,38 +647,41 @@ func (s *coderPlanningStream) startTaskStream(task *PlanTask) error {
 
 func (s *coderPlanningStream) startSummaryStage() error {
 	s.pending = append(s.pending, DeltaStageMarker{Stage: "coder-summary"})
-	summaryMessages := make([]openAIMessage, 0, len(s.executeMessages)+2)
-	systemPrompt := s.settings.Summary.PrimaryPrompt()
-	if systemPrompt == "" && s.engine != nil {
-		systemPrompt = strings.TrimSpace(s.engine.cfg.CoderPrompts.SummarySystemPrompt)
-	}
-	if systemPrompt == "" {
-		systemPrompt = defaultCoderSummarySystemPrompt
-	}
-	summaryMessages = append(summaryMessages, openAIMessage{Role: "system", Content: systemPrompt})
-	summaryMessages = append(summaryMessages, s.executeMessages...)
 	planningMarkdown := ""
 	if s.execCtx != nil && s.execCtx.PlanningState != nil {
 		planningMarkdown = s.execCtx.PlanningState.Markdown
 	}
-	summaryMessages = append(summaryMessages, openAIMessage{
-		Role:    "user",
-		Content: s.renderSummaryUserPrompt(planningMarkdown),
-	})
+	summaryMessages := s.summaryMessages(planningMarkdown)
 
 	stream, err := s.engine.newRunStreamWithOptions(s.ctx, s.req, s.sessionForStage(s.settings.Summary, nil), false, runStreamOptions{
-		ExecCtx:   s.execCtx,
-		Messages:  summaryMessages,
-		ToolNames: nil,
-		ModelKey:  s.resolveStageModelKey(s.settings.Summary),
-		MaxSteps:  1,
-		Stage:     "coder-summary",
+		ExecCtx:                      s.execCtx,
+		Messages:                     summaryMessages,
+		ToolNames:                    nil,
+		ModelKey:                     s.resolveStageModelKey(s.settings.Summary),
+		MaxSteps:                     1,
+		Stage:                        "coder-summary",
+		PreserveProvidedSystemPrompt: true,
 	})
 	if err != nil {
 		return err
 	}
 	s.current = stream
 	return nil
+}
+
+func (s *coderPlanningStream) summaryMessages(planningMarkdown string) []openAIMessage {
+	base := append([]openAIMessage(nil), s.summaryBaseMessages...)
+	if len(base) == 0 {
+		base = append(base, openAIMessage{
+			Role:    "system",
+			Content: s.executionSystemPrompt(defaultCoderExecuteSystemPrompt),
+		})
+		base = append(base, s.executeMessages...)
+	}
+	return append(base, openAIMessage{
+		Role:    "user",
+		Content: s.renderSummaryUserPrompt(planningMarkdown),
+	})
 }
 
 func (s *coderPlanningStream) renderSummaryUserPrompt(planningMarkdown string) string {
@@ -717,7 +735,11 @@ func (s *coderPlanningStream) planStageTools() []string {
 }
 
 func (s *coderPlanningStream) executeStageTools() []string {
-	tools := stageToolsOrDefault(s.settings.Execute, s.session.ToolNames)
+	return coderPlanningExecuteTools(s.settings.Execute, s.session.ToolNames)
+}
+
+func coderPlanningExecuteTools(stage StageSettings, toolNames []string) []string {
+	tools := stageToolsOrDefault(stage, toolNames)
 	return removeToolNames(tools, "plan_add_tasks", "plan_get_tasks", "plan_update_task", "planning_write", "ask_user_question")
 }
 

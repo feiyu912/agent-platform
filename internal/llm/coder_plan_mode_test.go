@@ -129,6 +129,38 @@ func TestCoderSummaryPromptUsesCoderPromptsConfig(t *testing.T) {
 	}
 }
 
+func TestCoderSummaryMessagesReuseExecutePrefix(t *testing.T) {
+	executePrefix := []openAIMessage{
+		{Role: "system", Content: "execute system prompt"},
+		{Role: "user", Content: "execute confirmed plan"},
+		{Role: "assistant", Content: "execution complete"},
+	}
+	stream := &coderPlanningStream{
+		engine: &LLMAgentEngine{cfg: config.Config{
+			CoderPrompts: config.CoderPromptsConfig{
+				SummarySystemPrompt:       "summary system prompt must not be used",
+				SummaryUserPromptTemplate: "summary {{original_request}} {{confirmed_plan}}",
+			},
+		}},
+		req:                 api.QueryRequest{Message: "build it"},
+		summaryBaseMessages: append([]openAIMessage(nil), executePrefix...),
+	}
+	got := stream.summaryMessages("confirmed markdown")
+	if len(got) != len(executePrefix)+1 {
+		t.Fatalf("expected one appended summary message, got %#v", got)
+	}
+	if !reflect.DeepEqual(got[:len(executePrefix)], executePrefix) {
+		t.Fatalf("summary prefix changed: got %#v want %#v", got[:len(executePrefix)], executePrefix)
+	}
+	last := got[len(got)-1]
+	if last.Role != "user" || last.Content != "summary build it confirmed markdown" {
+		t.Fatalf("unexpected appended summary user message %#v", last)
+	}
+	if got[0].Content == "summary system prompt must not be used" {
+		t.Fatalf("summary system prompt replaced execute prefix: %#v", got)
+	}
+}
+
 func TestCoderPlanningConfirmationUsesPlanMode(t *testing.T) {
 	stream := &coderPlanningStream{
 		session: contracts.QuerySession{RunID: "run_1"},

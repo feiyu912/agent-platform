@@ -67,7 +67,13 @@ func (s *llmRunStream) currentSystemRef() map[string]any {
 	if s == nil {
 		return nil
 	}
-	cacheKey := SystemInitCacheKey(s.session.Mode, s.promptBuildOptions.Stage)
+	if !s.systemInitCacheUsed {
+		return nil
+	}
+	cacheKey := strings.TrimSpace(s.systemInitCacheKey)
+	if cacheKey == "" {
+		cacheKey = SystemInitCacheKey(s.session.Mode, s.promptBuildOptions.Stage)
+	}
 	snapshot, ok := s.session.SystemInitCache[cacheKey]
 	if !ok || strings.TrimSpace(snapshot.Fingerprint) == "" {
 		return nil
