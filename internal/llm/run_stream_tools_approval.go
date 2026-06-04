@@ -181,11 +181,13 @@ func (s *llmRunStream) fileWritePlanNeedsApproval(plan filetools.WritePlan) bool
 	if !s.engine.cfg.FileTools.RequireWriteApproval {
 		return false
 	}
-	accessLevel, _ := NormalizeAccessLevel(s.fileAccessSession().AccessLevel)
+	session := s.fileAccessSession()
+	accessLevel, _ := NormalizeAccessLevel(session.AccessLevel)
 	if accessLevel == AccessLevelAutoApprove || accessLevel == AccessLevelFullAccess {
 		return false
 	}
-	return !filetools.PathInSessionWorkspace(s.fileAccessSession(), plan.FilePath)
+	return !filetools.PathInSessionWorkspace(session, plan.FilePath) &&
+		!filetools.PathInSessionHostWriteRoot(session, plan.FilePath)
 }
 
 func (s *llmRunStream) fileAccessPlanNeedsApproval(plan filetools.AccessPlan) bool {

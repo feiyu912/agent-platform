@@ -1811,6 +1811,63 @@ func TestWriteToolInsideSessionChatDirSkipsApproval(t *testing.T) {
 	}
 }
 
+func TestWriteToolInsideSessionHostAccessSkipsApproval(t *testing.T) {
+	workspace := t.TempDir()
+	ownerDir := t.TempDir()
+	session := contracts.QuerySession{
+		RunID:         "run_1",
+		WorkspaceRoot: workspace,
+		RuntimeContext: contracts.RuntimeRequestContext{
+			LocalPaths: contracts.LocalPaths{
+				WorkspaceDir: workspace,
+				OwnerDir:     ownerDir,
+			},
+		},
+		RuntimeHostAccess: contracts.HostAccessRoots{
+			WriteRoots: []string{"@owner"},
+		},
+	}
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{writeToolDefinition()}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: session,
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     workspace,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					MaxBatchOps:          20,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{Session: session},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_write",
+			args: map[string]any{
+				"file_path":   filepath.Join(ownerDir, "OWNER.md"),
+				"content":     "hello",
+				"description": "写入 owner 文件",
+			},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active write: %v", err)
+	}
+	if len(stream.pending) != 1 {
+		t.Fatalf("expected only tool result pending, got %#v", stream.pending)
+	}
+	if len(executor.invocations) != 1 {
+		t.Fatalf("expected hostAccess write to execute without approval, got %#v", executor.invocations)
+	}
+}
+
 func TestEditToolInsideSessionChatDirSkipsApproval(t *testing.T) {
 	workspace := t.TempDir()
 	chatDir := filepath.Join(t.TempDir(), "chat-1")
@@ -1863,6 +1920,64 @@ func TestEditToolInsideSessionChatDirSkipsApproval(t *testing.T) {
 	}
 	if len(executor.invocations) != 1 {
 		t.Fatalf("expected edit to execute without approval, got %#v", executor.invocations)
+	}
+}
+
+func TestEditToolInsideSessionHostAccessSkipsApproval(t *testing.T) {
+	workspace := t.TempDir()
+	ownerDir := t.TempDir()
+	session := contracts.QuerySession{
+		RunID:         "run_1",
+		WorkspaceRoot: workspace,
+		RuntimeContext: contracts.RuntimeRequestContext{
+			LocalPaths: contracts.LocalPaths{
+				WorkspaceDir: workspace,
+				OwnerDir:     ownerDir,
+			},
+		},
+		RuntimeHostAccess: contracts.HostAccessRoots{
+			WriteRoots: []string{"@owner"},
+		},
+	}
+	executor := &recordingToolExecutor{defs: []api.ToolDetailResponse{editToolDefinition()}}
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		session: session,
+		engine: &LLMAgentEngine{
+			cfg: config.Config{
+				FileTools: config.FileToolsConfig{
+					WorkingDirectory:     workspace,
+					AllowedReadPaths:     []string{"."},
+					AllowedWritePaths:    []string{"."},
+					MaxReadBytes:         1024,
+					MaxWriteBytes:        1024,
+					MaxBatchOps:          20,
+					RequireWriteApproval: true,
+				},
+			},
+			tools: executor,
+		},
+		execCtx: &contracts.ExecutionContext{Session: session},
+		activeToolCall: &preparedToolInvocation{
+			toolID:   "tool_1",
+			toolName: "file_edit",
+			args: map[string]any{
+				"file_path":   filepath.Join(ownerDir, "OWNER.md"),
+				"old_string":  "hello",
+				"new_string":  "hi",
+				"description": "编辑 owner 文件",
+			},
+		},
+	}
+
+	if err := stream.invokeActiveToolCall(); err != nil {
+		t.Fatalf("invoke active edit: %v", err)
+	}
+	if len(stream.pending) != 1 {
+		t.Fatalf("expected only tool result pending, got %#v", stream.pending)
+	}
+	if len(executor.invocations) != 1 {
+		t.Fatalf("expected hostAccess edit to execute without approval, got %#v", executor.invocations)
 	}
 }
 
