@@ -380,6 +380,39 @@ func TestInvokeHostBashAllowsShellSyntaxByDefault(t *testing.T) {
 	}
 }
 
+func TestInvokeHostBashAllowsExitStatusSpecialParameter(t *testing.T) {
+	root := t.TempDir()
+	executor := &RuntimeToolExecutor{
+		cfg: config.Config{
+			Bash: config.BashConfig{
+				WorkingDirectory:     root,
+				AllowedCommands:      []string{"false", "echo"},
+				ShellFeaturesEnabled: true,
+				ShellExecutable:      "bash",
+				ShellTimeoutMs:       30000,
+				MaxCommandChars:      16000,
+			},
+		},
+	}
+
+	result, err := executor.invokeHostBash(
+		context.Background(),
+		map[string]any{
+			"command": `false; echo "Exit code: $?"`,
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("invokeHostBash returned error: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected command to execute, got %#v", result)
+	}
+	if strings.TrimSpace(result.Output) != "Exit code: 1" {
+		t.Fatalf("expected shell to preserve real exit status, got %q", result.Output)
+	}
+}
+
 func TestInvokeHostBashIgnoresPerCallEnv(t *testing.T) {
 	root := t.TempDir()
 	executor := &RuntimeToolExecutor{

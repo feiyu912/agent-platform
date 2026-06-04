@@ -303,6 +303,14 @@ func TestBashAccessPolicyComplexAndOpaqueLevels(t *testing.T) {
 	if !opaque.RequiresApproval() {
 		t.Fatalf("expected opaque bash approval, got %#v", opaque)
 	}
+	npxOpaque := ReviewBashCommand(cfg, defaultSession, "npx tsc --noEmit", workspace, nil)
+	if !npxOpaque.RequiresApproval() || !strings.Contains(npxOpaque.RuleKey, "bash-access:opaque") {
+		t.Fatalf("expected npx opaque bash approval, got %#v", npxOpaque)
+	}
+	npxWithExitCode := ReviewBashCommand(cfg, defaultSession, `npx tsc --noEmit 2>&1; echo "Exit code: $?"`, workspace, nil)
+	if !npxWithExitCode.RequiresApproval() || !strings.Contains(npxWithExitCode.RuleKey, "bash-access:opaque") || npxWithExitCode.RuleKey == "bash-access:complex" {
+		t.Fatalf("expected npx command with exit code to use opaque approval, got %#v", npxWithExitCode)
+	}
 
 	autoSession := contracts.QuerySession{AccessLevel: contracts.AccessLevelAutoApprove, WorkspaceRoot: workspace}
 	autoOpaque := ReviewBashCommand(cfg, autoSession, "npm test", workspace, nil)

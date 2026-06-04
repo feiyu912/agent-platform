@@ -431,6 +431,9 @@ func (w *walker) parseWordPart(part syntax.WordPart, scope *varScope, insideDoub
 		if !isSimpleParamExp(node) {
 			return "", tooComplex("syntax.ParamExp", "unsupported parameter expansion")
 		}
+		if value, ok := safeSpecialParamValue(node.Param.Value); ok {
+			return value, nil
+		}
 		value, ok := scope.get(node.Param.Value)
 		if !ok {
 			return "", tooComplex("syntax.ParamExp", "unknown variable %s", node.Param.Value)
@@ -465,6 +468,15 @@ func (w *walker) parseWordPart(part syntax.WordPart, scope *varScope, insideDoub
 
 func hasBareVarUnsafeChars(value string) bool {
 	return strings.ContainsAny(value, " \t\n*?[]")
+}
+
+func safeSpecialParamValue(name string) (string, bool) {
+	switch name {
+	case "?":
+		return "0", true
+	default:
+		return "", false
+	}
 }
 
 func isShellIdentifier(name string) bool {

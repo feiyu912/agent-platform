@@ -61,6 +61,7 @@ func TestReviewBashSecurityAllowsASTSimpleSafeCommand(t *testing.T) {
 	tests := []string{
 		`VAR=x && echo "$VAR" | wc -c`,
 		`VAR=x && echo ${VAR}`,
+		`false; echo "Exit code: $?"`,
 	}
 	for _, command := range tests {
 		t.Run(command, func(t *testing.T) {

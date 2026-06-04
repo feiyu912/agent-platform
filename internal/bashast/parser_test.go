@@ -61,6 +61,47 @@ func TestParseForSecurityVariablesAndRedirects(t *testing.T) {
 	}
 }
 
+func TestParseForSecurityExitStatusSpecialParameter(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		want    [][]string
+	}{
+		{
+			name:    "echo exit status",
+			command: `echo "Exit code: $?"`,
+			want:    [][]string{{"echo", "Exit code: 0"}},
+		},
+		{
+			name:    "after prior command",
+			command: `false; echo "Exit code: $?"`,
+			want:    [][]string{{"false"}, {"echo", "Exit code: 0"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ParseForSecurity(tc.command)
+			if result.Kind != Simple {
+				t.Fatalf("expected simple, got %#v", result)
+			}
+			if len(result.Commands) != len(tc.want) {
+				t.Fatalf("expected %d commands, got %#v", len(tc.want), result.Commands)
+			}
+			for idx, wantArgv := range tc.want {
+				got := result.Commands[idx].Argv
+				if len(got) != len(wantArgv) {
+					t.Fatalf("command %d expected argv %#v, got %#v", idx, wantArgv, got)
+				}
+				for argIdx := range wantArgv {
+					if got[argIdx] != wantArgv[argIdx] {
+						t.Fatalf("command %d expected argv %#v, got %#v", idx, wantArgv, got)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestParseForSecurityKnownVariables(t *testing.T) {
 	result := ParseForSecurityWithKnownVariables(`echo "$TEST_HOST_ENV"`, map[string]string{"TEST_HOST_ENV": "agent-value"})
 	if result.Kind != Simple {

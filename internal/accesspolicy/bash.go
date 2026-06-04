@@ -318,7 +318,7 @@ func normalizedCommandBase(command string) string {
 
 func isOpaqueCommand(base string) bool {
 	switch base {
-	case "go", "npm", "yarn", "pnpm", "node", "python", "python3", "pip", "make", "bash", "sh":
+	case "go", "npm", "npx", "yarn", "pnpm", "node", "python", "python3", "pip", "make", "bash", "sh":
 		return true
 	default:
 		return false
