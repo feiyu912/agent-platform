@@ -20,6 +20,14 @@ func (s *Server) listChatSummaries(lastRunID string, agentKey string) ([]api.Cha
 }
 
 func mapChatSummaries(items []chat.Summary) []api.ChatSummaryResponse {
+	return mapChatSummariesWithUsage(items, true)
+}
+
+func mapChatSummariesWithoutUsage(items []chat.Summary) []api.ChatSummaryResponse {
+	return mapChatSummariesWithUsage(items, false)
+}
+
+func mapChatSummariesWithUsage(items []chat.Summary, includeUsage bool) []api.ChatSummaryResponse {
 	response := make([]api.ChatSummaryResponse, 0, len(items))
 	for _, item := range items {
 		resp := api.ChatSummaryResponse{
@@ -42,7 +50,8 @@ func mapChatSummaries(items []chat.Summary) []api.ChatSummaryResponse {
 				CreatedAt:  item.PendingAwaiting.CreatedAt,
 			}
 		}
-		if usage := mapUsageDataPtr(item.Usage); usage != nil {
+		if includeUsage {
+			usage := mapUsageDataPtr(item.Usage)
 			resp.Usage = usage
 		}
 		response = append(response, resp)

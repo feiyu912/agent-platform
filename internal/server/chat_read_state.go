@@ -36,7 +36,7 @@ func (s *Server) listAgentSummaries(includeChats int, scope string) ([]api.Agent
 			if err != nil {
 				return nil, err
 			}
-			items[i].Chats = mapChatSummaries(chats)
+			items[i].Chats = mapChatSummariesWithoutUsage(chats)
 		}
 	}
 	return items, nil

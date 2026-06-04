@@ -432,7 +432,16 @@ func TestListAgentSummariesIncludesChatStats(t *testing.T) {
 	if _, err := chats.MarkRead("chat-a2", "loyw3v20"); err != nil {
 		t.Fatalf("mark chat-a2 read: %v", err)
 	}
-	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-a1", RunID: "loyw3v28", UpdatedAtMillis: 3000}); err != nil {
+	if err := chats.OnRunCompleted(chat.RunCompletion{
+		ChatID:          "chat-a1",
+		RunID:           "loyw3v28",
+		UpdatedAtMillis: 3000,
+		Usage: chat.UsageData{
+			PromptTokens:     7,
+			CompletionTokens: 3,
+			TotalTokens:      10,
+		},
+	}); err != nil {
 		t.Fatalf("complete chat-a1: %v", err)
 	}
 	if err := chats.OnRunCompleted(chat.RunCompletion{ChatID: "chat-b1", RunID: "loyw3v2s", UpdatedAtMillis: 2000}); err != nil {
@@ -471,8 +480,26 @@ func TestListAgentSummariesIncludesChatStats(t *testing.T) {
 	if got := chatsByKey["agent-a"]; len(got) != 1 || got[0].ChatID != "chat-a1" {
 		t.Fatalf("unexpected agent-a chats: %#v", got)
 	}
+	if got := chatsByKey["agent-a"]; got[0].Usage != nil {
+		t.Fatalf("agent chats should not include usage, got %#v", got[0].Usage)
+	}
 	if got := chatsByKey["agent-b"]; len(got) != 1 || got[0].ChatID != "chat-b1" {
 		t.Fatalf("unexpected agent-b chats: %#v", got)
+	}
+
+	chatSummaries, err := server.listChatSummaries("", "")
+	if err != nil {
+		t.Fatalf("list chat summaries: %v", err)
+	}
+	var chatA1 api.ChatSummaryResponse
+	for _, item := range chatSummaries {
+		if item.ChatID == "chat-a1" {
+			chatA1 = item
+			break
+		}
+	}
+	if chatA1.ChatID == "" || chatA1.Usage == nil || chatA1.Usage.TotalTokens != 10 {
+		t.Fatalf("/api/chats summaries should still include usage, got %#v", chatA1)
 	}
 }
 
