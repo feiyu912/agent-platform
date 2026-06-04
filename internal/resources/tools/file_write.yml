@@ -17,9 +17,8 @@ inputSchema:
       description: Required. Complete UTF-8 file contents to write. Existing file contents are replaced.
     description:
       type: string
-      description: Required. 这次写文件的用途简述（一句话，中文），会在需要人工审批时展示给用户。
+      description: Optional. 这次写文件的用途简述（一句话，中文），会在需要人工审批时展示给用户。
   required:
     - file_path
     - content
-    - description
   additionalProperties: false

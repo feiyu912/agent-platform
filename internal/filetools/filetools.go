@@ -212,9 +212,6 @@ func BuildWritePlan(cfg config.FileToolsConfig, args map[string]any) (WritePlan,
 	}
 	content := AnyStringNode(args["content"])
 	description := strings.TrimSpace(AnyStringNode(args["description"]))
-	if description == "" {
-		return WritePlan{}, fmt.Errorf("description is required for write")
-	}
 	if len([]byte(content)) > maxPositive(cfg.MaxWriteBytes, 1<<20) {
 		return WritePlan{}, fmt.Errorf("content exceeds max write bytes")
 	}
@@ -239,9 +236,6 @@ func BuildWritePlan(cfg config.FileToolsConfig, args map[string]any) (WritePlan,
 func BuildWritePlanWithAccess(access AccessPlan, cfg config.FileToolsConfig, args map[string]any) (WritePlan, error) {
 	content := AnyStringNode(args["content"])
 	description := strings.TrimSpace(AnyStringNode(args["description"]))
-	if description == "" {
-		return WritePlan{}, fmt.Errorf("description is required for write")
-	}
 	if len([]byte(content)) > maxPositive(cfg.MaxWriteBytes, 1<<20) {
 		return WritePlan{}, fmt.Errorf("content exceeds max write bytes")
 	}
@@ -280,9 +274,6 @@ func BuildEditPlan(cfg config.FileToolsConfig, args map[string]any) (WritePlan, 
 		return WritePlan{}, fmt.Errorf("old_string and new_string must be different")
 	}
 	description := strings.TrimSpace(AnyStringNode(args["description"]))
-	if description == "" {
-		return WritePlan{}, fmt.Errorf("description is required for edit")
-	}
 	if len([]byte(newString)) > maxPositive(cfg.MaxWriteBytes, 1<<20) {
 		return WritePlan{}, fmt.Errorf("new_string exceeds max write bytes")
 	}
@@ -327,9 +318,6 @@ func BuildEditPlanWithAccess(access AccessPlan, cfg config.FileToolsConfig, args
 		return WritePlan{}, fmt.Errorf("old_string and new_string must be different")
 	}
 	description := strings.TrimSpace(AnyStringNode(args["description"]))
-	if description == "" {
-		return WritePlan{}, fmt.Errorf("description is required for edit")
-	}
 	if len([]byte(newString)) > maxPositive(cfg.MaxWriteBytes, 1<<20) {
 		return WritePlan{}, fmt.Errorf("new_string exceeds max write bytes")
 	}

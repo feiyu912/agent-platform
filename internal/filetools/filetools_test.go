@@ -265,6 +265,59 @@ func TestAccessApprovalExactAndRule(t *testing.T) {
 	}
 }
 
+func TestBuildWritePlanWithoutDescription(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.FileToolsConfig{
+		WorkingDirectory:  root,
+		AllowedReadPaths:  []string{"."},
+		AllowedWritePaths: []string{"."},
+		MaxWriteBytes:     1024,
+	}
+
+	plan, err := BuildWritePlan(cfg, map[string]any{
+		"file_path": "notes.txt",
+		"content":   "hello",
+	})
+	if err != nil {
+		t.Fatalf("build write plan without description: %v", err)
+	}
+	if plan.Description != "" {
+		t.Fatalf("expected empty description, got %q", plan.Description)
+	}
+	if plan.FilePath == "" || plan.Content == nil || plan.Fingerprint == "" {
+		t.Fatalf("unexpected write plan metadata: %#v", plan)
+	}
+}
+
+func TestBuildEditPlanWithoutDescription(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "notes.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	cfg := config.FileToolsConfig{
+		WorkingDirectory:  root,
+		AllowedReadPaths:  []string{"."},
+		AllowedWritePaths: []string{"."},
+		MaxWriteBytes:     1024,
+	}
+
+	plan, err := BuildEditPlan(cfg, map[string]any{
+		"file_path":  "notes.txt",
+		"old_string": "hello",
+		"new_string": "hi",
+	})
+	if err != nil {
+		t.Fatalf("build edit plan without description: %v", err)
+	}
+	if plan.Description != "" {
+		t.Fatalf("expected empty description, got %q", plan.Description)
+	}
+	if plan.FilePath == "" || plan.OldString != "hello" || plan.NewString != "hi" {
+		t.Fatalf("unexpected edit plan fields: %#v", plan)
+	}
+}
+
 func realPathForTest(t *testing.T, path string) string {
 	t.Helper()
 	real, err := filepath.EvalSymlinks(path)

@@ -1528,6 +1528,49 @@ func TestInvokeEditInsideSessionWorkspaceBypassesWriteApproval(t *testing.T) {
 	}
 }
 
+func TestInvokeWriteWithoutDescription(t *testing.T) {
+	root := t.TempDir()
+	executor := fileToolExecutor(root, true)
+
+	result, err := executor.invokeWrite(context.Background(), map[string]any{
+		"file_path": "owner.md",
+		"content":   "hello",
+	}, &contracts.ExecutionContext{})
+	if err != nil {
+		t.Fatalf("invokeWrite without description: %v", err)
+	}
+	// Should not error about missing description, proceed to normal approval flow
+	if result.ExitCode == 0 || result.Structured["error"] != "file_write_approval_required" {
+		t.Fatalf("expected approval required for write without description, got %#v", result)
+	}
+}
+
+func TestInvokeEditWithoutDescription(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.md")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, true)
+	execCtx := &contracts.ExecutionContext{}
+	if _, err := executor.invokeRead(map[string]any{"file_path": "owner.md", "add_line_numbers": false}, execCtx); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	result, err := executor.invokeEdit(context.Background(), map[string]any{
+		"file_path":  "owner.md",
+		"old_string": "old",
+		"new_string": "new",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeEdit without description: %v", err)
+	}
+	// Should not error about missing description, proceed to normal approval flow
+	if result.ExitCode == 0 || result.Structured["error"] != "file_edit_approval_required" {
+		t.Fatalf("expected approval required for edit without description, got %#v", result)
+	}
+}
+
 func realPath(t *testing.T, path string) string {
 	t.Helper()
 	real, err := filepath.EvalSymlinks(path)

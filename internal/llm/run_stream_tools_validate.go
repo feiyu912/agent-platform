@@ -44,8 +44,5 @@ func validateWriteToolArgs(toolName string, args map[string]any) error {
 	if strings.TrimSpace(mapStringArg(args, "file_path")) == "" {
 		return nil
 	}
-	if strings.TrimSpace(mapStringArg(args, "description")) == "" {
-		return fmt.Errorf("description is required for write tools")
-	}
 	return nil
 }

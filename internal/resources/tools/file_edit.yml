@@ -24,10 +24,9 @@ inputSchema:
       description: Replace every occurrence of old_string. Defaults to false; when false, old_string must match exactly once.
     description:
       type: string
-      description: Required. 这次编辑文件的用途简述（一句话，中文），会在需要人工审批时展示给用户。
+      description: Optional. 这次编辑文件的用途简述（一句话，中文），会在需要人工审批时展示给用户。
   required:
     - file_path
     - old_string
     - new_string
-    - description
   additionalProperties: false

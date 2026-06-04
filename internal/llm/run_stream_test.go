@@ -1097,6 +1097,62 @@ func TestPrepareToolCall_BashDescriptionIsRequired(t *testing.T) {
 	}
 }
 
+func TestPrepareToolCall_WriteToolDescriptionNotRequired(t *testing.T) {
+	tool := writeToolDefinition()
+	stream := &llmRunStream{
+		ctx:     context.Background(),
+		engine: &LLMAgentEngine{
+			tools:    stubToolExecutor{defs: []api.ToolDetailResponse{tool}},
+			frontend: frontendtools.NewDefaultRegistry(),
+		},
+		session: contracts.QuerySession{RunID: "run_1"},
+		execCtx: &contracts.ExecutionContext{},
+	}
+
+	invocation, deltas, toolMsg := stream.prepareToolCall(openAIToolCall{
+		ID:   "tool_1",
+		Type: "function",
+		Function: openAIFunctionCall{
+			Name:      "file_write",
+			Arguments: `{"file_path":"/tmp/test.txt","content":"hello"}`,
+		},
+	})
+	if invocation == nil {
+		t.Fatalf("expected invocation without description, got nil")
+	}
+	if len(deltas) != 0 {
+		t.Fatalf("expected no error deltas, got %#v", deltas)
+	}
+	if toolMsg != nil {
+		t.Fatalf("expected no tool message, got %#v", toolMsg)
+	}
+	if invocation.toolName != "file_write" {
+		t.Fatalf("expected file_write invocation, got %s", invocation.toolName)
+	}
+
+	// Also test file_edit without description
+	invocation2, deltas2, toolMsg2 := stream.prepareToolCall(openAIToolCall{
+		ID:   "tool_2",
+		Type: "function",
+		Function: openAIFunctionCall{
+			Name:      "file_edit",
+			Arguments: `{"file_path":"/tmp/test.txt","old_string":"hello","new_string":"hi"}`,
+		},
+	})
+	if invocation2 == nil {
+		t.Fatalf("expected invocation for file_edit without description, got nil")
+	}
+	if len(deltas2) != 0 {
+		t.Fatalf("expected no error deltas for file_edit, got %#v", deltas2)
+	}
+	if toolMsg2 != nil {
+		t.Fatalf("expected no tool message for file_edit, got %#v", toolMsg2)
+	}
+	if invocation2.toolName != "file_edit" {
+		t.Fatalf("expected file_edit invocation, got %s", invocation2.toolName)
+	}
+}
+
 func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 	tests := []struct {
 		name                     string
