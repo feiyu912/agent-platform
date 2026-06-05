@@ -296,6 +296,8 @@ func mapArchivedSummary(item chat.ArchivedSummary) api.ArchivedSummaryResponse {
 }
 
 func mapRunSummary(run chat.RunSummary) api.RunSummary {
+	usage := run.Usage
+	usage.ModelKey = ""
 	return api.RunSummary{
 		RunID:           run.RunID,
 		ChatID:          run.ChatID,
@@ -305,7 +307,7 @@ func mapRunSummary(run chat.RunSummary) api.RunSummary {
 		FinishReason:    run.FinishReason,
 		StartedAt:       run.StartedAt,
 		CompletedAt:     run.CompletedAt,
-		Usage:           mapUsageData(run.Usage),
+		Usage:           mapUsageData(usage),
 		FeedbackType:    run.FeedbackType,
 		FeedbackComment: run.FeedbackComment,
 		FeedbackAt:      run.FeedbackAt,

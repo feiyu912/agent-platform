@@ -184,6 +184,7 @@ func (DeltaDebugPreCall) agentDeltaTag() {}
 type DeltaDebugPostCall struct {
 	ChatID                          string
 	ModelKey                        string
+	ReasoningEffort                 string
 	ContextWindow                   int
 	CurrentContextSize              int
 	EstimatedNextCallSize           int
@@ -212,6 +213,7 @@ func (DeltaDebugPostCall) agentDeltaTag() {}
 type DeltaUsageSnapshot struct {
 	ChatID                          string
 	ModelKey                        string
+	ReasoningEffort                 string
 	ContextWindow                   int
 	CurrentContextSize              int
 	EstimatedNextCallSize           int

@@ -312,7 +312,7 @@ func TestRunEventProcessorDecoratesUsageSnapshotWithEstimatedCost(t *testing.T) 
 	data := &stream.EventData{
 		Type: "usage.snapshot",
 		Payload: map[string]any{
-			"model": map[string]any{"key": "mock-model"},
+			"contextWindow": map[string]any{"modelKey": "mock-model"},
 			"usage": map[string]any{
 				"current": map[string]any{
 					"promptTokens":     1_000_000,
@@ -346,8 +346,8 @@ func TestRunEventProcessorDecoratesUsageSnapshotWithEstimatedCost(t *testing.T) 
 		t.Fatalf("unexpected current estimated cost %#v", currentCost)
 	}
 	run, _ := usage["run"].(map[string]any)
-	if run["modelKey"] != "mock-model" {
-		t.Fatalf("expected run modelKey, got %#v", run)
+	if _, exists := run["modelKey"]; exists {
+		t.Fatalf("did not expect run modelKey, got %#v", run)
 	}
 	runCost, _ := run["estimatedCost"].(map[string]any)
 	if runCost["currency"] != "CNY" || floatValue(runCost["inputCacheHit"]) != 0.005 ||
@@ -373,7 +373,7 @@ func TestRunEventProcessorPreservesEstimatedCostOnTerminalUsage(t *testing.T) {
 	processor.decorate(&stream.EventData{
 		Type: "usage.snapshot",
 		Payload: map[string]any{
-			"model": map[string]any{"key": "mock-model"},
+			"contextWindow": map[string]any{"modelKey": "mock-model"},
 			"usage": map[string]any{
 				"current": map[string]any{
 					"promptTokens":     1_000_000,
@@ -419,8 +419,11 @@ func TestRunEventProcessorPreservesEstimatedCostOnTerminalUsage(t *testing.T) {
 	usage, _ := data.Payload["usage"].(map[string]any)
 	run, _ := usage["run"].(map[string]any)
 	runCost, _ := run["estimatedCost"].(map[string]any)
-	if run["modelKey"] != "mock-model" || floatValue(runCost["total"]) != 9 {
-		t.Fatalf("expected terminal usage to preserve modelKey and cost, got %#v", run)
+	if _, exists := run["modelKey"]; exists {
+		t.Fatalf("did not expect terminal usage to expose modelKey, got %#v", run)
+	}
+	if floatValue(runCost["total"]) != 9 {
+		t.Fatalf("expected terminal usage to preserve cost, got %#v", run)
 	}
 }
 

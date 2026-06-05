@@ -165,6 +165,12 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 			"llmChatCompletionCount": value.LLMReturnLLMChatCompletionCount,
 			"toolCallCount":          value.LLMReturnToolCallCount,
 		}
+		if value.ModelKey != "" {
+			llmReturnUsage["modelKey"] = value.ModelKey
+		}
+		if value.ReasoningEffort != "" {
+			llmReturnUsage["reasoningEffort"] = value.ReasoningEffort
+		}
 		addDetailedUsage(llmReturnUsage, value.LLMReturnCachedTokens, value.LLMReturnReasoningTokens, value.LLMReturnPromptCacheHitTokens, value.LLMReturnPromptCacheMissTokens)
 		runUsage := map[string]any{
 			"promptTokens":           value.RunPromptTokens,
@@ -179,12 +185,15 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 			"chatId": value.ChatID,
 			"data": map[string]any{
 				"model": map[string]any{
-					"key": value.ModelKey,
+					"key":             value.ModelKey,
+					"reasoningEffort": value.ReasoningEffort,
 				},
 				"contextWindow": map[string]any{
-					"maxSize":       value.ContextWindow,
-					"actualSize":    value.CurrentContextSize,
-					"estimatedSize": value.EstimatedNextCallSize,
+					"maxSize":         value.ContextWindow,
+					"actualSize":      value.CurrentContextSize,
+					"estimatedSize":   value.EstimatedNextCallSize,
+					"modelKey":        value.ModelKey,
+					"reasoningEffort": value.ReasoningEffort,
 				},
 				"usage": map[string]any{
 					"llmReturnUsage": llmReturnUsage,
@@ -200,7 +209,7 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 		if value.RunTotalTokens > 0 || value.RunLLMChatCompletionCount > 0 || value.RunToolCallCount > 0 {
 			d.state.runUsage = runUsageStateFromValues(value.RunPromptTokens, value.RunCompletionTokens, value.RunTotalTokens, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens, value.RunLLMChatCompletionCount, value.RunToolCallCount)
 		}
-		return []StreamEvent{usageSnapshotEvent(d.request.RunID, value.TaskID, value.ChatID, value.ModelKey, value.ContextWindow, value.CurrentContextSize, value.EstimatedNextCallSize, value.LLMReturnPromptTokens, value.LLMReturnCompletionTokens, value.LLMReturnTotalTokens, value.LLMReturnCachedTokens, value.LLMReturnReasoningTokens, value.LLMReturnPromptCacheHitTokens, value.LLMReturnPromptCacheMissTokens, value.LLMReturnLLMChatCompletionCount, value.LLMReturnToolCallCount, value.RunPromptTokens, value.RunCompletionTokens, value.RunTotalTokens, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens, value.RunLLMChatCompletionCount, value.RunToolCallCount)}
+		return []StreamEvent{usageSnapshotEvent(d.request.RunID, value.TaskID, value.ChatID, value.ModelKey, value.ReasoningEffort, value.ContextWindow, value.CurrentContextSize, value.EstimatedNextCallSize, value.LLMReturnPromptTokens, value.LLMReturnCompletionTokens, value.LLMReturnTotalTokens, value.LLMReturnCachedTokens, value.LLMReturnReasoningTokens, value.LLMReturnPromptCacheHitTokens, value.LLMReturnPromptCacheMissTokens, value.LLMReturnLLMChatCompletionCount, value.LLMReturnToolCallCount, value.RunPromptTokens, value.RunCompletionTokens, value.RunTotalTokens, value.RunCachedTokens, value.RunReasoningTokens, value.RunPromptCacheHitTokens, value.RunPromptCacheMissTokens, value.RunLLMChatCompletionCount, value.RunToolCallCount)}
 	case InputRunComplete:
 		d.state.runFinishReason = value.FinishReason
 		return nil
@@ -221,26 +230,32 @@ func (d *StreamEventDispatcher) Dispatch(input StreamInput) []StreamEvent {
 	}
 }
 
-func usageSnapshotEvent(runID string, taskID string, chatID string, modelKey string, contextWindow int, currentContextSize int, estimatedNextCallSize int, currentPromptTokens int, currentCompletionTokens int, currentTotalTokens int, currentCachedTokens int, currentReasoningTokens int, currentPromptCacheHitTokens int, currentPromptCacheMissTokens int, currentLLMChatCompletionCount int, currentToolCallCount int, runPromptTokens int, runCompletionTokens int, runTotalTokens int, runCachedTokens int, runReasoningTokens int, runPromptCacheHitTokens int, runPromptCacheMissTokens int, runLLMChatCompletionCount int, runToolCallCount int) StreamEvent {
+func usageSnapshotEvent(runID string, taskID string, chatID string, modelKey string, reasoningEffort string, contextWindow int, currentContextSize int, estimatedNextCallSize int, currentPromptTokens int, currentCompletionTokens int, currentTotalTokens int, currentCachedTokens int, currentReasoningTokens int, currentPromptCacheHitTokens int, currentPromptCacheMissTokens int, currentLLMChatCompletionCount int, currentToolCallCount int, runPromptTokens int, runCompletionTokens int, runTotalTokens int, runCachedTokens int, runReasoningTokens int, runPromptCacheHitTokens int, runPromptCacheMissTokens int, runLLMChatCompletionCount int, runToolCallCount int) StreamEvent {
 	currentUsage := usageMapFromValues(currentPromptTokens, currentCompletionTokens, currentTotalTokens, currentCachedTokens, currentReasoningTokens, currentPromptCacheHitTokens, currentPromptCacheMissTokens, currentLLMChatCompletionCount, currentToolCallCount, false)
 	runUsage := usageMapFromValues(runPromptTokens, runCompletionTokens, runTotalTokens, runCachedTokens, runReasoningTokens, runPromptCacheHitTokens, runPromptCacheMissTokens, runLLMChatCompletionCount, runToolCallCount, true)
 	if modelKey != "" {
 		currentUsage["modelKey"] = modelKey
-		runUsage["modelKey"] = modelKey
+	}
+	if reasoningEffort != "" {
+		currentUsage["reasoningEffort"] = reasoningEffort
+	}
+	contextWindowPayload := map[string]any{
+		"maxSize":               contextWindow,
+		"currentSize":           currentContextSize,
+		"estimatedNextCallSize": estimatedNextCallSize,
+		"actualSize":            currentContextSize,
+		"estimatedSize":         estimatedNextCallSize,
+	}
+	if modelKey != "" {
+		contextWindowPayload["modelKey"] = modelKey
+	}
+	if reasoningEffort != "" {
+		contextWindowPayload["reasoningEffort"] = reasoningEffort
 	}
 	payload := map[string]any{
-		"runId":  runID,
-		"chatId": chatID,
-		"model": map[string]any{
-			"key": modelKey,
-		},
-		"contextWindow": map[string]any{
-			"maxSize":               contextWindow,
-			"currentSize":           currentContextSize,
-			"estimatedNextCallSize": estimatedNextCallSize,
-			"actualSize":            currentContextSize,
-			"estimatedSize":         estimatedNextCallSize,
-		},
+		"runId":         runID,
+		"chatId":        chatID,
+		"contextWindow": contextWindowPayload,
 		"usage": map[string]any{
 			"current": currentUsage,
 			"run":     runUsage,

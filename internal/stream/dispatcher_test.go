@@ -294,6 +294,7 @@ func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) 
 		TaskID:                          "task_sub_1",
 		ChatID:                          "chat_1",
 		ModelKey:                        "deepseek-v4-pro",
+		ReasoningEffort:                 "HIGH",
 		ContextWindow:                   128000,
 		CurrentContextSize:              100,
 		EstimatedNextCallSize:           200,
@@ -339,15 +340,22 @@ func TestDispatcherUsageSnapshotIncludesTaskAndDeepSeekCacheUsage(t *testing.T) 
 	if current["modelKey"] != "deepseek-v4-pro" {
 		t.Fatalf("expected current modelKey, got %#v", usage)
 	}
+	if current["reasoningEffort"] != "HIGH" {
+		t.Fatalf("expected current reasoningEffort, got %#v", usage)
+	}
 	runPromptDetails, _ := run["promptTokensDetails"].(map[string]any)
 	if runPromptDetails["cacheHitTokens"] != 128 || runPromptDetails["cacheMissTokens"] != 172 || run["llmChatCompletionCount"] != 2 || run["toolCallCount"] != 5 {
 		t.Fatalf("expected detailed run usage, got %#v", usage)
 	}
-	if run["modelKey"] != "deepseek-v4-pro" {
-		t.Fatalf("expected run modelKey, got %#v", usage)
+	if _, exists := run["modelKey"]; exists {
+		t.Fatalf("did not expect run modelKey, got %#v", usage)
+	}
+	if _, exists := data.Map()["model"]; exists {
+		t.Fatalf("did not expect top-level model, got %#v", data.Map())
 	}
 	cw, _ := data.Value("contextWindow").(map[string]any)
-	if cw["maxSize"] != 128000 || cw["currentSize"] != 100 || cw["estimatedNextCallSize"] != 200 {
+	if cw["maxSize"] != 128000 || cw["currentSize"] != 100 || cw["estimatedNextCallSize"] != 200 ||
+		cw["modelKey"] != "deepseek-v4-pro" || cw["reasoningEffort"] != "HIGH" {
 		t.Fatalf("unexpected context window %#v", cw)
 	}
 }

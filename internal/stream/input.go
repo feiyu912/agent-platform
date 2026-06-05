@@ -248,6 +248,7 @@ type InputDebugPostCall struct {
 	TaskID                          string
 	ChatID                          string
 	ModelKey                        string
+	ReasoningEffort                 string
 	ContextWindow                   int
 	CurrentContextSize              int
 	EstimatedNextCallSize           int
@@ -277,6 +278,7 @@ type InputUsageSnapshot struct {
 	TaskID                          string
 	ChatID                          string
 	ModelKey                        string
+	ReasoningEffort                 string
 	ContextWindow                   int
 	CurrentContextSize              int
 	EstimatedNextCallSize           int

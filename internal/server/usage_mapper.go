@@ -99,7 +99,9 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, re
 
 func latestRunUsageFromSummaries(runs []chat.RunSummary) *api.ChatUsageData {
 	for _, run := range runs {
-		if mapped := mapUsageDataPtr(&run.Usage); mapped != nil {
+		usage := run.Usage
+		usage.ModelKey = ""
+		if mapped := mapUsageDataPtr(&usage); mapped != nil {
 			return mapped
 		}
 	}
@@ -115,7 +117,9 @@ func runUsageForID(runs []chat.RunSummary, runID string) *api.ChatUsageData {
 		if strings.TrimSpace(run.RunID) != runID {
 			continue
 		}
-		if mapped := mapUsageDataPtr(&run.Usage); mapped != nil {
+		usage := run.Usage
+		usage.ModelKey = ""
+		if mapped := mapUsageDataPtr(&usage); mapped != nil {
 			return mapped
 		}
 		return nil
@@ -146,11 +150,13 @@ func mapChatContextWindow(contextWindow map[string]any) *api.ChatContextWindow {
 		return nil
 	}
 	out := api.ChatContextWindow{
+		ModelKey:              strings.TrimSpace(contracts.FirstNonEmptyString(contextWindow["modelKey"], contextWindow["model_key"])),
+		ReasoningEffort:       strings.TrimSpace(contracts.FirstNonEmptyString(contextWindow["reasoningEffort"], contextWindow["reasoning_effort"])),
 		MaxSize:               contracts.AnyIntNode(contextWindow["maxSize"]),
-		CurrentSize:           contracts.AnyIntNode(contextWindow["currentSize"]),
-		EstimatedNextCallSize: contracts.AnyIntNode(contextWindow["estimatedNextCallSize"]),
+		CurrentSize:           firstPositiveInt(contracts.AnyIntNode(contextWindow["currentSize"]), contracts.AnyIntNode(contextWindow["current_size"]), contracts.AnyIntNode(contextWindow["actualSize"]), contracts.AnyIntNode(contextWindow["actual_size"])),
+		EstimatedNextCallSize: firstPositiveInt(contracts.AnyIntNode(contextWindow["estimatedNextCallSize"]), contracts.AnyIntNode(contextWindow["estimated_next_call_size"]), contracts.AnyIntNode(contextWindow["estimatedSize"]), contracts.AnyIntNode(contextWindow["estimated_size"])),
 	}
-	if out.MaxSize == 0 && out.CurrentSize == 0 && out.EstimatedNextCallSize == 0 {
+	if out.MaxSize == 0 && out.CurrentSize == 0 && out.EstimatedNextCallSize == 0 && out.ModelKey == "" && out.ReasoningEffort == "" {
 		return nil
 	}
 	return &out

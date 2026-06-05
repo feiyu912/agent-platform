@@ -63,6 +63,13 @@ func (s *llmRunStream) effectiveContextWindow() int {
 	return defaultContextWindow
 }
 
+func (s *llmRunStream) effectiveReasoningEffort() string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.stageSettings.ReasoningEffort)
+}
+
 func (s *llmRunStream) currentSystemRef() map[string]any {
 	if s == nil {
 		return nil
@@ -96,6 +103,7 @@ func (s *llmRunStream) emitPendingUsageDelta() {
 	s.pending = append(s.pending, DeltaDebugPostCall{
 		ChatID:                          s.session.ChatID,
 		ModelKey:                        s.model.Key,
+		ReasoningEffort:                 s.effectiveReasoningEffort(),
 		ContextWindow:                   s.effectiveContextWindow(),
 		CurrentContextSize:              s.currentContextSize(),
 		EstimatedNextCallSize:           s.estimatedNextCallSize(),
@@ -159,6 +167,7 @@ func (s *llmRunStream) commitUsage(usage *openAIUsage) {
 	s.pending = append(s.pending, DeltaUsageSnapshot{
 		ChatID:                          s.session.ChatID,
 		ModelKey:                        s.model.Key,
+		ReasoningEffort:                 s.effectiveReasoningEffort(),
 		ContextWindow:                   s.effectiveContextWindow(),
 		CurrentContextSize:              s.currentContextSize(),
 		EstimatedNextCallSize:           s.estimatedNextCallSize(),

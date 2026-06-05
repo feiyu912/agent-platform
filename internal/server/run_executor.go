@@ -162,20 +162,20 @@ func (p *runEventProcessor) decorateUsageSnapshot(data *stream.EventData) {
 		}
 	}
 	if run, _ := usage["run"].(map[string]any); run != nil {
-		if modelKey != "" {
-			run["modelKey"] = modelKey
-		}
 		if p.runUsage != nil {
 			mergeUsageMapIntoRunData(p.runUsage, run)
 			p.applyRunModelKey()
-			usage["run"] = usageDataMap(*p.runUsage)
+			runUsage := *p.runUsage
+			runUsage.ModelKey = ""
+			usage["run"] = usageDataMap(runUsage)
 		}
 	}
 }
 
 func (p *runEventProcessor) modelKeyFromEvent(data *stream.EventData) string {
 	modelNode, _ := data.Payload["model"].(map[string]any)
-	return strings.TrimSpace(contracts.AnyStringNode(modelNode["key"]))
+	contextWindow, _ := data.Payload["contextWindow"].(map[string]any)
+	return strings.TrimSpace(contracts.FirstNonEmptyString(contextWindow["modelKey"], contextWindow["model_key"], modelNode["key"]))
 }
 
 func (p *runEventProcessor) estimateUsageCostForModel(usage chat.UsageData) chat.UsageData {
@@ -234,9 +234,11 @@ func (p *runEventProcessor) decorateTerminalUsage(data *stream.EventData) {
 	p.applyRunModelKey()
 	chatUsage := addUsageData(p.chatUsage, *p.runUsage)
 	chatUsage.ModelKey = ""
+	runUsage := *p.runUsage
+	runUsage.ModelKey = ""
 	data.Payload["usage"] = map[string]any{
 		"chat": usageDataMap(chatUsage),
-		"run":  usageDataMap(*p.runUsage),
+		"run":  usageDataMap(runUsage),
 	}
 }
 

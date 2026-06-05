@@ -1962,12 +1962,14 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 		Type: "usage.snapshot",
 		Payload: map[string]any{
 			"model": map[string]any{
-				"key": "mock-model",
+				"key":             "mock-model",
+				"reasoningEffort": "HIGH",
 			},
 			"contextWindow": map[string]any{
 				"maxSize":               128000,
 				"currentSize":           100,
 				"estimatedNextCallSize": 200,
+				"reasoningEffort":       "HIGH",
 			},
 			"usage": map[string]any{
 				"current": map[string]any{
@@ -2018,6 +2020,9 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 	if usage["modelKey"] != "mock-model" {
 		t.Fatalf("expected persisted usage snapshot modelKey, got %#v", lines[0])
 	}
+	if usage["reasoningEffort"] != "HIGH" {
+		t.Fatalf("expected persisted usage snapshot reasoningEffort, got %#v", lines[0])
+	}
 	estimatedCost, _ := usage["estimatedCost"].(map[string]any)
 	if estimatedCost["currency"] != "CNY" || estimatedCost["total"] != 0.06 {
 		t.Fatalf("expected persisted usage snapshot estimated cost, got %#v", lines[0])
@@ -2025,6 +2030,9 @@ func TestStepWriterPersistsUsageSnapshotWhenDebugEventsDisabled(t *testing.T) {
 	contextWindow, _ := lines[0]["contextWindow"].(map[string]any)
 	if toIntValue(contextWindow["maxSize"]) != 128000 || toIntValue(contextWindow["actualSize"]) != 100 || toIntValue(contextWindow["estimatedSize"]) != 200 {
 		t.Fatalf("expected context window to persist, got %#v", lines[0])
+	}
+	if contextWindow["modelKey"] != "mock-model" || contextWindow["reasoningEffort"] != "HIGH" {
+		t.Fatalf("expected context window model metadata to persist, got %#v", lines[0])
 	}
 }
 

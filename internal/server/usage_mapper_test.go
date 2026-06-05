@@ -107,8 +107,8 @@ func TestChatUsageBreakdownPrefersLatestRunAndHistoricalChatUsage(t *testing.T) 
 	if breakdown.LastRun.ToolCallCount != 2 {
 		t.Fatalf("expected latest run tool call count, got %#v", breakdown.LastRun)
 	}
-	if breakdown.LastRun.ModelKey != "mock-model" || breakdown.LastRun.EstimatedCost == nil || breakdown.LastRun.EstimatedCost.Total != 0.12 {
-		t.Fatalf("expected latest run modelKey and cost, got %#v", breakdown.LastRun)
+	if breakdown.LastRun.ModelKey != "" || breakdown.LastRun.EstimatedCost == nil || breakdown.LastRun.EstimatedCost.Total != 0.12 {
+		t.Fatalf("expected latest run usage to omit modelKey and preserve cost, got %#v", breakdown.LastRun)
 	}
 	if breakdown.Chat.PromptTokens != 111 || breakdown.Chat.CompletionTokens != 22 || breakdown.Chat.TotalTokens != 133 ||
 		breakdown.Chat.LlmChatCompletionCount != 2 || breakdown.Chat.ToolCallCount != 4 {
@@ -185,12 +185,31 @@ func TestChatUsageBreakdownPrefersCompletedRunSummaryOverReplayForSameRun(t *tes
 	if breakdown == nil || breakdown.LastRun == nil {
 		t.Fatalf("expected usage breakdown, got %#v", breakdown)
 	}
-	if breakdown.LastRun.ModelKey != "mock-model" ||
+	if breakdown.LastRun.ModelKey != "" ||
 		breakdown.LastRun.EstimatedCost == nil ||
 		breakdown.LastRun.EstimatedCost.Total != 0.12 ||
 		breakdown.LastRun.CompletionTokensDetails == nil ||
 		breakdown.LastRun.CompletionTokensDetails.ReasoningTokens != 3 {
-		t.Fatalf("expected completed run summary to preserve model/cost/details, got %#v", breakdown.LastRun)
+		t.Fatalf("expected completed run summary to omit model and preserve cost/details, got %#v", breakdown.LastRun)
+	}
+}
+
+func TestMapChatContextWindowIncludesModelMetadata(t *testing.T) {
+	contextWindow := mapChatContextWindow(map[string]any{
+		"maxSize":         128000,
+		"actualSize":      100,
+		"estimatedSize":   200,
+		"modelKey":        "mock-model",
+		"reasoningEffort": "HIGH",
+	})
+
+	if contextWindow == nil ||
+		contextWindow.MaxSize != 128000 ||
+		contextWindow.CurrentSize != 100 ||
+		contextWindow.EstimatedNextCallSize != 200 ||
+		contextWindow.ModelKey != "mock-model" ||
+		contextWindow.ReasoningEffort != "HIGH" {
+		t.Fatalf("unexpected context window %#v", contextWindow)
 	}
 }
 

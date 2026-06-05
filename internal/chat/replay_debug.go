@@ -41,6 +41,12 @@ func synthesizedContextWindow(contextWindow map[string]any) map[string]any {
 	if v := toIntFromKeys(contextWindow, "estimatedSize", "estimated_size"); v > 0 {
 		cw["estimatedSize"] = v
 	}
+	if modelKey := firstStringFromKeys(contextWindow, "modelKey", "model_key"); modelKey != "" {
+		cw["modelKey"] = modelKey
+	}
+	if reasoningEffort := firstStringFromKeys(contextWindow, "reasoningEffort", "reasoning_effort"); reasoningEffort != "" {
+		cw["reasoningEffort"] = reasoningEffort
+	}
 	return cw
 }
 
@@ -58,7 +64,32 @@ func synthesizedUsageSnapshotContextWindow(contextWindow map[string]any) map[str
 	if v := toIntFromKeys(contextWindow, "estimatedNextCallSize", "estimated_next_call_size", "estimatedSize", "estimated_size"); v > 0 {
 		cw["estimatedNextCallSize"] = v
 	}
+	if modelKey := firstStringFromKeys(contextWindow, "modelKey", "model_key"); modelKey != "" {
+		cw["modelKey"] = modelKey
+	}
+	if reasoningEffort := firstStringFromKeys(contextWindow, "reasoningEffort", "reasoning_effort"); reasoningEffort != "" {
+		cw["reasoningEffort"] = reasoningEffort
+	}
 	return cw
+}
+
+func contextWindowWithUsageModel(contextWindow map[string]any, usage map[string]any) map[string]any {
+	if len(contextWindow) == 0 {
+		contextWindow = map[string]any{}
+	} else {
+		contextWindow = cloneStringAnyMap(contextWindow)
+	}
+	if firstStringFromKeys(contextWindow, "modelKey", "model_key") == "" {
+		if modelKey := firstStringFromKeys(usage, "modelKey", "model_key"); modelKey != "" {
+			contextWindow["modelKey"] = modelKey
+		}
+	}
+	if firstStringFromKeys(contextWindow, "reasoningEffort", "reasoning_effort") == "" {
+		if reasoningEffort := firstStringFromKeys(usage, "reasoningEffort", "reasoning_effort"); reasoningEffort != "" {
+			contextWindow["reasoningEffort"] = reasoningEffort
+		}
+	}
+	return contextWindow
 }
 
 func cumulativeUsagePayload(cumulative map[string]int) map[string]any {
@@ -81,15 +112,23 @@ func synthesizeUsageSnapshotEvent(runID, chatID string, taskID string, usage map
 	if !hasProviderUsagePayload(usage) {
 		return nil
 	}
+	currentUsage := usagePayloadFromMap(usage, false)
+	if modelKey := firstStringFromKeys(currentUsage, "modelKey", "model_key"); modelKey == "" {
+		if modelKey := firstStringFromKeys(contextWindow, "modelKey", "model_key"); modelKey != "" {
+			currentUsage["modelKey"] = modelKey
+		}
+	}
+	if reasoningEffort := firstStringFromKeys(currentUsage, "reasoningEffort", "reasoning_effort"); reasoningEffort == "" {
+		if reasoningEffort := firstStringFromKeys(contextWindow, "reasoningEffort", "reasoning_effort"); reasoningEffort != "" {
+			currentUsage["reasoningEffort"] = reasoningEffort
+		}
+	}
 	payload := map[string]any{
 		"runId":  runID,
 		"chatId": chatID,
 		"usage": map[string]any{
-			"current": usagePayloadFromMap(usage, false),
+			"current": currentUsage,
 		},
-	}
-	if modelKey := firstStringFromKeys(usage, "modelKey", "model_key"); modelKey != "" {
-		payload["model"] = map[string]any{"key": modelKey}
 	}
 	if cw := synthesizedUsageSnapshotContextWindow(contextWindow); len(cw) > 0 {
 		payload["contextWindow"] = cw
@@ -170,12 +209,26 @@ func synthesizePostCallEvent(runID, chatID string, taskID string, usage map[stri
 
 func usagePayloadFromSnapshotEvent(event stream.EventData, usage map[string]any, includeLLMChatCompletionCount bool) map[string]any {
 	out := usagePayloadFromMap(usage, includeLLMChatCompletionCount)
-	if _, ok := out["modelKey"]; ok {
-		return out
+	contextWindow, _ := event.Value("contextWindow").(map[string]any)
+	if _, ok := out["modelKey"]; !ok {
+		model, _ := event.Value("model").(map[string]any)
+		modelKey := firstStringFromKeys(contextWindow, "modelKey", "model_key")
+		if modelKey == "" {
+			modelKey = strings.TrimSpace(stringFromAny(model["key"]))
+		}
+		if modelKey != "" {
+			out["modelKey"] = modelKey
+		}
 	}
-	model, _ := event.Value("model").(map[string]any)
-	if modelKey := strings.TrimSpace(stringFromAny(model["key"])); modelKey != "" {
-		out["modelKey"] = modelKey
+	if _, ok := out["reasoningEffort"]; !ok {
+		model, _ := event.Value("model").(map[string]any)
+		reasoningEffort := firstStringFromKeys(contextWindow, "reasoningEffort", "reasoning_effort")
+		if reasoningEffort == "" {
+			reasoningEffort = strings.TrimSpace(stringFromAny(model["reasoningEffort"]))
+		}
+		if reasoningEffort != "" {
+			out["reasoningEffort"] = reasoningEffort
+		}
 	}
 	return out
 }
@@ -188,6 +241,9 @@ func usagePayloadFromMap(usage map[string]any, includeLLMChatCompletionCount boo
 	}
 	if modelKey := firstStringFromKeys(usage, "modelKey", "model_key"); modelKey != "" {
 		out["modelKey"] = modelKey
+	}
+	if reasoningEffort := firstStringFromKeys(usage, "reasoningEffort", "reasoning_effort"); reasoningEffort != "" {
+		out["reasoningEffort"] = reasoningEffort
 	}
 	addUsageDetailsToMap(
 		out,

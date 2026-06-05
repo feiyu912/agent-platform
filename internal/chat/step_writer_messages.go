@@ -273,6 +273,12 @@ func buildContextWindow(usage map[string]any, maxSize int, estimatedSize int) ma
 	if estimatedSize > 0 {
 		cw["estimatedSize"] = estimatedSize
 	}
+	if modelKey := firstStringFromKeys(usage, "modelKey", "model_key"); modelKey != "" {
+		cw["modelKey"] = modelKey
+	}
+	if reasoningEffort := firstStringFromKeys(usage, "reasoningEffort", "reasoning_effort"); reasoningEffort != "" {
+		cw["reasoningEffort"] = reasoningEffort
+	}
 	if len(cw) == 0 {
 		return nil
 	}

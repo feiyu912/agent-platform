@@ -220,6 +220,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			awaitingReplay := newStepAwaitingReplay(line["awaiting"], runID)
 			stepUsage, _ := line["usage"].(map[string]any)
 			stepContextWindow, _ := line["contextWindow"].(map[string]any)
+			stepContextWindow = contextWindowWithUsageModel(stepContextWindow, stepUsage)
 			if cw := synthesizedUsageSnapshotContextWindow(stepContextWindow); len(cw) > 0 {
 				latestContextWindow = cw
 			}

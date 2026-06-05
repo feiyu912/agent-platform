@@ -290,6 +290,7 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 		return []stream.StreamInput{stream.InputDebugPostCall{
 			ChatID:                          value.ChatID,
 			ModelKey:                        value.ModelKey,
+			ReasoningEffort:                 value.ReasoningEffort,
 			ContextWindow:                   value.ContextWindow,
 			CurrentContextSize:              value.CurrentContextSize,
 			EstimatedNextCallSize:           value.EstimatedNextCallSize,
@@ -317,6 +318,7 @@ func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
 		return []stream.StreamInput{stream.InputUsageSnapshot{
 			ChatID:                          value.ChatID,
 			ModelKey:                        value.ModelKey,
+			ReasoningEffort:                 value.ReasoningEffort,
 			ContextWindow:                   value.ContextWindow,
 			CurrentContextSize:              value.CurrentContextSize,
 			EstimatedNextCallSize:           value.EstimatedNextCallSize,
