@@ -73,16 +73,20 @@ func latestUsageFromEvents(events []stream.EventData, key string) *api.ChatUsage
 	return latest
 }
 
-func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, events []stream.EventData) *api.ChatUsageBreakdown {
-	var lastRun *api.ChatUsageData
-	for _, run := range runs {
-		if mapped := mapUsageDataPtr(&run.Usage); mapped != nil {
+func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, replayUsage chat.ReplayUsage) *api.ChatUsageBreakdown {
+	lastRun := latestRunUsageFromSummaries(runs)
+	if replayRunID := strings.TrimSpace(replayUsage.LastRunID); replayRunID != "" {
+		if completedRun := runUsageForID(runs, replayRunID); completedRun != nil {
+			lastRun = completedRun
+		} else if mapped := mapUsageDataPtr(&replayUsage.LastRun); mapped != nil {
 			lastRun = mapped
-			break
 		}
 	}
 
 	chatUsage := mapUsageDataPtr(summaryUsage)
+	if replayChatUsageIsNewer(replayUsage.Chat, summaryUsage) {
+		chatUsage = mapUsageDataPtr(&replayUsage.Chat)
+	}
 
 	if lastRun == nil && chatUsage == nil {
 		return nil
@@ -91,6 +95,50 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, ev
 		LastRun: lastRun,
 		Chat:    chatUsage,
 	}
+}
+
+func latestRunUsageFromSummaries(runs []chat.RunSummary) *api.ChatUsageData {
+	for _, run := range runs {
+		if mapped := mapUsageDataPtr(&run.Usage); mapped != nil {
+			return mapped
+		}
+	}
+	return nil
+}
+
+func runUsageForID(runs []chat.RunSummary, runID string) *api.ChatUsageData {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil
+	}
+	for _, run := range runs {
+		if strings.TrimSpace(run.RunID) != runID {
+			continue
+		}
+		if mapped := mapUsageDataPtr(&run.Usage); mapped != nil {
+			return mapped
+		}
+		return nil
+	}
+	return nil
+}
+
+func replayChatUsageIsNewer(replay chat.UsageData, summary *chat.UsageData) bool {
+	if mapUsageDataPtr(&replay) == nil {
+		return false
+	}
+	if mapUsageDataPtr(summary) == nil {
+		return true
+	}
+	return replay.PromptTokens > summary.PromptTokens ||
+		replay.CompletionTokens > summary.CompletionTokens ||
+		replay.TotalTokens > summary.TotalTokens ||
+		replay.CachedTokens > summary.CachedTokens ||
+		replay.ReasoningTokens > summary.ReasoningTokens ||
+		replay.PromptCacheHitTokens > summary.PromptCacheHitTokens ||
+		replay.PromptCacheMissTokens > summary.PromptCacheMissTokens ||
+		replay.LlmChatCompletionCount > summary.LlmChatCompletionCount ||
+		replay.ToolCallCount > summary.ToolCallCount
 }
 
 func mapChatContextWindow(contextWindow map[string]any) *api.ChatContextWindow {

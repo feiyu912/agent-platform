@@ -256,10 +256,17 @@ type Detail struct {
 	RawMessages   []map[string]any
 	Events        []stream.EventData
 	ContextWindow map[string]any
+	ReplayUsage   ReplayUsage
 	References    []map[string]any
 	Plan          *PlanState
 	Planning      *PlanningState
 	Artifact      *ArtifactState
+}
+
+type ReplayUsage struct {
+	LastRunID string
+	LastRun   UsageData
+	Chat      UsageData
 }
 
 type UsageData struct {

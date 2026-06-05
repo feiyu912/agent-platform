@@ -426,16 +426,64 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 		allEvents[i].Seq = int64(i + 1)
 	}
 
+	lastRunID, lastRunUsage := latestReplayRunUsage(runs, runOrder)
+
 	return Detail{
 		ChatID:        summary.ChatID,
 		ChatName:      summary.ChatName,
 		RawMessages:   rawMessages,
 		Events:        allEvents,
 		ContextWindow: latestContextWindow,
-		Plan:          plan,
-		Planning:      planning,
-		Artifact:      artifact,
+		ReplayUsage: ReplayUsage{
+			LastRunID: lastRunID,
+			LastRun:   lastRunUsage,
+			Chat: UsageData{
+				PromptTokens:           chatTotalPromptTokens,
+				CompletionTokens:       chatTotalCompletionTokens,
+				TotalTokens:            chatTotalTotalTokens,
+				CachedTokens:           chatTotalCachedTokens,
+				ReasoningTokens:        chatTotalReasoningTokens,
+				PromptCacheHitTokens:   chatTotalPromptCacheHitTokens,
+				PromptCacheMissTokens:  chatTotalPromptCacheMissTokens,
+				LlmChatCompletionCount: chatTotalLlmChatCompletionCount,
+				ToolCallCount:          chatTotalToolCallCount,
+			},
+		},
+		Plan:     plan,
+		Planning: planning,
+		Artifact: artifact,
 	}, nil
+}
+
+func latestReplayRunUsage(runs map[string]*chatRunData, runOrder []string) (string, UsageData) {
+	for i := len(runOrder) - 1; i >= 0; i-- {
+		runID := strings.TrimSpace(runOrder[i])
+		if runID == "" {
+			continue
+		}
+		usage := replayRunUsageData(runs[runID])
+		if hasUsageData(usage) {
+			return runID, usage
+		}
+	}
+	return "", UsageData{}
+}
+
+func replayRunUsageData(rd *chatRunData) UsageData {
+	if rd == nil {
+		return UsageData{}
+	}
+	return UsageData{
+		PromptTokens:           rd.totalPromptTokens,
+		CompletionTokens:       rd.totalCompletionTokens,
+		TotalTokens:            rd.totalTotalTokens,
+		CachedTokens:           rd.totalCachedTokens,
+		ReasoningTokens:        rd.totalReasoningTokens,
+		PromptCacheHitTokens:   rd.totalPromptCacheHitTokens,
+		PromptCacheMissTokens:  rd.totalPromptCacheMissTokens,
+		LlmChatCompletionCount: rd.totalLlmChatCompletionCount,
+		ToolCallCount:          rd.totalToolCallCount,
+	}
 }
 
 func suppressLegacyConfirmReplay(event map[string]any, legacyConfirmIDs map[string]bool) bool {

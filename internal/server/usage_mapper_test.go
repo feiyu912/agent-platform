@@ -89,26 +89,10 @@ func TestChatUsageBreakdownPrefersLatestRunAndHistoricalChatUsage(t *testing.T) 
 			{RunID: "run-2", Usage: chat.UsageData{ModelKey: "mock-model", PromptTokens: 11, CompletionTokens: 5, TotalTokens: 16, ReasoningTokens: 3, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.12, LlmChatCompletionCount: 1, ToolCallCount: 2}},
 			{RunID: "run-1", Usage: chat.UsageData{PromptTokens: 100, CompletionTokens: 17, TotalTokens: 117, LlmChatCompletionCount: 1}},
 		},
-		[]stream.EventData{
-			{
-				Type: "usage.snapshot",
-				Payload: map[string]any{
-					"usage": map[string]any{
-						"run": map[string]any{
-							"promptTokens":           11,
-							"completionTokens":       5,
-							"totalTokens":            16,
-							"llmChatCompletionCount": 1,
-						},
-						"chat": map[string]any{
-							"promptTokens":           111,
-							"completionTokens":       22,
-							"totalTokens":            133,
-							"llmChatCompletionCount": 2,
-						},
-					},
-				},
-			},
+		chat.ReplayUsage{
+			LastRunID: "run-2",
+			LastRun:   chat.UsageData{PromptTokens: 11, CompletionTokens: 5, TotalTokens: 16, LlmChatCompletionCount: 1},
+			Chat:      chat.UsageData{PromptTokens: 111, CompletionTokens: 22, TotalTokens: 133, LlmChatCompletionCount: 2},
 		},
 	)
 	if breakdown == nil || breakdown.LastRun == nil || breakdown.Chat == nil {
@@ -136,21 +120,7 @@ func TestChatUsageBreakdownUsesSummaryChatUsageWithoutHistoricalRunFallback(t *t
 	breakdown := chatUsageBreakdown(
 		&chat.UsageData{PromptTokens: 30, CompletionTokens: 7, TotalTokens: 37, LlmChatCompletionCount: 2},
 		nil,
-		[]stream.EventData{
-			{
-				Type: "run.complete",
-				Payload: map[string]any{
-					"usage": map[string]any{
-						"run": map[string]any{
-							"promptTokens":           3,
-							"completionTokens":       4,
-							"totalTokens":            7,
-							"llmChatCompletionCount": 1,
-						},
-					},
-				},
-			},
-		},
+		chat.ReplayUsage{},
 	)
 	if breakdown == nil || breakdown.Chat == nil {
 		t.Fatalf("expected fallback usage breakdown, got %#v", breakdown)
@@ -160,5 +130,86 @@ func TestChatUsageBreakdownUsesSummaryChatUsageWithoutHistoricalRunFallback(t *t
 	}
 	if breakdown.Chat.TotalTokens != 37 || breakdown.Chat.LlmChatCompletionCount != 2 {
 		t.Fatalf("expected chat fallback from summary, got %#v", breakdown.Chat)
+	}
+}
+
+func TestChatUsageBreakdownUsesReplayWhenRunHasNoSummary(t *testing.T) {
+	breakdown := chatUsageBreakdown(
+		nil,
+		nil,
+		chat.ReplayUsage{
+			LastRunID: "run-awaiting",
+			LastRun:   chat.UsageData{PromptTokens: 2822, CompletionTokens: 100, TotalTokens: 2922, LlmChatCompletionCount: 1},
+			Chat:      chat.UsageData{PromptTokens: 2822, CompletionTokens: 100, TotalTokens: 2922, LlmChatCompletionCount: 1},
+		},
+	)
+
+	if breakdown == nil || breakdown.LastRun == nil || breakdown.Chat == nil {
+		t.Fatalf("expected replay usage breakdown, got %#v", breakdown)
+	}
+	if breakdown.LastRun.PromptTokens != 2822 || breakdown.LastRun.CompletionTokens != 100 ||
+		breakdown.LastRun.TotalTokens != 2922 || breakdown.LastRun.LlmChatCompletionCount != 1 {
+		t.Fatalf("unexpected replay last run usage %#v", breakdown.LastRun)
+	}
+	if breakdown.Chat.PromptTokens != 2822 || breakdown.Chat.CompletionTokens != 100 ||
+		breakdown.Chat.TotalTokens != 2922 || breakdown.Chat.LlmChatCompletionCount != 1 {
+		t.Fatalf("unexpected replay chat usage %#v", breakdown.Chat)
+	}
+}
+
+func TestChatUsageBreakdownPrefersCompletedRunSummaryOverReplayForSameRun(t *testing.T) {
+	breakdown := chatUsageBreakdown(
+		nil,
+		[]chat.RunSummary{
+			{
+				RunID: "run-complete",
+				Usage: chat.UsageData{
+					ModelKey:               "mock-model",
+					PromptTokens:           10,
+					CompletionTokens:       5,
+					TotalTokens:            15,
+					ReasoningTokens:        3,
+					EstimatedCostCurrency:  "CNY",
+					EstimatedCostTotal:     0.12,
+					LlmChatCompletionCount: 1,
+				},
+			},
+		},
+		chat.ReplayUsage{
+			LastRunID: "run-complete",
+			LastRun:   chat.UsageData{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, LlmChatCompletionCount: 1},
+			Chat:      chat.UsageData{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, LlmChatCompletionCount: 1},
+		},
+	)
+
+	if breakdown == nil || breakdown.LastRun == nil {
+		t.Fatalf("expected usage breakdown, got %#v", breakdown)
+	}
+	if breakdown.LastRun.ModelKey != "mock-model" ||
+		breakdown.LastRun.EstimatedCost == nil ||
+		breakdown.LastRun.EstimatedCost.Total != 0.12 ||
+		breakdown.LastRun.CompletionTokensDetails == nil ||
+		breakdown.LastRun.CompletionTokensDetails.ReasoningTokens != 3 {
+		t.Fatalf("expected completed run summary to preserve model/cost/details, got %#v", breakdown.LastRun)
+	}
+}
+
+func TestChatUsageBreakdownUsesReplayChatWhenSummaryLags(t *testing.T) {
+	breakdown := chatUsageBreakdown(
+		&chat.UsageData{PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10, LlmChatCompletionCount: 1},
+		nil,
+		chat.ReplayUsage{
+			LastRunID: "run-2",
+			LastRun:   chat.UsageData{PromptTokens: 11, CompletionTokens: 4, TotalTokens: 15, LlmChatCompletionCount: 1},
+			Chat:      chat.UsageData{PromptTokens: 18, CompletionTokens: 7, TotalTokens: 25, LlmChatCompletionCount: 2},
+		},
+	)
+
+	if breakdown == nil || breakdown.Chat == nil {
+		t.Fatalf("expected usage breakdown, got %#v", breakdown)
+	}
+	if breakdown.Chat.PromptTokens != 18 || breakdown.Chat.CompletionTokens != 7 ||
+		breakdown.Chat.TotalTokens != 25 || breakdown.Chat.LlmChatCompletionCount != 2 {
+		t.Fatalf("expected replay chat usage to replace stale summary, got %#v", breakdown.Chat)
 	}
 }

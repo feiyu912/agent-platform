@@ -4850,6 +4850,21 @@ func TestLoadChatReadsUsageFromStepLevel(t *testing.T) {
 	if _, exists := detail.Events[6].Value("usage").(map[string]any); exists {
 		t.Fatalf("did not expect synthesized run.complete usage %#v", detail.Events[6])
 	}
+	if detail.ReplayUsage.LastRunID != "run-step-usage" ||
+		detail.ReplayUsage.LastRun.PromptTokens != 100 ||
+		detail.ReplayUsage.LastRun.CompletionTokens != 50 ||
+		detail.ReplayUsage.LastRun.TotalTokens != 150 ||
+		detail.ReplayUsage.LastRun.LlmChatCompletionCount != 1 ||
+		detail.ReplayUsage.LastRun.ToolCallCount != 2 {
+		t.Fatalf("unexpected replay last run usage %#v", detail.ReplayUsage)
+	}
+	if detail.ReplayUsage.Chat.PromptTokens != 100 ||
+		detail.ReplayUsage.Chat.CompletionTokens != 50 ||
+		detail.ReplayUsage.Chat.TotalTokens != 150 ||
+		detail.ReplayUsage.Chat.LlmChatCompletionCount != 1 ||
+		detail.ReplayUsage.Chat.ToolCallCount != 2 {
+		t.Fatalf("unexpected replay chat usage %#v", detail.ReplayUsage)
+	}
 }
 
 func TestLoadChatDoesNotSynthesizeEmptyUsageSnapshot(t *testing.T) {
@@ -4917,6 +4932,9 @@ func TestLoadChatDoesNotSynthesizeEmptyUsageSnapshot(t *testing.T) {
 	if toIntValue(detail.ContextWindow["maxSize"]) != 128000 || toIntValue(detail.ContextWindow["estimatedNextCallSize"]) != 5703 {
 		t.Fatalf("expected detail context window from empty step usage, got %#v", detail.ContextWindow)
 	}
+	if detail.ReplayUsage.LastRunID != "" || detail.ReplayUsage.Chat.TotalTokens != 0 || detail.ReplayUsage.Chat.LlmChatCompletionCount != 0 {
+		t.Fatalf("did not expect replay usage from empty provider usage, got %#v", detail.ReplayUsage)
+	}
 }
 
 func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
@@ -4983,6 +5001,16 @@ func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
 	}
 	if _, exists := detail.Events[4].Value("usage").(map[string]any); exists {
 		t.Fatalf("did not expect synthesized run.complete usage %#v", detail.Events[4])
+	}
+	if detail.ReplayUsage.LastRunID != "run-legacy-step-usage" ||
+		detail.ReplayUsage.LastRun.PromptTokens != 100 ||
+		detail.ReplayUsage.LastRun.CompletionTokens != 50 ||
+		detail.ReplayUsage.LastRun.TotalTokens != 150 ||
+		detail.ReplayUsage.LastRun.PromptCacheHitTokens != 32 ||
+		detail.ReplayUsage.LastRun.PromptCacheMissTokens != 68 ||
+		detail.ReplayUsage.LastRun.ReasoningTokens != 8 ||
+		detail.ReplayUsage.LastRun.LlmChatCompletionCount != 1 {
+		t.Fatalf("unexpected replay usage from legacy step usage %#v", detail.ReplayUsage)
 	}
 }
 

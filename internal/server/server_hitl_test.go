@@ -291,6 +291,129 @@ func TestFrontendSubmitAndSteerAreConsumedBeforeNextTurn(t *testing.T) {
 	}
 }
 
+func TestAwaitingChatDetailExposesReplayUsageWithoutUsageSnapshotEvent(t *testing.T) {
+	var providerCallCount atomic.Int32
+
+	fixture := newTestFixtureWithModelHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		call := providerCallCount.Add(1)
+		switch call {
+		case 1:
+			writeProviderSSE(t, w,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"tool_question","type":"function","function":{"name":"ask_user_question","arguments":"{\"mode\":\"question\",\"questions\":[{\"question\":\"Need confirmation\",\"type\":\"text\"}]}"}}]},"finish_reason":"tool_calls"}]}`,
+				`{"choices":[],"usage":{"prompt_tokens":2822,"completion_tokens":100,"total_tokens":2922,"completion_tokens_details":{"reasoning_tokens":44}}}`,
+				`[DONE]`,
+			)
+		case 2:
+			writeProviderSSE(t, w,
+				`{"choices":[{"delta":{"content":"confirmed"},"finish_reason":"stop"}]}`,
+				`[DONE]`,
+			)
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+		}
+	})
+
+	httpServer := newLoopbackServer(t, fixture.server)
+	defer httpServer.Close()
+
+	resp, err := http.Post(httpServer.URL+"/api/query", "application/json", bytes.NewBufferString(`{"message":"please ask first","agentKey":"mock-agent"}`))
+	if err != nil {
+		t.Fatalf("post query: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+	var streamBody strings.Builder
+	runID := ""
+	chatID := ""
+	awaitingID := ""
+	agentKey := ""
+	for {
+		line, readErr := reader.ReadString('\n')
+		streamBody.WriteString(line)
+		if strings.HasPrefix(line, "data: {") {
+			payload := decodeSSELine(t, line)
+			if value, _ := payload["chatId"].(string); value != "" {
+				chatID = value
+			}
+			if payload["type"] == "awaiting.ask" {
+				runID, _ = payload["runId"].(string)
+				awaitingID, _ = payload["awaitingId"].(string)
+				agentKey, _ = payload["agentKey"].(string)
+				break
+			}
+		}
+		if readErr != nil {
+			t.Fatalf("read query stream before awaiting.ask: %v", readErr)
+		}
+	}
+	if runID == "" || chatID == "" || awaitingID == "" || agentKey == "" {
+		t.Fatalf("expected active awaiting identifiers, runID=%q chatID=%q awaitingID=%q agentKey=%q stream=%s", runID, chatID, awaitingID, agentKey, streamBody.String())
+	}
+
+	chatRec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(chatRec, httptest.NewRequest(http.MethodGet, "/api/chat?chatId="+chatID, nil))
+	if chatRec.Code != http.StatusOK {
+		t.Fatalf("chat detail expected 200, got %d: %s", chatRec.Code, chatRec.Body.String())
+	}
+	var chatResp api.ApiResponse[api.ChatDetailResponse]
+	if err := json.Unmarshal(chatRec.Body.Bytes(), &chatResp); err != nil {
+		t.Fatalf("decode chat detail: %v", err)
+	}
+
+	toolIndex := -1
+	awaitIndex := -1
+	for i, event := range chatResp.Data.Events {
+		switch event.Type {
+		case "usage.snapshot":
+			t.Fatalf("did not expect historical usage.snapshot event, got %#v", chatResp.Data.Events)
+		case "tool.snapshot":
+			if event.String("toolName") == "ask_user_question" {
+				toolIndex = i
+			}
+		case "awaiting.ask":
+			if event.String("awaitingId") == awaitingID {
+				awaitIndex = i
+			}
+		}
+	}
+	if toolIndex < 0 || awaitIndex <= toolIndex {
+		t.Fatalf("expected tool.snapshot before awaiting.ask, toolIndex=%d awaitIndex=%d events=%#v", toolIndex, awaitIndex, chatResp.Data.Events)
+	}
+	if chatResp.Data.Usage == nil || chatResp.Data.Usage.LastRun == nil || chatResp.Data.Usage.Chat == nil {
+		t.Fatalf("expected replay usage while awaiting, got %#v", chatResp.Data.Usage)
+	}
+	if chatResp.Data.Usage.LastRun.PromptTokens != 2822 ||
+		chatResp.Data.Usage.LastRun.CompletionTokens != 100 ||
+		chatResp.Data.Usage.LastRun.TotalTokens != 2922 ||
+		chatResp.Data.Usage.LastRun.LlmChatCompletionCount != 1 ||
+		chatResp.Data.Usage.LastRun.CompletionTokensDetails == nil ||
+		chatResp.Data.Usage.LastRun.CompletionTokensDetails.ReasoningTokens != 44 {
+		t.Fatalf("unexpected last run replay usage %#v", chatResp.Data.Usage.LastRun)
+	}
+	if chatResp.Data.Usage.Chat.PromptTokens != 2822 ||
+		chatResp.Data.Usage.Chat.CompletionTokens != 100 ||
+		chatResp.Data.Usage.Chat.TotalTokens != 2922 ||
+		chatResp.Data.Usage.Chat.LlmChatCompletionCount != 1 {
+		t.Fatalf("unexpected chat replay usage %#v", chatResp.Data.Usage.Chat)
+	}
+
+	submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", bytes.NewBufferString(`{"agentKey":"`+agentKey+`","runId":"`+runID+`","awaitingId":"`+awaitingID+`","params":[{"id":"q1","answer":"Approve"}]}`))
+	submitReq.Header.Set("Content-Type", "application/json")
+	submitRec := httptest.NewRecorder()
+	fixture.server.ServeHTTP(submitRec, submitReq)
+	if submitRec.Code != http.StatusOK {
+		t.Fatalf("submit expected 200, got %d: %s", submitRec.Code, submitRec.Body.String())
+	}
+	for {
+		if _, readErr := reader.ReadString('\n'); readErr == io.EOF {
+			break
+		} else if readErr != nil {
+			t.Fatalf("read query stream after submit: %v", readErr)
+		}
+	}
+}
+
 func TestQuestionAwaitFollowsToolEnd(t *testing.T) {
 	var providerCallCount atomic.Int32
 	secondTurnMessages := make(chan []map[string]any, 1)
