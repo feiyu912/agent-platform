@@ -395,3 +395,154 @@ func TestAskUserQuestionHandlerFormatSubmitResult(t *testing.T) {
 		t.Fatalf("unexpected summary result: ok=%v got=%q", ok, got)
 	}
 }
+
+func TestAskUserQuestionHandlerValidateArgsRecommendedSingle(t *testing.T) {
+	handler := NewAskUserQuestionHandler()
+	err := handler.ValidateArgs(map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{
+				"question": "Pick a plan",
+				"type":     "select",
+				"options": []any{
+					map[string]any{"label": "A", "recommended": false},
+					map[string]any{"label": "B", "recommended": true},
+					map[string]any{"label": "C"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ValidateArgs returned error for single recommended option: %v", err)
+	}
+
+	// BuildInitialAwaitAsk should preserve recommended
+	awaitAsk := handler.BuildInitialAwaitAsk("tool_1", "run_1", frontendTool("ask_user_question"), map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{
+				"question": "Pick a plan",
+				"type":     "select",
+				"options": []any{
+					map[string]any{"label": "A", "recommended": false},
+					map[string]any{"label": "B", "recommended": true},
+					map[string]any{"label": "C"},
+				},
+			},
+		},
+	}, 0, 5000)
+	if awaitAsk == nil || len(awaitAsk.Questions) != 1 {
+		t.Fatalf("expected await ask with one question, got %#v", awaitAsk)
+	}
+	question := awaitAsk.Questions[0].(map[string]any)
+	options := question["options"].([]any)
+	if len(options) != 3 {
+		t.Fatalf("expected 3 options, got %d", len(options))
+	}
+	opt0 := options[0].(map[string]any)
+	if opt0["recommended"] != false {
+		t.Fatalf("expected option 0 recommended=false, got %#v", opt0["recommended"])
+	}
+	opt1 := options[1].(map[string]any)
+	if opt1["recommended"] != true {
+		t.Fatalf("expected option 1 recommended=true, got %#v", opt1["recommended"])
+	}
+	opt2 := options[2].(map[string]any)
+	if _, has := opt2["recommended"]; has {
+		t.Fatalf("did not expect recommended on option 2, got %#v", opt2["recommended"])
+	}
+}
+
+func TestAskUserQuestionHandlerValidateArgsRecommendedMultiple(t *testing.T) {
+	handler := NewAskUserQuestionHandler()
+	err := handler.ValidateArgs(map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{
+				"question": "Pick a plan",
+				"type":     "select",
+				"options": []any{
+					map[string]any{"label": "A", "recommended": true},
+					map[string]any{"label": "B", "recommended": true},
+					map[string]any{"label": "C"},
+				},
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "at most one option can have recommended=true") {
+		t.Fatalf("expected error for multiple recommended options, got %v", err)
+	}
+}
+
+func TestAskUserQuestionHandlerValidateArgsRecommendedMultiSelect(t *testing.T) {
+	handler := NewAskUserQuestionHandler()
+	err := handler.ValidateArgs(map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{
+				"question": "Pick topics",
+				"type":     "multi-select",
+				"options": []any{
+					map[string]any{"label": "A", "recommended": true},
+					map[string]any{"label": "B"},
+				},
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "recommended is not allowed for multi-select questions") {
+		t.Fatalf("expected error for recommended in multi-select, got %v", err)
+	}
+
+	// Also check recommended=false is rejected for multi-select
+	err = handler.ValidateArgs(map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{
+				"question": "Pick topics",
+				"type":     "multi-select",
+				"options": []any{
+					map[string]any{"label": "A", "recommended": false},
+				},
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "recommended is not allowed for multi-select questions") {
+		t.Fatalf("expected error for recommended=false in multi-select, got %v", err)
+	}
+}
+
+func TestAskUserQuestionHandlerValidateArgsRecommendedNonBool(t *testing.T) {
+	handler := NewAskUserQuestionHandler()
+	err := handler.ValidateArgs(map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{
+				"question": "Pick a plan",
+				"type":     "select",
+				"options": []any{
+					map[string]any{"label": "A", "recommended": "yes"},
+				},
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "recommended must be a boolean") {
+		t.Fatalf("expected error for non-boolean recommended, got %v", err)
+	}
+
+	// Also check integer
+	err = handler.ValidateArgs(map[string]any{
+		"mode": "question",
+		"questions": []any{
+			map[string]any{
+				"question": "Pick a plan",
+				"type":     "select",
+				"options": []any{
+					map[string]any{"label": "A", "recommended": 1},
+				},
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "recommended must be a boolean") {
+		t.Fatalf("expected error for integer recommended, got %v", err)
+	}
+}

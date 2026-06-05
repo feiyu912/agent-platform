@@ -56,6 +56,7 @@ func (h *AskUserQuestionHandler) ValidateArgs(args map[string]any) error {
 		if !ok || len(options) == 0 {
 			return fmt.Errorf("%s: options is required for select and multi-select questions", questionText)
 		}
+		recommendedCount := 0
 		for optionIndex, rawOption := range options {
 			option := contracts.AnyMapNode(rawOption)
 			label := strings.TrimSpace(contracts.AnyStringNode(option["label"]))
@@ -68,6 +69,21 @@ func (h *AskUserQuestionHandler) ValidateArgs(args map[string]any) error {
 					return fmt.Errorf("%s: option %d previewHtml must be a non-empty string", questionText, optionIndex+1)
 				}
 			}
+			if rawRecommended, ok := option["recommended"]; ok {
+				isBool, ok := rawRecommended.(bool)
+				if !ok {
+					return fmt.Errorf("%s: option %d recommended must be a boolean", questionText, optionIndex+1)
+				}
+				if questionType == "multi-select" {
+					return fmt.Errorf("%s: recommended is not allowed for multi-select questions", questionText)
+				}
+				if isBool {
+					recommendedCount++
+				}
+			}
+		}
+		if recommendedCount > 1 {
+			return fmt.Errorf("%s: at most one option can have recommended=true", questionText)
 		}
 	}
 	return nil

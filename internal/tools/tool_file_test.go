@@ -1494,6 +1494,38 @@ func TestInvokeEditConsumesApprovalAndPreservesCRLF(t *testing.T) {
 	}
 }
 
+func TestInvokeEditPreservesMixedLineEndings(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.md")
+	original := "title\r\n\nalpha\nold value\nomega\r\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	executor := fileToolExecutor(root, false)
+	execCtx := &contracts.ExecutionContext{}
+	if _, err := executor.invokeRead(map[string]any{"file_path": "owner.md", "add_line_numbers": false}, execCtx); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	result, err := executor.invokeEdit(context.Background(), map[string]any{
+		"file_path":   "owner.md",
+		"old_string":  "old value",
+		"new_string":  "new value",
+		"description": "编辑 owner 文档",
+	}, execCtx)
+	if err != nil {
+		t.Fatalf("invokeEdit: %v", err)
+	}
+	if result.Error != "" || result.ExitCode != 0 {
+		t.Fatalf("expected edit success, got %#v", result)
+	}
+	want := "title\r\n\nalpha\nnew value\nomega\r\n"
+	if got, err := os.ReadFile(path); err != nil || string(got) != want {
+		t.Fatalf("unexpected mixed-line-ending content %q err=%v", string(got), err)
+	}
+	assertResultLineStats(t, result, 1, 1, 1)
+}
+
 func TestInvokeEditInsideSessionWorkspaceBypassesWriteApproval(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "owner.md")

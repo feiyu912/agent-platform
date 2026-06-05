@@ -145,6 +145,12 @@ func TestAskUserToolSchemasMatchContract(t *testing.T) {
 	if _, ok := questionOptionProperties["previewHtml"]; !ok {
 		t.Fatal("expected previewHtml on ask user question options")
 	}
+	if _, ok := questionOptionProperties["recommended"]; !ok {
+		t.Fatal("expected recommended on ask user question options")
+	}
+	if questionOptionProperties["recommended"].(map[string]any)["type"] != "boolean" {
+		t.Fatal("expected recommended type boolean")
+	}
 	if questionOptions["additionalProperties"] != false {
 		t.Fatalf("expected ask user question options additionalProperties=false, got %#v", questionOptions["additionalProperties"])
 	}

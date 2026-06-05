@@ -56,6 +56,9 @@ inputSchema:
                 previewHtml:
                   type: string
                   description: Optional safe HTML fragment rendered as a visual preview for this option. When provided, the frontend should render previewHtml instead of description. Do not include full HTML documents, scripts, event handlers, iframes, or remote executable content.
+                recommended:
+                  type: boolean
+                  description: Optional. Recommended option hint for select questions. Only applies when type=select. Each select question may have at most one option with recommended=true. This is a UI hint only and does not automatically select the option.
               required:
                 - label
               additionalProperties: false

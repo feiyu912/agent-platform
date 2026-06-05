@@ -316,7 +316,9 @@ func (t *RuntimeToolExecutor) invokeEdit(ctx context.Context, args map[string]an
 		if replacements > 1 && !plan.ReplaceAll {
 			return fileToolError("file_edit_multiple_matches", fmt.Sprintf("old_string matched %d times; set replace_all=true or provide more context", replacements)), nil
 		}
-		if plan.ReplaceAll {
+		if lineEndings == "MIXED" {
+			updatedContent, replacements = replaceNormalizedMatchesPreservingLineEndings(currentContent, normalizedContent, oldString, newString, plan.ReplaceAll)
+		} else if plan.ReplaceAll {
 			updatedContent = strings.ReplaceAll(normalizedContent, oldString, newString)
 		} else {
 			updatedContent = strings.Replace(normalizedContent, oldString, newString, 1)
@@ -560,14 +562,142 @@ func validateFileSnapshot(path string, info os.FileInfo, snap ReadFileSnapshot, 
 }
 
 func normalizeEditLineEndings(content string) (string, string) {
-	if strings.Contains(content, "\r\n") {
-		return strings.ReplaceAll(content, "\r\n", "\n"), "CRLF"
+	hasCRLF := strings.Contains(content, "\r\n")
+	withoutCRLF := strings.ReplaceAll(content, "\r\n", "")
+	hasBareLF := strings.Contains(withoutCRLF, "\n")
+	if hasCRLF {
+		normalized := strings.ReplaceAll(content, "\r\n", "\n")
+		if hasBareLF {
+			return normalized, "MIXED"
+		}
+		return normalized, "CRLF"
 	}
 	return content, "LF"
 }
 
 func normalizeEditString(content string) string {
 	return strings.ReplaceAll(content, "\r\n", "\n")
+}
+
+func replaceNormalizedMatchesPreservingLineEndings(original string, normalized string, oldString string, newString string, replaceAll bool) (string, int) {
+	mapping := normalizedToOriginalByteOffsets(original)
+	var builder strings.Builder
+	lastOriginal := 0
+	searchStart := 0
+	replacements := 0
+	for {
+		idx := strings.Index(normalized[searchStart:], oldString)
+		if idx < 0 {
+			break
+		}
+		normalizedStart := searchStart + idx
+		normalizedEnd := normalizedStart + len(oldString)
+		originalStart := mapping[normalizedStart]
+		originalEnd := mapping[normalizedEnd]
+		builder.WriteString(original[lastOriginal:originalStart])
+		builder.WriteString(convertNormalizedLineEndings(newString, localLineEndingForReplacement(original, originalStart, originalEnd)))
+		lastOriginal = originalEnd
+		replacements++
+		if !replaceAll {
+			break
+		}
+		searchStart = normalizedEnd
+	}
+	builder.WriteString(original[lastOriginal:])
+	return builder.String(), replacements
+}
+
+func normalizedToOriginalByteOffsets(content string) []int {
+	offsets := make([]int, 0, len(content)+1)
+	for idx := 0; idx < len(content); {
+		offsets = append(offsets, idx)
+		if content[idx] == '\r' && idx+1 < len(content) && content[idx+1] == '\n' {
+			idx += 2
+			continue
+		}
+		idx++
+	}
+	offsets = append(offsets, len(content))
+	return offsets
+}
+
+func convertNormalizedLineEndings(content string, lineEnding string) string {
+	if lineEnding == "CRLF" {
+		return strings.ReplaceAll(content, "\n", "\r\n")
+	}
+	return content
+}
+
+func localLineEndingForReplacement(content string, start int, end int) string {
+	if lineEnding := dominantLineEnding(content[start:end]); lineEnding != "" {
+		return lineEnding
+	}
+	if lineEnding := nextLineEnding(content, end); lineEnding != "" {
+		return lineEnding
+	}
+	if lineEnding := previousLineEnding(content, start); lineEnding != "" {
+		return lineEnding
+	}
+	if lineEnding := dominantLineEnding(content); lineEnding != "" {
+		return lineEnding
+	}
+	return "LF"
+}
+
+func dominantLineEnding(content string) string {
+	crlf, lf := countLineEndings(content)
+	switch {
+	case crlf > lf:
+		return "CRLF"
+	case lf > 0:
+		return "LF"
+	case crlf > 0:
+		return "CRLF"
+	default:
+		return ""
+	}
+}
+
+func countLineEndings(content string) (int, int) {
+	crlf := 0
+	lf := 0
+	for idx := 0; idx < len(content); idx++ {
+		if content[idx] != '\n' {
+			continue
+		}
+		if idx > 0 && content[idx-1] == '\r' {
+			crlf++
+		} else {
+			lf++
+		}
+	}
+	return crlf, lf
+}
+
+func nextLineEnding(content string, start int) string {
+	for idx := start; idx < len(content); idx++ {
+		if content[idx] != '\n' {
+			continue
+		}
+		if idx > 0 && content[idx-1] == '\r' {
+			return "CRLF"
+		}
+		return "LF"
+	}
+	return ""
+}
+
+func previousLineEnding(content string, start int) string {
+	for idx := start - 1; idx >= 0; idx-- {
+		if content[idx] != '\n' {
+			continue
+		}
+		if idx > 0 && content[idx-1] == '\r' {
+			return "CRLF"
+		}
+		return "LF"
+	}
+	return ""
 }
 
 func recordReadSnapshot(execCtx *ExecutionContext, path string, info os.FileInfo, sha string, offset int64, limit int64) ReadFileSnapshot {
