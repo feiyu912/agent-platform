@@ -13,7 +13,7 @@ import (
 type DeltaMapper struct {
 	runID                string
 	chatID               string
-	toolTimeoutMs        int64
+	budget               Budget
 	reasoningSeq         int
 	contentSeq           int
 	activeReasoningID    string
@@ -28,11 +28,11 @@ type DeltaMapper struct {
 	frontend             *frontendtools.Registry
 }
 
-func NewDeltaMapper(runID string, chatID string, toolTimeoutMs int64, toolRegistry ToolDefinitionLookup, frontend *frontendtools.Registry) *DeltaMapper {
+func NewDeltaMapper(runID string, chatID string, budget Budget, toolRegistry ToolDefinitionLookup, frontend *frontendtools.Registry) *DeltaMapper {
 	return &DeltaMapper{
 		runID:                runID,
 		chatID:               chatID,
-		toolTimeoutMs:        toolTimeoutMs,
+		budget:               budget,
 		indexedToolIDs:       map[int]string{},
 		toolArgChunkCounters: map[string]int{},
 		toolArgBuffers:       map[string]*strings.Builder{},
@@ -47,15 +47,15 @@ func (m *DeltaMapper) CloneIsolated(runID string, chatID string) StreamDeltaMapp
 	if m == nil {
 		return nil
 	}
-	return NewDeltaMapper(runID, chatID, m.toolTimeoutMs, m.toolRegistry, m.frontend)
+	return NewDeltaMapper(runID, chatID, m.budget, m.toolRegistry, m.frontend)
 }
 
 type DeltaMapperFactory struct {
 	Frontend *frontendtools.Registry
 }
 
-func (f DeltaMapperFactory) NewDeltaMapper(runID string, chatID string, toolTimeoutMs int64, toolRegistry ToolDefinitionLookup) StreamDeltaMapper {
-	return NewDeltaMapper(runID, chatID, toolTimeoutMs, toolRegistry, f.Frontend)
+func (f DeltaMapperFactory) NewDeltaMapper(runID string, chatID string, budget Budget, toolRegistry ToolDefinitionLookup) StreamDeltaMapper {
+	return NewDeltaMapper(runID, chatID, budget, toolRegistry, f.Frontend)
 }
 
 func (m *DeltaMapper) Map(delta AgentDelta) []stream.StreamInput {
@@ -377,13 +377,15 @@ func (m *DeltaMapper) buildFrontendToolAwaitAsk(toolID string, toolName string, 
 			return nil, false
 		}
 		delete(m.toolArgBuffers, toolID)
-		return handler.BuildInitialAwaitAsk(toolID, m.runID, tool, args, 0, m.toolTimeoutMs), true
+		timeoutMs := resolveFrontendAwaitTimeout(toolName, tool, args, m.budget)
+		return handler.BuildInitialAwaitAsk(toolID, m.runID, tool, args, 0, timeoutMs), true
 	}
 	if strings.TrimSpace(argsDelta) != "" {
 		var args map[string]any
 		if err := json.Unmarshal([]byte(argsDelta), &args); err == nil {
 			if err := handler.ValidateArgs(args); err == nil {
-				return handler.BuildInitialAwaitAsk(toolID, m.runID, tool, args, chunkIndex, m.toolTimeoutMs), false
+				timeoutMs := resolveFrontendAwaitTimeout(toolName, tool, args, m.budget)
+				return handler.BuildInitialAwaitAsk(toolID, m.runID, tool, args, chunkIndex, timeoutMs), false
 			}
 			return nil, false
 		}

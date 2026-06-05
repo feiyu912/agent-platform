@@ -55,11 +55,12 @@ func TestLoadDefaults(t *testing.T) {
 		if cfg.Logging.LLMInteraction.RecordDir != filepath.Join("runtime", "chats", "llm") {
 			t.Fatalf("unexpected llm chat record dir: %q", cfg.Logging.LLMInteraction.RecordDir)
 		}
-		if cfg.BashHITL.DefaultTimeoutMs != 600000 {
-			t.Fatalf("expected default bash HITL timeout 600000, got %d", cfg.BashHITL.DefaultTimeoutMs)
-		}
 		if cfg.Defaults.Budget.Hitl.TimeoutMs != 0 {
 			t.Fatalf("expected default HITL budget timeout 0, got %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
+		}
+		if cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 0 || cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 0 ||
+			cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 0 || cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 0 {
+			t.Fatalf("expected default HITL mode timeouts unset, got %#v", cfg.Defaults.Budget.Hitl)
 		}
 		if cfg.Defaults.MaxOutputTokens != 4096 {
 			t.Fatalf("expected default max output tokens 4096, got %d", cfg.Defaults.MaxOutputTokens)
@@ -194,6 +195,17 @@ func TestLoadDesktopConfigFromFile(t *testing.T) {
 func TestLoadRuntimeConfigFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
+			"budget:\n" +
+			"  hitl:\n" +
+			"    timeoutMs: 610000\n" +
+			"    question:\n" +
+			"      timeoutMs: 620000\n" +
+			"    approval:\n" +
+			"      timeoutMs: 630000\n" +
+			"    form:\n" +
+			"      timeoutMs: 640000\n" +
+			"    plan:\n" +
+			"      timeoutMs: 650000\n" +
 			"container-hub:\n" +
 			"  base-url: http://runtime-hub\n" +
 			"  auth-token: runtime-token\n" +
@@ -254,9 +266,52 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 						if cfg.Billing.Currency != "USD" {
 							t.Fatalf("unexpected billing currency: %#v", cfg.Billing)
 						}
+						if cfg.Defaults.Budget.Hitl.TimeoutMs != 610000 ||
+							cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 620000 ||
+							cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 630000 ||
+							cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 640000 ||
+							cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 650000 {
+							t.Fatalf("unexpected runtime HITL budget config: %#v", cfg.Defaults.Budget.Hitl)
+						}
 					})
 				})
 			})
+		})
+	})
+}
+
+func TestLoadEnvOverridesRuntimeBudgetHITLConfig(t *testing.T) {
+	withIsolatedEnv(t, map[string]string{
+		"BUDGET_HITL_TIMEOUT_MS":          "710000",
+		"BUDGET_HITL_QUESTION_TIMEOUT_MS": "720000",
+		"BUDGET_HITL_APPROVAL_TIMEOUT_MS": "730000",
+		"BUDGET_HITL_FORM_TIMEOUT_MS":     "740000",
+		"BUDGET_HITL_PLAN_TIMEOUT_MS":     "750000",
+	}, func() {
+		content := "" +
+			"budget:\n" +
+			"  hitl:\n" +
+			"    timeoutMs: 610000\n" +
+			"    question:\n" +
+			"      timeoutMs: 620000\n" +
+			"    approval:\n" +
+			"      timeoutMs: 630000\n" +
+			"    form:\n" +
+			"      timeoutMs: 640000\n" +
+			"    plan:\n" +
+			"      timeoutMs: 650000\n"
+		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.Defaults.Budget.Hitl.TimeoutMs != 710000 ||
+				cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 720000 ||
+				cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 730000 ||
+				cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 740000 ||
+				cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 750000 {
+				t.Fatalf("expected env to override runtime HITL budget config, got %#v", cfg.Defaults.Budget.Hitl)
+			}
 		})
 	})
 }
@@ -1190,8 +1245,12 @@ func TestLoadContainerHubAndBashConfigFromFiles(t *testing.T) {
 
 func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"CONTAINER_HUB_BASE_URL":               "http://127.0.0.1:18000",
-		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS": "60000",
+		"CONTAINER_HUB_BASE_URL":          "http://127.0.0.1:18000",
+		"BUDGET_HITL_TIMEOUT_MS":          "60000",
+		"BUDGET_HITL_QUESTION_TIMEOUT_MS": "70000",
+		"BUDGET_HITL_APPROVAL_TIMEOUT_MS": "75000",
+		"BUDGET_HITL_FORM_TIMEOUT_MS":     "76000",
+		"BUDGET_HITL_PLAN_TIMEOUT_MS":     "80000",
 	}, func() {
 		content := "" +
 			"bash:\n" +
@@ -1201,8 +1260,7 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 			"  shell-args:\n" +
 			"    - -NoProfile\n" +
 			"    - -Command\n" +
-			"    - \"{{command}}\"\n" +
-			"  hitl-default-timeout-ms: 45000\n"
+			"    - \"{{command}}\"\n"
 		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
 			cfg, err := Load()
 			if err != nil {
@@ -1226,13 +1284,31 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 			if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-Command|{{command}}" {
 				t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
 			}
-			if cfg.BashHITL.DefaultTimeoutMs != 45000 {
-				t.Fatalf("unexpected bash HITL timeout: %d", cfg.BashHITL.DefaultTimeoutMs)
-			}
 			if cfg.Defaults.Budget.Hitl.TimeoutMs != 60000 {
 				t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
 			}
+			if cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 70000 ||
+				cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 75000 ||
+				cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 76000 ||
+				cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 80000 {
+				t.Fatalf("unexpected default HITL mode budget timeout: %#v", cfg.Defaults.Budget.Hitl)
+			}
 		})
+	})
+}
+
+func TestLoadRejectsDeprecatedBashHITLTimeout(t *testing.T) {
+	content := "" +
+		"bash:\n" +
+		"  hitl-default-timeout-ms: 45000\n"
+	withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+		_, err := Load()
+		if err == nil {
+			t.Fatal("expected deprecated bash HITL timeout to be rejected")
+		}
+		if !strings.Contains(err.Error(), "hitl-default-timeout-ms") || !strings.Contains(err.Error(), "budget.hitl.timeoutMs") {
+			t.Fatalf("expected migration error for deprecated bash HITL timeout, got %v", err)
+		}
 	})
 }
 
@@ -1470,7 +1546,6 @@ func TestHostToolsConfigYAMLOverrides(t *testing.T) {
 			"  shell-executable: bash\n" +
 			"  shell-timeout-ms: 12345\n" +
 			"  max-command-chars: 4321\n" +
-			"  hitl-default-timeout-ms: 45000\n" +
 			"file-tools:\n" +
 			"  working-directory: " + filepath.ToSlash(filepath.Join("tmp", "merged-files")) + "\n" +
 			"  max-read-bytes: 1234\n" +
@@ -1499,9 +1574,6 @@ func TestHostToolsConfigYAMLOverrides(t *testing.T) {
 						}
 						if strings.Join(cfg.Bash.AllowedCommands, ",") != "pwd,echo" {
 							t.Fatalf("unexpected allowed commands: %#v", cfg.Bash.AllowedCommands)
-						}
-						if cfg.BashHITL.DefaultTimeoutMs != 45000 {
-							t.Fatalf("unexpected bash HITL timeout: %d", cfg.BashHITL.DefaultTimeoutMs)
 						}
 						if cfg.FileTools.WorkingDirectory != filepath.Join("tmp", "merged-files") {
 							t.Fatalf("unexpected file working dir: %q", cfg.FileTools.WorkingDirectory)
@@ -1985,7 +2057,11 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS",
 		"AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS",
 		"AGENT_DEFAULT_BUDGET_TOOL_RETRY_COUNT",
-		"AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS",
+		"BUDGET_HITL_TIMEOUT_MS",
+		"BUDGET_HITL_QUESTION_TIMEOUT_MS",
+		"BUDGET_HITL_APPROVAL_TIMEOUT_MS",
+		"BUDGET_HITL_FORM_TIMEOUT_MS",
+		"BUDGET_HITL_PLAN_TIMEOUT_MS",
 		"AGENT_DEFAULT_REACT_MAX_STEPS",
 		"AGENT_DEFAULT_PLAN_EXECUTE_MAX_STEPS",
 		"AGENT_DEFAULT_PLAN_EXECUTE_MAX_WORK_ROUNDS_PER_TASK",

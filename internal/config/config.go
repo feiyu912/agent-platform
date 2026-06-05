@@ -36,7 +36,6 @@ type Config struct {
 	AccessPolicy    AccessPolicyConfig
 	Bash            BashConfig
 	FileTools       FileToolsConfig
-	BashHITL        BashHITLConfig
 	Run             RunConfig
 	WebSocket       WebSocketConfig
 	// Gateways 是多 gateway 反向连接列表（wecom / feishu / ding / ...）。
@@ -191,6 +190,14 @@ type RetryBudgetConfig struct {
 }
 
 type HitlBudgetConfig struct {
+	TimeoutMs int
+	Question  HitlModeBudgetConfig
+	Approval  HitlModeBudgetConfig
+	Form      HitlModeBudgetConfig
+	Plan      HitlModeBudgetConfig
+}
+
+type HitlModeBudgetConfig struct {
 	TimeoutMs int
 }
 
@@ -384,10 +391,6 @@ type LSPDiagnosticsHookConfig struct {
 type LSPServerConfig struct {
 	Command string
 	Args    []string
-}
-
-type BashHITLConfig struct {
-	DefaultTimeoutMs int
 }
 
 type RunConfig struct {

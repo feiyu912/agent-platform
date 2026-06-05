@@ -13,7 +13,10 @@ func TestResolveBudgetSupportsHitlTimeoutOverride(t *testing.T) {
 				RunTimeoutMs: 300000,
 				Model:        config.RetryBudgetConfig{MaxCalls: 30, TimeoutMs: 120000},
 				Tool:         config.RetryBudgetConfig{MaxCalls: 20, TimeoutMs: 60000},
-				Hitl:         config.HitlBudgetConfig{TimeoutMs: 15000},
+				Hitl: config.HitlBudgetConfig{
+					TimeoutMs: 15000,
+					Question:  config.HitlModeBudgetConfig{TimeoutMs: 16000},
+				},
 			},
 		},
 	}
@@ -21,10 +24,15 @@ func TestResolveBudgetSupportsHitlTimeoutOverride(t *testing.T) {
 	budget := ResolveBudget(cfg, map[string]any{
 		"hitl": map[string]any{
 			"timeoutMs": 45000,
+			"question":  map[string]any{"timeoutMs": 55000},
+			"approval":  map[string]any{"timeoutMs": 65000},
 		},
 	})
-	if budget.Hitl.TimeoutMs != 45000 {
+	if budget.Hitl.TimeoutMs != 45000 || budget.Hitl.Question.TimeoutMs != 55000 || budget.Hitl.Approval.TimeoutMs != 65000 {
 		t.Fatalf("expected HITL timeout override 45000, got %#v", budget)
+	}
+	if budget.Hitl.Form.TimeoutMs != 0 || budget.Hitl.Plan.TimeoutMs != 0 {
+		t.Fatalf("did not expect unset HITL mode timeouts, got %#v", budget.Hitl)
 	}
 }
 
@@ -32,6 +40,10 @@ func TestNormalizeBudgetLeavesUnsetHitlTimeoutAtZero(t *testing.T) {
 	budget := NormalizeBudget(Budget{})
 	if budget.Hitl.TimeoutMs != 0 {
 		t.Fatalf("expected unset HITL timeout to stay 0, got %#v", budget)
+	}
+	if budget.Hitl.Question.TimeoutMs != 0 || budget.Hitl.Approval.TimeoutMs != 0 ||
+		budget.Hitl.Form.TimeoutMs != 0 || budget.Hitl.Plan.TimeoutMs != 0 {
+		t.Fatalf("expected unset HITL mode timeouts to stay 0, got %#v", budget.Hitl)
 	}
 	if budget.MaxSteps != 100 {
 		t.Fatalf("expected default max steps 100, got %#v", budget)
@@ -46,6 +58,38 @@ func TestNormalizeBudgetLeavesUnsetHitlTimeoutAtZero(t *testing.T) {
 	derived := NormalizeBudget(Budget{MaxSteps: 7})
 	if derived.Tool.MaxCalls != 14 {
 		t.Fatalf("expected explicit max steps to derive tool max calls 14, got %#v", derived)
+	}
+}
+
+func TestResolveHITLTimeoutUsesModeItemAndFallbackPriority(t *testing.T) {
+	budget := Budget{Hitl: HitlPolicy{
+		TimeoutMs: 100000,
+		Question:  HitlModePolicy{TimeoutMs: 110000},
+		Approval:  HitlModePolicy{TimeoutMs: 120000},
+		Form:      HitlModePolicy{TimeoutMs: 130000},
+		Plan:      HitlModePolicy{TimeoutMs: 140000},
+	}}
+
+	if got := ResolveHITLTimeout("question", 900000, budget); got != 110000 {
+		t.Fatalf("question timeout = %d, want mode override 110000", got)
+	}
+	if got := ResolveHITLTimeout("plan", 900000, budget); got != 140000 {
+		t.Fatalf("plan timeout = %d, want mode override 140000", got)
+	}
+	if got := ResolveHITLTimeout("approval", 900000, budget); got != 900000 {
+		t.Fatalf("approval timeout = %d, want item override 900000", got)
+	}
+	if got := ResolveHITLTimeout("form", 800000, budget); got != 800000 {
+		t.Fatalf("form timeout = %d, want item override 800000", got)
+	}
+	if got := ResolveHITLTimeout("approval", 0, budget); got != 120000 {
+		t.Fatalf("approval timeout = %d, want mode override 120000", got)
+	}
+	if got := ResolveHITLTimeout("question", 0, Budget{Hitl: HitlPolicy{TimeoutMs: 100000}}); got != 100000 {
+		t.Fatalf("question timeout = %d, want global override 100000", got)
+	}
+	if got := ResolveHITLTimeout("question", 0, Budget{}); got != DefaultHITLTimeoutMs {
+		t.Fatalf("question timeout = %d, want fallback %d", got, DefaultHITLTimeoutMs)
 	}
 }
 

@@ -722,7 +722,7 @@ func (s *llmRunStream) preToolInvocationDeltas(toolID string, toolName string, p
 	if !ok {
 		return nil
 	}
-	toolTimeout := s.resolveHITLTimeout()
+	toolTimeout := resolveFrontendAwaitTimeout(toolName, tool, payload, s.execCtx.Budget)
 	awaitAsk := handler.BuildInitialAwaitAsk(toolID, s.session.RunID, tool, payload, 0, toolTimeout)
 	if s.runControl != nil && awaitAsk != nil {
 		s.runControl.ExpectSubmit(awaitingContextFromStreamAsk(awaitAsk))

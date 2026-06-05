@@ -22,6 +22,15 @@ func (s stubBackendToolExecutor) Invoke(context.Context, string, map[string]any,
 	return ToolExecutionResult{}, nil
 }
 
+type captureFrontendSubmitter struct {
+	hadDeadline bool
+}
+
+func (s *captureFrontendSubmitter) Await(ctx context.Context, _ *ExecutionContext, _ map[string]any) (ToolExecutionResult, error) {
+	_, s.hadDeadline = ctx.Deadline()
+	return ToolExecutionResult{Output: "ok", ExitCode: 0}, nil
+}
+
 func TestToolRouterReloadRuntimeToolDefinitions(t *testing.T) {
 	root := t.TempDir()
 	router := NewToolRouter(stubBackendToolExecutor{
@@ -55,5 +64,31 @@ inputSchema:
 	}
 	if tool.Meta["kind"] != "frontend" || tool.Meta["viewportKey"] != "leave_form" {
 		t.Fatalf("unexpected runtime tool metadata %#v", tool.Meta)
+	}
+}
+
+func TestToolRouterFrontendToolDoesNotUseToolTimeoutDeadline(t *testing.T) {
+	frontend := &captureFrontendSubmitter{}
+	router := NewToolRouter(stubBackendToolExecutor{}, nil, nil, frontend, nil, api.ToolDetailResponse{
+		Name: "ask_user_question",
+		Meta: map[string]any{
+			"kind":       "frontend",
+			"sourceType": "local",
+		},
+	})
+
+	result, err := router.Invoke(context.Background(), "ask_user_question", map[string]any{"mode": "question"}, &ExecutionContext{
+		Budget: Budget{
+			Tool: RetryPolicy{TimeoutMs: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Invoke returned error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("expected successful frontend result, got %#v", result)
+	}
+	if frontend.hadDeadline {
+		t.Fatal("frontend tools should not inherit budget.tool.timeoutMs as a context deadline")
 	}
 }

@@ -76,6 +76,9 @@ func parseToolDefinition(root map[string]any, options toolDefinitionParseOptions
 	if viewportKey != "" {
 		meta["viewportKey"] = viewportKey
 	}
+	if timeoutMs := AnyIntNode(root["timeoutMs"]); timeoutMs > 0 {
+		meta["timeoutMs"] = timeoutMs
+	}
 	if sourceKey != "" {
 		meta["sourceKey"] = sourceKey
 	}

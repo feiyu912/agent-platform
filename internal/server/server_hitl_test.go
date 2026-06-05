@@ -887,7 +887,7 @@ func TestBashHITLApproveFlowReplaysApprovalSummaryInChatRawMessages(t *testing.T
 	}, testFixtureOptions{
 		sandbox: &recordingSandbox{},
 		configure: func(cfg *config.Config) {
-			cfg.BashHITL.DefaultTimeoutMs = 15000
+			cfg.Defaults.Budget.Hitl.TimeoutMs = 15000
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
 			root := filepath.Join(cfg.Paths.SkillsMarketDir, "mock-skill", ".bash-hooks")
@@ -1440,9 +1440,9 @@ func runBashHITLFlow(t *testing.T, options bashHITLFlowOptions) (string, []strin
 		mcp:      options.mcp,
 		mcpTools: options.mcpTools,
 		configure: func(cfg *config.Config) {
-			cfg.BashHITL.DefaultTimeoutMs = 15000
+			cfg.Defaults.Budget.Hitl.TimeoutMs = 15000
 			if options.timeoutMs > 0 {
-				cfg.BashHITL.DefaultTimeoutMs = options.timeoutMs
+				cfg.Defaults.Budget.Hitl.TimeoutMs = options.timeoutMs
 			}
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {

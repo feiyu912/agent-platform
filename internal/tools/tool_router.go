@@ -101,16 +101,19 @@ func (r *ToolRouter) Invoke(ctx context.Context, toolName string, args map[strin
 
 	sourceType, _ := def.Meta["sourceType"].(string)
 	kind, _ := def.Meta["kind"].(string)
+	if !strings.EqualFold(strings.TrimSpace(sourceType), "mcp") && strings.EqualFold(strings.TrimSpace(kind), "frontend") {
+		return r.invokeFrontendWithPolicy(ctx, def.Name, execCtx, func(callCtx context.Context) (ToolExecutionResult, error) {
+			if r.frontend == nil {
+				return ToolExecutionResult{Output: "frontend submitter not configured", Error: "frontend_not_configured", ExitCode: -1}, nil
+			}
+			return r.frontend.Await(callCtx, execCtx, args)
+		})
+	}
 	return r.invokeWithPolicy(ctx, def.Name, execCtx, func(callCtx context.Context) (ToolExecutionResult, error) {
 		if strings.EqualFold(strings.TrimSpace(sourceType), "mcp") {
 			return r.invokeMCPTool(callCtx, def, args, execCtx), nil
 		}
 		switch strings.ToLower(strings.TrimSpace(kind)) {
-		case "frontend":
-			if r.frontend == nil {
-				return ToolExecutionResult{Output: "frontend submitter not configured", Error: "frontend_not_configured", ExitCode: -1}, nil
-			}
-			return r.frontend.Await(callCtx, execCtx, args)
 		case "action":
 			if r.action == nil {
 				return ToolExecutionResult{Output: "action invoker not configured", Error: "action_not_configured", ExitCode: -1}, nil
@@ -256,35 +259,8 @@ func (r *ToolRouter) invokeWithPolicy(ctx context.Context, toolName string, exec
 	budget := Budget{}
 	if execCtx != nil {
 		budget = NormalizeBudget(execCtx.Budget)
-		if budget.Tool.MaxCalls > 0 && execCtx.ToolCalls > budget.Tool.MaxCalls {
-			return ToolExecutionResult{
-				Output: MarshalJSON(NewErrorPayload(
-					"tool_calls_exceeded",
-					"tool call budget exceeded",
-					ErrorScopeTool,
-					ErrorCategoryTool,
-					map[string]any{
-						"toolCalls":  execCtx.ToolCalls,
-						"limitValue": budget.Tool.MaxCalls,
-						"limitName":  "budget.tool.maxCalls",
-						"toolName":   toolName,
-					},
-				)),
-				Structured: NewErrorPayload(
-					"tool_calls_exceeded",
-					"tool call budget exceeded",
-					ErrorScopeTool,
-					ErrorCategoryTool,
-					map[string]any{
-						"toolCalls":  execCtx.ToolCalls,
-						"limitValue": budget.Tool.MaxCalls,
-						"limitName":  "budget.tool.maxCalls",
-						"toolName":   toolName,
-					},
-				),
-				Error:    "tool_calls_exceeded",
-				ExitCode: -1,
-			}, nil
+		if result, exceeded := toolCallsExceededResult(execCtx, budget, toolName); exceeded {
+			return result, nil
 		}
 	}
 	retryCount := 0
@@ -321,4 +297,51 @@ func (r *ToolRouter) invokeWithPolicy(ctx context.Context, toolName string, exec
 		lastErr = err
 	}
 	return ToolExecutionResult{}, lastErr
+}
+
+func (r *ToolRouter) invokeFrontendWithPolicy(ctx context.Context, toolName string, execCtx *ExecutionContext, invoke func(context.Context) (ToolExecutionResult, error)) (ToolExecutionResult, error) {
+	if execCtx != nil {
+		budget := NormalizeBudget(execCtx.Budget)
+		if result, exceeded := toolCallsExceededResult(execCtx, budget, toolName); exceeded {
+			return result, nil
+		}
+	}
+	result, err := invoke(ctx)
+	if err == nil {
+		observability.LogToolInvocation(toolName, "ok", map[string]any{
+			"attempt":  1,
+			"exitCode": result.ExitCode,
+			"error":    result.Error,
+		})
+		return result, nil
+	}
+	observability.LogToolInvocation(toolName, "error", map[string]any{
+		"attempt": 1,
+		"error":   observability.SanitizeLog(err.Error()),
+	})
+	return ToolExecutionResult{}, err
+}
+
+func toolCallsExceededResult(execCtx *ExecutionContext, budget Budget, toolName string) (ToolExecutionResult, bool) {
+	if execCtx == nil || budget.Tool.MaxCalls <= 0 || execCtx.ToolCalls <= budget.Tool.MaxCalls {
+		return ToolExecutionResult{}, false
+	}
+	payload := NewErrorPayload(
+		"tool_calls_exceeded",
+		"tool call budget exceeded",
+		ErrorScopeTool,
+		ErrorCategoryTool,
+		map[string]any{
+			"toolCalls":  execCtx.ToolCalls,
+			"limitValue": budget.Tool.MaxCalls,
+			"limitName":  "budget.tool.maxCalls",
+			"toolName":   toolName,
+		},
+	)
+	return ToolExecutionResult{
+		Output:     MarshalJSON(payload),
+		Structured: payload,
+		Error:      "tool_calls_exceeded",
+		ExitCode:   -1,
+	}, true
 }

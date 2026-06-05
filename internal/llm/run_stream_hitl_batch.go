@@ -347,7 +347,7 @@ func (s *llmRunStream) awaitHITLApprovalBatchAndContinue() error {
 }
 
 func (s *llmRunStream) awaitHITLBatchSubmitOrAccessLevel(batch *pendingHITLApprovalBatch) (SubmitResult, error) {
-	timeout := time.Duration(s.resolveHITLTimeoutWithRule(batch.timeoutMs)) * time.Millisecond
+	timeout := time.Duration(s.resolveHITLTimeoutWithItem("approval", int64(batch.timeoutMs))) * time.Millisecond
 	deadline := time.Time{}
 	if timeout > 0 {
 		deadline = time.Now().Add(timeout)

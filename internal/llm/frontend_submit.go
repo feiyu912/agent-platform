@@ -127,11 +127,22 @@ func frontendSubmitTimeout(execCtx *ExecutionContext) time.Duration {
 			return time.Duration(awaitingCtx.TimeoutMs) * time.Millisecond
 		}
 	}
-	budget := NormalizeBudget(execCtx.Budget)
-	if budget.Hitl.TimeoutMs > 0 {
-		return time.Duration(budget.Hitl.TimeoutMs) * time.Millisecond
+	budget := Budget{}
+	if execCtx != nil {
+		budget = NormalizeBudget(execCtx.Budget)
 	}
-	return toolTimeout(budget.Tool)
+	mode := argsModeFromExecContext(execCtx)
+	return time.Duration(ResolveHITLTimeout(mode, 0, budget)) * time.Millisecond
+}
+
+func argsModeFromExecContext(execCtx *ExecutionContext) string {
+	if execCtx == nil {
+		return ""
+	}
+	if strings.EqualFold(strings.TrimSpace(execCtx.CurrentToolName), "ask_user_question") {
+		return "question"
+	}
+	return "form"
 }
 
 func resolveFrontendTimeoutMessage(toolName string, awaitingID string, timeoutMs int64, elapsedMs int64) string {

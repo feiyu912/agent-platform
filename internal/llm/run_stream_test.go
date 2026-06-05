@@ -485,26 +485,29 @@ func TestPrepareToolCall_LegacyMultipleReturnsToolError(t *testing.T) {
 func TestResolveHITLTimeoutUsesHitlBudgetGlobalAndFallback(t *testing.T) {
 	tests := []struct {
 		name   string
+		mode   string
 		budget contracts.Budget
-		global int
 		want   int64
 	}{
 		{
 			name:   "agent hitl budget wins",
+			mode:   "question",
 			budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 600000}, Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
-			global: 300000,
 			want:   600000,
 		},
 		{
-			name:   "global wins when hitl budget unset",
-			budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
-			global: 300000,
-			want:   300000,
+			name: "mode timeout wins",
+			mode: "plan",
+			budget: contracts.Budget{Hitl: contracts.HitlPolicy{
+				TimeoutMs: 600000,
+				Plan:      contracts.HitlModePolicy{TimeoutMs: 300000},
+			}},
+			want: 300000,
 		},
 		{
 			name:   "tool timeout no longer affects hitl timeout",
+			mode:   "question",
 			budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
-			global: 0,
 			want:   600000,
 		},
 	}
@@ -512,12 +515,11 @@ func TestResolveHITLTimeoutUsesHitlBudgetGlobalAndFallback(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			stream := &llmRunStream{
-				engine: &LLMAgentEngine{cfg: config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: tc.global}}},
 				execCtx: &contracts.ExecutionContext{
 					Budget: tc.budget,
 				},
 			}
-			if got := stream.resolveHITLTimeout(); got != tc.want {
+			if got := stream.resolveHITLTimeout(tc.mode); got != tc.want {
 				t.Fatalf("expected timeout %d, got %d", tc.want, got)
 			}
 		})
@@ -586,16 +588,15 @@ func TestRunStreamToolBudgetDerivesStageLimitFromMaxSteps(t *testing.T) {
 
 func TestResolveHITLTimeoutWithRuleUsesRuleOverride(t *testing.T) {
 	stream := &llmRunStream{
-		engine: &LLMAgentEngine{cfg: config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 300000}}},
 		execCtx: &contracts.ExecutionContext{
 			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 600000}},
 		},
 	}
 
-	if got := stream.resolveHITLTimeoutWithRule(150000); got != 150000 {
+	if got := stream.resolveHITLTimeoutWithItem("approval", 150000); got != 150000 {
 		t.Fatalf("expected rule timeout 150000, got %d", got)
 	}
-	if got := stream.resolveHITLTimeoutWithRule(0); got != 600000 {
+	if got := stream.resolveHITLTimeoutWithItem("approval", 0); got != 600000 {
 		t.Fatalf("expected fallback hitl budget timeout 600000, got %d", got)
 	}
 }
@@ -614,9 +615,6 @@ func TestPreToolInvocationDeltasUsesHitlTimeoutForFrontendAwaiting(t *testing.T)
 		engine: &LLMAgentEngine{
 			tools:    stubToolExecutor{defs: []api.ToolDetailResponse{tool}},
 			frontend: frontendtools.NewRegistry(handler),
-			cfg: config.Config{
-				BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 300000},
-			},
 		},
 		session:    contracts.QuerySession{RunID: "run_1"},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
@@ -644,10 +642,8 @@ func TestPreToolInvocationDeltasUsesHitlTimeoutForFrontendAwaiting(t *testing.T)
 
 func TestEmitHITLConfirmDeltasUsesRuleTimeoutOverride(t *testing.T) {
 	stream := &llmRunStream{
-		ctx: context.Background(),
-		engine: &LLMAgentEngine{
-			cfg: config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 15000}},
-		},
+		ctx:    context.Background(),
+		engine: &LLMAgentEngine{},
 		session: contracts.QuerySession{
 			RunID: "run_1",
 		},
@@ -701,7 +697,6 @@ func TestAwaitHITLSubmitAndExecuteUsesRuleTimeoutOverride(t *testing.T) {
 				result: contracts.ToolExecutionResult{Output: "approved", ExitCode: 0},
 			},
 			frontend: frontendtools.NewDefaultRegistry(),
-			cfg:      config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 40}},
 		},
 		session: contracts.QuerySession{
 			RequestID: "req_1",
@@ -1100,7 +1095,7 @@ func TestPrepareToolCall_BashDescriptionIsRequired(t *testing.T) {
 func TestPrepareToolCall_WriteToolDescriptionNotRequired(t *testing.T) {
 	tool := writeToolDefinition()
 	stream := &llmRunStream{
-		ctx:     context.Background(),
+		ctx: context.Background(),
 		engine: &LLMAgentEngine{
 			tools:    stubToolExecutor{defs: []api.ToolDetailResponse{tool}},
 			frontend: frontendtools.NewDefaultRegistry(),
@@ -4299,7 +4294,6 @@ func TestPrepareQueuedBashApprovalBatch_UsesLargestRuleTimeout(t *testing.T) {
 		ctx: context.Background(),
 		engine: &LLMAgentEngine{
 			tools: stubToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}},
-			cfg:   config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 15000}},
 		},
 		session: contracts.QuerySession{
 			RequestID: "req_1",
@@ -4351,7 +4345,6 @@ func TestAwaitHITLApprovalBatchAndContinueUsesLargestRuleTimeout(t *testing.T) {
 		ctx: context.Background(),
 		engine: &LLMAgentEngine{
 			tools: stubToolExecutor{defs: []api.ToolDetailResponse{bashToolDefinition()}},
-			cfg:   config.Config{BashHITL: config.BashHITLConfig{DefaultTimeoutMs: 40}},
 		},
 		session: contracts.QuerySession{
 			RequestID: "req_1",

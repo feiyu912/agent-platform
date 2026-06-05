@@ -1,5 +1,17 @@
 # Runtime integration config. Copy to configs/runtime.yml to customize locally.
 
+budget:
+  hitl:
+    timeoutMs: 600000
+    question:
+      timeoutMs: 600000
+    approval:
+      timeoutMs: 600000
+    form:
+      timeoutMs: 600000
+    plan:
+      timeoutMs: 600000
+
 container-hub:
   base-url: ${CONTAINER_HUB_BASE_URL:http://host.docker.internal:11960}
 

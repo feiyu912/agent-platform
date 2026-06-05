@@ -266,7 +266,7 @@ func TestRunExecutorFinalizesAfterStreamDrain(t *testing.T) {
 			AgentKey: "agent-a",
 			Message:  "hello",
 		}),
-		Mapper:        llm.NewDeltaMapper("run-1", "chat-1", 0, nil, nil),
+		Mapper:        llm.NewDeltaMapper("run-1", "chat-1", Budget{}, nil, nil),
 		EventBus:      eventBus,
 		Chats:         chats,
 		Notifications: notifications,

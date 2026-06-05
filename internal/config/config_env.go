@@ -63,7 +63,11 @@ func (c *Config) applyEnv() {
 	}
 	c.Defaults.Budget.Tool.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS", c.Defaults.Budget.Tool.TimeoutMs)
 	c.Defaults.Budget.Tool.RetryCount = intEnv("AGENT_DEFAULT_BUDGET_TOOL_RETRY_COUNT", c.Defaults.Budget.Tool.RetryCount)
-	c.Defaults.Budget.Hitl.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_HITL_TIMEOUT_MS", c.Defaults.Budget.Hitl.TimeoutMs)
+	c.Defaults.Budget.Hitl.TimeoutMs = intEnv("BUDGET_HITL_TIMEOUT_MS", c.Defaults.Budget.Hitl.TimeoutMs)
+	c.Defaults.Budget.Hitl.Question.TimeoutMs = intEnv("BUDGET_HITL_QUESTION_TIMEOUT_MS", c.Defaults.Budget.Hitl.Question.TimeoutMs)
+	c.Defaults.Budget.Hitl.Approval.TimeoutMs = intEnv("BUDGET_HITL_APPROVAL_TIMEOUT_MS", c.Defaults.Budget.Hitl.Approval.TimeoutMs)
+	c.Defaults.Budget.Hitl.Form.TimeoutMs = intEnv("BUDGET_HITL_FORM_TIMEOUT_MS", c.Defaults.Budget.Hitl.Form.TimeoutMs)
+	c.Defaults.Budget.Hitl.Plan.TimeoutMs = intEnv("BUDGET_HITL_PLAN_TIMEOUT_MS", c.Defaults.Budget.Hitl.Plan.TimeoutMs)
 	c.Defaults.React.MaxSteps = intEnv("AGENT_DEFAULT_REACT_MAX_STEPS", c.Defaults.React.MaxSteps)
 	c.Defaults.Plan.MaxSteps = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_STEPS", c.Defaults.Plan.MaxSteps)
 	c.Defaults.Plan.MaxWorkRoundsPerTask = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_WORK_ROUNDS_PER_TASK", c.Defaults.Plan.MaxWorkRoundsPerTask)

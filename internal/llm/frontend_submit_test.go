@@ -197,7 +197,7 @@ func TestFrontendSubmitCoordinatorAwait_TimeoutReturnsCompactStructuredError(t *
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "ask_user_question",
 		Budget: contracts.Budget{
-			Tool: contracts.RetryPolicy{TimeoutMs: 1},
+			Hitl: contracts.HitlPolicy{TimeoutMs: 1},
 		},
 	}, map[string]any{"mode": "question"})
 	if err != nil {
@@ -247,5 +247,27 @@ func TestFrontendSubmitCoordinatorAwait_UsesAwaitingAskTimeoutOverToolBudget(t *
 	}
 	if !strings.Contains(result.Output, "timeoutMs=1") {
 		t.Fatalf("expected awaiting.ask timeout to drive submit wait, got %q", result.Output)
+	}
+}
+
+func TestFrontendSubmitTimeoutUsesDisplayedAwaitingAskTimeout(t *testing.T) {
+	control := contracts.NewRunControl(context.Background(), "run_1")
+	control.ExpectSubmit(contracts.AwaitingSubmitContext{
+		AwaitingID: "tool_1",
+		Mode:       "question",
+		ItemCount:  1,
+		TimeoutMs:  600000,
+	})
+
+	timeout := frontendSubmitTimeout(&contracts.ExecutionContext{
+		RunControl:      control,
+		CurrentToolID:   "tool_1",
+		CurrentToolName: "ask_user_question",
+		Budget: contracts.Budget{
+			Tool: contracts.RetryPolicy{TimeoutMs: 120000},
+		},
+	})
+	if timeout.Milliseconds() != 600000 {
+		t.Fatalf("expected awaiting.ask.timeout 600000 to drive backend wait, got %d", timeout.Milliseconds())
 	}
 }

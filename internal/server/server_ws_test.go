@@ -711,7 +711,7 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 		{
 			name: "timeout",
 			configure: func(cfg *config.Config) {
-				cfg.BashHITL.DefaultTimeoutMs = 20
+				cfg.Defaults.Budget.Hitl.TimeoutMs = 20
 				cfg.Defaults.Budget.Tool.TimeoutMs = 20
 			},
 			act: func(t *testing.T, flow *awaitingPushQuestionFlow, awaitAskData map[string]any) {

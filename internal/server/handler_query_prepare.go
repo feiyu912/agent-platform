@@ -11,7 +11,6 @@ import (
 	"agent-platform/internal/catalog"
 	"agent-platform/internal/channel"
 	"agent-platform/internal/chat"
-	"agent-platform/internal/config"
 	"agent-platform/internal/contracts"
 	"agent-platform/internal/memory"
 	"agent-platform/internal/stream"
@@ -663,21 +662,9 @@ func (s *Server) newAssemblerAndMapper(prepared preparedQuery) (*stream.StreamEv
 			}
 		}
 	}
-	toolTimeoutMs := resolveHITLTimeoutFromBudget(prepared.session.ResolvedBudget, &s.deps.Config)
 	var mapper contracts.StreamDeltaMapper
 	if s.deps.DeltaMappers != nil {
-		mapper = s.deps.DeltaMappers.NewDeltaMapper(prepared.req.RunID, prepared.req.ChatID, toolTimeoutMs, s.toolLookupWithOverrides(prepared.session.ToolOverrides))
+		mapper = s.deps.DeltaMappers.NewDeltaMapper(prepared.req.RunID, prepared.req.ChatID, prepared.session.ResolvedBudget, s.toolLookupWithOverrides(prepared.session.ToolOverrides))
 	}
 	return assembler, mapper
-}
-
-func resolveHITLTimeoutFromBudget(budget contracts.Budget, cfg *config.Config) int64 {
-	normalized := contracts.NormalizeBudget(budget)
-	if normalized.Hitl.TimeoutMs > 0 {
-		return int64(normalized.Hitl.TimeoutMs)
-	}
-	if cfg != nil && cfg.BashHITL.DefaultTimeoutMs > 0 {
-		return int64(cfg.BashHITL.DefaultTimeoutMs)
-	}
-	return 600000
 }

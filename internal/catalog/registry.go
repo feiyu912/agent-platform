@@ -674,6 +674,12 @@ func parseToolOverrides(value any) map[string]api.ToolDetailResponse {
 			}
 			meta["viewportKey"] = viewportKey
 		}
+		if timeoutMs := intNode(override["timeoutMs"]); timeoutMs > 0 {
+			if meta == nil {
+				meta = map[string]any{}
+			}
+			meta["timeoutMs"] = timeoutMs
+		}
 		result[strings.ToLower(strings.TrimSpace(toolName))] = api.ToolDetailResponse{
 			Key:           key,
 			Name:          name,

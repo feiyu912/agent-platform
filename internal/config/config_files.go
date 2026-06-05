@@ -79,10 +79,34 @@ func (c *Config) applyRuntimeFile(path string) {
 	if billing, ok := values["billing"].(map[string]any); ok && len(billing) > 0 {
 		c.applyBillingValues(billing)
 	}
+	if budget, ok := values["budget"].(map[string]any); ok && len(budget) > 0 {
+		c.applyRuntimeBudgetValues(budget)
+	}
 }
 
 func (c *Config) applyBillingValues(values map[string]any) {
 	c.Billing.Currency = strings.ToUpper(stringValue(anyValue(values["currency"], c.Billing.Currency), c.Billing.Currency))
+}
+
+func (c *Config) applyRuntimeBudgetValues(budget map[string]any) {
+	hitl, _ := budget["hitl"].(map[string]any)
+	if len(hitl) == 0 {
+		return
+	}
+	c.Defaults.Budget.Hitl.TimeoutMs = intValue(anyValue(hitl["timeoutMs"], c.Defaults.Budget.Hitl.TimeoutMs), c.Defaults.Budget.Hitl.TimeoutMs)
+	c.Defaults.Budget.Hitl.Question = parseHitlModeBudgetConfig(hitl["question"], c.Defaults.Budget.Hitl.Question)
+	c.Defaults.Budget.Hitl.Approval = parseHitlModeBudgetConfig(hitl["approval"], c.Defaults.Budget.Hitl.Approval)
+	c.Defaults.Budget.Hitl.Form = parseHitlModeBudgetConfig(hitl["form"], c.Defaults.Budget.Hitl.Form)
+	c.Defaults.Budget.Hitl.Plan = parseHitlModeBudgetConfig(hitl["plan"], c.Defaults.Budget.Hitl.Plan)
+}
+
+func parseHitlModeBudgetConfig(raw any, fallback HitlModeBudgetConfig) HitlModeBudgetConfig {
+	values, _ := raw.(map[string]any)
+	if len(values) == 0 {
+		return fallback
+	}
+	fallback.TimeoutMs = intValue(anyValue(values["timeoutMs"], fallback.TimeoutMs), fallback.TimeoutMs)
+	return fallback
 }
 
 func (c *Config) applyAccessPolicyValues(values map[string]any) {
@@ -144,7 +168,6 @@ func (c *Config) applyBashValues(values map[string]any) {
 	c.Bash.ShellArgs = csvOrList(anyValue(values["shell-args"], c.Bash.ShellArgs), c.Bash.ShellArgs)
 	c.Bash.ShellTimeoutMs = intValue(anyValue(values["shell-timeout-ms"], c.Bash.ShellTimeoutMs), c.Bash.ShellTimeoutMs)
 	c.Bash.MaxCommandChars = intValue(anyValue(values["max-command-chars"], c.Bash.MaxCommandChars), c.Bash.MaxCommandChars)
-	c.BashHITL.DefaultTimeoutMs = intValue(anyValue(values["hitl-default-timeout-ms"], c.BashHITL.DefaultTimeoutMs), c.BashHITL.DefaultTimeoutMs)
 }
 
 func (c *Config) applyFileToolsValues(path string, values map[string]any) error {
@@ -191,6 +214,9 @@ func (c *Config) applyHostToolsFile(path string) error {
 	}
 	if bash, ok := values["bash"].(map[string]any); ok && len(bash) > 0 {
 		if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", bash, "allowed-paths", "path-checked-commands", "path-check-bypass-commands"); err != nil {
+			return err
+		}
+		if err := rejectDeprecatedYAMLKeys(path, "budget.hitl.timeoutMs", bash, "hitl-default-timeout-ms"); err != nil {
 			return err
 		}
 		c.applyBashValues(bash)

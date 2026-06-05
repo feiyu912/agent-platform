@@ -14,6 +14,14 @@ type RetryPolicy struct {
 }
 
 type HitlPolicy struct {
+	TimeoutMs int            `json:"timeoutMs,omitempty"`
+	Question  HitlModePolicy `json:"question,omitempty"`
+	Approval  HitlModePolicy `json:"approval,omitempty"`
+	Form      HitlModePolicy `json:"form,omitempty"`
+	Plan      HitlModePolicy `json:"plan,omitempty"`
+}
+
+type HitlModePolicy struct {
 	TimeoutMs int `json:"timeoutMs,omitempty"`
 }
 
@@ -47,6 +55,10 @@ func DefaultBudget(cfg config.Config) Budget {
 		},
 		Hitl: HitlPolicy{
 			TimeoutMs: cfg.Defaults.Budget.Hitl.TimeoutMs,
+			Question:  hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Question),
+			Approval:  hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Approval),
+			Form:      hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Form),
+			Plan:      hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Plan),
 		},
 	}
 }
@@ -79,9 +91,7 @@ func ResolveBudget(cfg config.Config, overrides map[string]any) Budget {
 		budget.Tool = mergeRetryPolicy(budget.Tool, tool)
 	}
 	if hitl := anyMapNode(overrides["hitl"]); len(hitl) > 0 {
-		if value := anyIntNode(hitl["timeoutMs"]); value > 0 {
-			budget.Hitl.TimeoutMs = value
-		}
+		budget.Hitl = mergeHitlPolicy(budget.Hitl, hitl)
 	}
 	if stages := anyMapNode(overrides["stages"]); len(stages) > 0 {
 		budget.Stages = mergeStageBudgets(budget.Stages, stages)
@@ -126,6 +136,10 @@ func normalizeBudget(b Budget) Budget {
 	return b
 }
 
+func hitlModePolicyFromConfig(cfg config.HitlModeBudgetConfig) HitlModePolicy {
+	return HitlModePolicy{TimeoutMs: cfg.TimeoutMs}
+}
+
 func normalizeStageBudget(stage StageBudget) StageBudget {
 	if stage.MaxSteps > 0 && stage.Tool.MaxCalls <= 0 {
 		stage.Tool.MaxCalls = stage.MaxSteps * 2
@@ -161,6 +175,58 @@ func mergeRetryPolicy(base RetryPolicy, overrides map[string]any) RetryPolicy {
 		policy.RetryCount = maxInt(value, 0)
 	}
 	return policy
+}
+
+func mergeHitlPolicy(base HitlPolicy, overrides map[string]any) HitlPolicy {
+	policy := base
+	if value := anyIntNode(overrides["timeoutMs"]); value > 0 {
+		policy.TimeoutMs = value
+	}
+	policy.Question = mergeHitlModePolicy(policy.Question, anyMapNode(overrides["question"]))
+	policy.Approval = mergeHitlModePolicy(policy.Approval, anyMapNode(overrides["approval"]))
+	policy.Form = mergeHitlModePolicy(policy.Form, anyMapNode(overrides["form"]))
+	policy.Plan = mergeHitlModePolicy(policy.Plan, anyMapNode(overrides["plan"]))
+	return policy
+}
+
+func mergeHitlModePolicy(base HitlModePolicy, overrides map[string]any) HitlModePolicy {
+	policy := base
+	if value := anyIntNode(overrides["timeoutMs"]); value > 0 {
+		policy.TimeoutMs = value
+	}
+	return policy
+}
+
+const DefaultHITLTimeoutMs int64 = 600000
+
+func ResolveHITLTimeout(mode string, itemTimeoutMs int64, budget Budget) int64 {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	hitl := budget.Hitl
+	if itemTimeoutMs > 0 && (mode == "approval" || mode == "form") {
+		return itemTimeoutMs
+	}
+	if modeTimeout := hitlModeTimeout(hitl, mode); modeTimeout > 0 {
+		return int64(modeTimeout)
+	}
+	if hitl.TimeoutMs > 0 {
+		return int64(hitl.TimeoutMs)
+	}
+	return DefaultHITLTimeoutMs
+}
+
+func hitlModeTimeout(hitl HitlPolicy, mode string) int {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "question":
+		return hitl.Question.TimeoutMs
+	case "approval":
+		return hitl.Approval.TimeoutMs
+	case "form":
+		return hitl.Form.TimeoutMs
+	case "plan":
+		return hitl.Plan.TimeoutMs
+	default:
+		return 0
+	}
 }
 
 func mergeStageBudgets(base map[string]StageBudget, overrides map[string]any) map[string]StageBudget {

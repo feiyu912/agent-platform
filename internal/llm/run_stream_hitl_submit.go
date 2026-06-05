@@ -162,7 +162,8 @@ func (s *llmRunStream) awaitHITLSubmitAndExecute() error {
 }
 
 func (s *llmRunStream) awaitHITLSubmitOrAccessLevel(invocation *preparedToolInvocation, match *hitl.InterceptResult, awaitingID string, awaitArgs map[string]any) (SubmitResult, error) {
-	timeout := time.Duration(s.resolveHITLTimeoutWithRule(match.Rule.TimeoutMs)) * time.Millisecond
+	mode := strings.TrimSpace(AnyStringNode(awaitArgs["mode"]))
+	timeout := time.Duration(s.resolveHITLTimeoutWithItem(mode, int64(match.Rule.TimeoutMs))) * time.Millisecond
 	deadline := time.Time{}
 	if timeout > 0 {
 		deadline = time.Now().Add(timeout)
@@ -492,22 +493,14 @@ func approvalDescription(invocation *preparedToolInvocation) string {
 	return command[:60]
 }
 
-func (s *llmRunStream) resolveHITLTimeout() int64 {
-	if s != nil && s.execCtx != nil {
-		budget := NormalizeBudget(s.execCtx.Budget)
-		if budget.Hitl.TimeoutMs > 0 {
-			return int64(budget.Hitl.TimeoutMs)
-		}
-	}
-	if s.engine.cfg.BashHITL.DefaultTimeoutMs > 0 {
-		return int64(s.engine.cfg.BashHITL.DefaultTimeoutMs)
-	}
-	return 600000
+func (s *llmRunStream) resolveHITLTimeout(mode string) int64 {
+	return s.resolveHITLTimeoutWithItem(mode, 0)
 }
 
-func (s *llmRunStream) resolveHITLTimeoutWithRule(ruleTimeoutMs int) int64 {
-	if ruleTimeoutMs > 0 {
-		return int64(ruleTimeoutMs)
+func (s *llmRunStream) resolveHITLTimeoutWithItem(mode string, itemTimeoutMs int64) int64 {
+	budget := Budget{}
+	if s != nil && s.execCtx != nil {
+		budget = NormalizeBudget(s.execCtx.Budget)
 	}
-	return s.resolveHITLTimeout()
+	return ResolveHITLTimeout(mode, itemTimeoutMs, budget)
 }

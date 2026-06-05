@@ -171,10 +171,11 @@ func frontendSubmitInvalidPayloadResult(invocation *preparedToolInvocation, awai
 }
 
 func (s *llmRunStream) buildHITLAwaitDelta(awaitingID string, args map[string]any, ruleTimeoutMs int) DeltaAwaitAsk {
-	timeout := s.resolveHITLTimeoutWithRule(ruleTimeoutMs)
+	mode := strings.ToLower(strings.TrimSpace(AnyStringNode(args["mode"])))
+	timeout := s.resolveHITLTimeoutWithItem(mode, int64(ruleTimeoutMs))
 	await := DeltaAwaitAsk{
 		AwaitingID: awaitingID,
-		Mode:       strings.ToLower(strings.TrimSpace(AnyStringNode(args["mode"]))),
+		Mode:       mode,
 		Timeout:    timeout,
 		RunID:      s.session.RunID,
 	}

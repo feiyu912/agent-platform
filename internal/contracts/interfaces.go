@@ -50,7 +50,7 @@ type StreamDeltaMapper interface {
 }
 
 type StreamDeltaMapperFactory interface {
-	NewDeltaMapper(runID string, chatID string, toolTimeoutMs int64, toolRegistry ToolDefinitionLookup) StreamDeltaMapper
+	NewDeltaMapper(runID string, chatID string, budget Budget, toolRegistry ToolDefinitionLookup) StreamDeltaMapper
 }
 
 type SystemInitProfile struct {
