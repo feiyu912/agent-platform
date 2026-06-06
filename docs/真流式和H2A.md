@@ -21,6 +21,8 @@ HTTP query
 
 `GET /api/attach?runId=...&agentKey=...&lastSeq=...` 用于续接已注册 run 的事件流。服务端会校验 `agentKey` 与 run 归属；run 超过 retention 或序号已过期时返回 `SEQ_EXPIRED`。
 
+从 `/api/chat` 冷启动恢复 active run 时，客户端应使用 `activeRun.lastSeq` 作为 attach 游标。该值来自本次 chat detail 已返回历史 events 的 `liveSeq` 覆盖边界，不是内存 event bus 的最新 seq。
+
 ## 配置与接口
 
 - `POST /api/query`：发起 run，返回 SSE。

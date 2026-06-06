@@ -1239,6 +1239,203 @@ func TestStepWriterActionSnapshotPersistsTsAndReplaysTimestamp(t *testing.T) {
 	}
 }
 
+func TestStepWriterPersistsLiveSeqAndReplaysIt(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+	if _, _, err := store.EnsureChat("chat-live-seq", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	writer := NewStepWriter(store, "chat-live-seq", "run-live-seq", "react")
+	writer.OnEvent(stream.EventData{
+		Seq:       1,
+		Type:      "request.query",
+		Timestamp: 1000,
+		Payload: map[string]any{
+			"runId":   "run-live-seq",
+			"chatId":  "chat-live-seq",
+			"message": "hello",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Seq:       2,
+		Type:      "content.snapshot",
+		Timestamp: 1001,
+		Payload: map[string]any{
+			"contentId": "content-1",
+			"text":      "partial",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Seq:       3,
+		Type:      "tool.snapshot",
+		Timestamp: 1002,
+		Payload: map[string]any{
+			"toolId":    "tool-1",
+			"toolName":  "bash",
+			"arguments": `{"command":"date"}`,
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Seq:       4,
+		Type:      "awaiting.ask",
+		Timestamp: 1003,
+		Payload: map[string]any{
+			"awaitingId": "tool-1",
+			"runId":      "run-live-seq",
+			"mode":       "approval",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Seq:       5,
+		Type:      "tool.result",
+		Timestamp: 1004,
+		Payload: map[string]any{
+			"toolId": "tool-1",
+			"result": "ok",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Seq:       6,
+		Type:      "request.submit",
+		Timestamp: 1005,
+		Payload: map[string]any{
+			"runId":      "run-live-seq",
+			"chatId":     "chat-live-seq",
+			"awaitingId": "tool-1",
+			"submitId":   "submit-1",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Seq:       7,
+		Type:      "awaiting.answer",
+		Timestamp: 1006,
+		Payload: map[string]any{
+			"awaitingId": "tool-1",
+			"runId":      "run-live-seq",
+			"mode":       "approval",
+			"status":     "accepted",
+			"submitId":   "submit-1",
+		},
+	})
+	writer.OnEvent(stream.EventData{
+		Seq:       8,
+		Type:      "request.steer",
+		Timestamp: 1007,
+		Payload: map[string]any{
+			"runId":   "run-live-seq",
+			"chatId":  "chat-live-seq",
+			"message": "nudge",
+			"role":    "user",
+		},
+	})
+	writer.Flush()
+
+	lines, err := readJSONLines(store.chatJSONLPath("chat-live-seq"))
+	if err != nil {
+		t.Fatalf("read chat jsonl: %v", err)
+	}
+	var stepLines []map[string]any
+	var submitLine map[string]any
+	var steerLine map[string]any
+	for _, line := range lines {
+		switch line["_type"] {
+		case "query":
+			query, _ := line["query"].(map[string]any)
+			if got := int64FromAny(query["liveSeq"]); got != 1 {
+				t.Fatalf("expected query liveSeq=1, got %#v", query)
+			}
+		case "react":
+			stepLines = append(stepLines, line)
+		case "submit":
+			submitLine = line
+		case "steer":
+			steerLine = line
+		}
+	}
+	if len(stepLines) != 2 {
+		t.Fatalf("expected two step lines, got %#v", lines)
+	}
+	messages, _ := stepLines[0]["messages"].([]any)
+	if len(messages) != 2 {
+		t.Fatalf("expected content and tool messages in first step, got %#v", stepLines[0])
+	}
+	if got := int64FromAny(messages[0].(map[string]any)["_liveSeq"]); got != 2 {
+		t.Fatalf("expected content _liveSeq=2, got %#v", messages[0])
+	}
+	if got := int64FromAny(messages[1].(map[string]any)["_liveSeq"]); got != 3 {
+		t.Fatalf("expected tool snapshot _liveSeq=3, got %#v", messages[1])
+	}
+	awaiting, _ := stepLines[0]["awaiting"].([]any)
+	if len(awaiting) != 1 {
+		t.Fatalf("expected awaiting in first step, got %#v", stepLines[0])
+	}
+	if got := int64FromAny(awaiting[0].(map[string]any)["liveSeq"]); got != 4 {
+		t.Fatalf("expected awaiting liveSeq=4, got %#v", awaiting[0])
+	}
+	resultMessages, _ := stepLines[1]["messages"].([]any)
+	if len(resultMessages) != 1 {
+		t.Fatalf("expected result message in second step, got %#v", stepLines[1])
+	}
+	if got := int64FromAny(resultMessages[0].(map[string]any)["_liveSeq"]); got != 5 {
+		t.Fatalf("expected tool result _liveSeq=5, got %#v", resultMessages[0])
+	}
+	submit, _ := submitLine["submit"].(map[string]any)
+	answer, _ := submitLine["answer"].(map[string]any)
+	if got := int64FromAny(submit["liveSeq"]); got != 6 {
+		t.Fatalf("expected submit liveSeq=6, got %#v", submit)
+	}
+	if _, ok := submit["seq"]; ok {
+		t.Fatalf("did not expect persisted submit seq, got %#v", submit)
+	}
+	if got := int64FromAny(answer["liveSeq"]); got != 7 {
+		t.Fatalf("expected answer liveSeq=7, got %#v", answer)
+	}
+	steerEvent, _ := steerLine["event"].(map[string]any)
+	if got := int64FromAny(steerEvent["liveSeq"]); got != 8 {
+		t.Fatalf("expected steer liveSeq=8, got %#v", steerEvent)
+	}
+	if _, ok := steerEvent["seq"]; ok {
+		t.Fatalf("did not expect persisted steer seq, got %#v", steerEvent)
+	}
+
+	detail, err := store.LoadChat("chat-live-seq")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+	wantLiveSeq := map[string]int64{
+		"request.query":    1,
+		"content.snapshot": 2,
+		"tool.snapshot":    3,
+		"awaiting.ask":     4,
+		"tool.result":      5,
+		"request.submit":   6,
+		"awaiting.answer":  7,
+		"request.steer":    8,
+	}
+	seen := map[string]bool{}
+	for _, event := range detail.Events {
+		want, ok := wantLiveSeq[event.Type]
+		if !ok {
+			continue
+		}
+		seen[event.Type] = true
+		if got := int64FromAny(event.Value("liveSeq")); got != want {
+			t.Fatalf("expected %s liveSeq=%d, got %#v", event.Type, want, event)
+		}
+		if event.Seq <= 0 || event.Seq == want {
+			t.Fatalf("expected replay seq to be independent from liveSeq for %s, got %#v", event.Type, event)
+		}
+	}
+	for eventType := range wantLiveSeq {
+		if !seen[eventType] {
+			t.Fatalf("expected replayed %s event, got %#v", eventType, detail.Events)
+		}
+	}
+}
+
 func TestStepWriterEmbedsAwaitingInStepLine(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {

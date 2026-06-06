@@ -17,6 +17,7 @@ import (
 	"agent-platform/internal/config"
 	"agent-platform/internal/contracts"
 	"agent-platform/internal/memory"
+	"agent-platform/internal/stream"
 )
 
 func TestServerSharedHelpersUseCommonChatAndMemoryStores(t *testing.T) {
@@ -372,6 +373,128 @@ func TestLoadChatDetailIncludesActiveRunAndConflictReturnsHTTP409(t *testing.T) 
 	}
 	if resp.Msg != "active_run_conflict" {
 		t.Fatalf("expected active_run_conflict, got %#v", resp)
+	}
+}
+
+func TestLoadChatDetailActiveRunLastSeqUsesPersistedLiveSeqCursor(t *testing.T) {
+	server, chats, _ := newServerForHelperTests(t)
+	runs := contracts.NewInMemoryRunManager()
+	server.deps.Runs = runs
+
+	if _, _, err := chats.EnsureChat("chat-live-cursor", "agent-1", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+	if err := chats.AppendQueryLine("chat-live-cursor", chat.QueryLine{
+		ChatID:    "chat-live-cursor",
+		RunID:     "run-live-cursor",
+		UpdatedAt: 1001,
+		Query: map[string]any{
+			"chatId":  "chat-live-cursor",
+			"message": "still running",
+			"liveSeq": int64(1),
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+	if err := chats.AppendStepLine("chat-live-cursor", chat.StepLine{
+		ChatID:    "chat-live-cursor",
+		RunID:     "run-live-cursor",
+		UpdatedAt: 1002,
+		Type:      "react",
+		Seq:       1,
+		Messages: []chat.StoredMessage{
+			{
+				Role:    "assistant",
+				Content: []chat.ContentPart{{Type: "text", Text: "partial"}},
+				LiveSeq: 3,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append step line: %v", err)
+	}
+	_, _, _ = runs.Register(context.Background(), contracts.QuerySession{
+		RunID:    "run-live-cursor",
+		ChatID:   "chat-live-cursor",
+		AgentKey: "agent-1",
+	})
+	bus, ok := runs.EventBus("run-live-cursor")
+	if !ok {
+		t.Fatal("expected run event bus")
+	}
+	for seq := int64(1); seq <= 672; seq++ {
+		eventType := "content.delta"
+		if seq == 4 {
+			eventType = "tool.start"
+		}
+		bus.Publish(stream.EventData{
+			Seq:       seq,
+			Type:      eventType,
+			Timestamp: 2000 + seq,
+			Payload:   map[string]any{"runId": "run-live-cursor"},
+		})
+	}
+	status, ok := runs.RunStatus("run-live-cursor")
+	if !ok || status.LastSeq != 672 {
+		t.Fatalf("expected in-memory latest seq 672, got %#v ok=%v", status, ok)
+	}
+
+	detail, err := server.loadChatDetail(context.Background(), "chat-live-cursor", false)
+	if err != nil {
+		t.Fatalf("load chat detail: %v", err)
+	}
+	if detail.ActiveRun == nil {
+		t.Fatalf("expected active run, got %#v", detail)
+	}
+	if detail.ActiveRun.LastSeq != 3 {
+		t.Fatalf("expected active run lastSeq from persisted liveSeq=3, got %#v", detail.ActiveRun)
+	}
+
+	observer, err := runs.AttachObserver("run-live-cursor", detail.ActiveRun.LastSeq)
+	if err != nil {
+		t.Fatalf("attach observer: %v", err)
+	}
+	defer runs.DetachObserver("run-live-cursor", observer.ID)
+	select {
+	case event := <-observer.Events:
+		if event.Seq != 4 || event.Type != "tool.start" {
+			t.Fatalf("expected attach replay to resume at seq 4 tool.start, got %#v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for replay event")
+	}
+
+	if _, _, err := chats.EnsureChat("chat-old-live-cursor", "agent-1", "", "hello"); err != nil {
+		t.Fatalf("ensure old chat: %v", err)
+	}
+	if err := chats.AppendQueryLine("chat-old-live-cursor", chat.QueryLine{
+		ChatID:    "chat-old-live-cursor",
+		RunID:     "run-old-live-cursor",
+		UpdatedAt: 3001,
+		Query: map[string]any{
+			"chatId":  "chat-old-live-cursor",
+			"message": "legacy running",
+		},
+		Type: "query",
+	}); err != nil {
+		t.Fatalf("append old query line: %v", err)
+	}
+	_, _, _ = runs.Register(context.Background(), contracts.QuerySession{
+		RunID:    "run-old-live-cursor",
+		ChatID:   "chat-old-live-cursor",
+		AgentKey: "agent-1",
+	})
+	oldBus, ok := runs.EventBus("run-old-live-cursor")
+	if !ok {
+		t.Fatal("expected old run event bus")
+	}
+	oldBus.Publish(stream.EventData{Seq: 9, Type: "content.delta", Payload: map[string]any{"runId": "run-old-live-cursor"}})
+	oldDetail, err := server.loadChatDetail(context.Background(), "chat-old-live-cursor", false)
+	if err != nil {
+		t.Fatalf("load old chat detail: %v", err)
+	}
+	if oldDetail.ActiveRun == nil || oldDetail.ActiveRun.LastSeq != 0 {
+		t.Fatalf("expected legacy active run lastSeq=0, got %#v", oldDetail.ActiveRun)
 	}
 }
 

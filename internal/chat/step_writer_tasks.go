@@ -115,8 +115,7 @@ func (w *StepWriter) flushAllTaskSteps() {
 }
 
 func (w *StepWriter) bufferAwaitingEvent(event stream.EventData) {
-	m := event.Map()
-	delete(m, "seq")
+	m := eventMapWithLiveSeq(event)
 	w.pendingAwaiting = append(w.pendingAwaiting, m)
 	w.flushCurrentStepAt(event.Timestamp)
 }
@@ -125,7 +124,7 @@ func (w *StepWriter) bufferSubmitEvent(event stream.EventData) {
 	if w.pendingSubmit != nil {
 		w.flushPendingSubmit()
 	}
-	w.pendingSubmit = event.Map()
+	w.pendingSubmit = eventMapWithLiveSeq(event)
 }
 
 func (w *StepWriter) flushPendingSubmit() {
@@ -147,8 +146,7 @@ func (w *StepWriter) writeSubmitLine(answer stream.EventData) {
 		w.pendingSubmit = nil
 		return
 	}
-	answerPayload := answer.Map()
-	delete(answerPayload, "seq")
+	answerPayload := eventMapWithLiveSeq(answer)
 	_ = w.store.AppendSubmitLine(w.chatID, SubmitLine{
 		ChatID:    w.chatID,
 		RunID:     w.runID,
@@ -168,7 +166,7 @@ func (w *StepWriter) appendTypedEventLine(event stream.EventData, lineType strin
 		ChatID:    w.chatID,
 		RunID:     w.runID,
 		UpdatedAt: time.Now().UnixMilli(),
-		Event:     event.Map(),
+		Event:     eventMapWithLiveSeq(event),
 		Type:      lineType,
 	})
 }

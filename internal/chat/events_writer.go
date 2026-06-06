@@ -14,7 +14,7 @@ func (s *FileStore) AppendEvent(chatID string, event stream.EventData) error {
 		Type:   "event",
 		ChatID: chatID,
 		RunID:  event.String("runId"),
-		Event:  event.Map(),
+		Event:  eventMapWithLiveSeq(event),
 	})
 }
 

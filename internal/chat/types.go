@@ -169,6 +169,7 @@ type StoredMessage struct {
 	MsgID            string           `json:"_msgId,omitempty"`
 	ToolID           string           `json:"_toolId,omitempty"`
 	ActionID         string           `json:"_actionId,omitempty"`
+	LiveSeq          int64            `json:"_liveSeq,omitempty"`
 }
 
 type ContentPart struct {

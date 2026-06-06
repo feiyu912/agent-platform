@@ -117,6 +117,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			ReasoningID:      event.String("reasoningId"),
 			MsgID:            w.currentMsgID,
 			Ts:               &ts,
+			LiveSeq:          event.Seq,
 		})
 
 	case "content.snapshot":
@@ -129,6 +130,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			ContentID: event.String("contentId"),
 			MsgID:     w.currentMsgID,
 			Ts:        &ts,
+			LiveSeq:   event.Seq,
 		})
 
 	case "tool.snapshot":
@@ -152,9 +154,10 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 					Arguments: event.String("arguments"),
 				},
 			}},
-			ToolID: toolID,
-			MsgID:  w.currentMsgID,
-			Ts:     &ts,
+			ToolID:  toolID,
+			MsgID:   w.currentMsgID,
+			Ts:      &ts,
+			LiveSeq: event.Seq,
 		})
 
 	case "tool.result":
@@ -174,6 +177,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			Content:    textContent(formatResult(event.Value("result"))),
 			ToolID:     toolID,
 			Ts:         &ts,
+			LiveSeq:    event.Seq,
 		})
 		w.needNewMsgID = true
 
@@ -215,6 +219,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			ActionID: actionID,
 			MsgID:    w.currentMsgID,
 			Ts:       &ts,
+			LiveSeq:  event.Seq,
 		})
 
 	case "action.result":
@@ -234,6 +239,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			Content:    textContent(formatResult(event.Value("result"))),
 			ActionID:   actionID,
 			Ts:         &ts,
+			LiveSeq:    event.Seq,
 		})
 		w.needNewMsgID = true
 
@@ -342,6 +348,9 @@ func (w *StepWriter) handleRequestQuery(event stream.EventData) {
 	// Copy all payload fields into query, excluding seq/type/timestamp
 	for key, val := range event.Payload {
 		query[key] = val
+	}
+	if event.Seq > 0 {
+		query["liveSeq"] = event.Seq
 	}
 
 	_ = w.store.AppendQueryLine(w.chatID, QueryLine{

@@ -9,6 +9,7 @@ import (
 func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, nextSeq func() int64) []stream.EventData {
 	role, _ := msg["role"].(string)
 	ts := int64FromAny(msg["ts"])
+	liveSeq := int64FromAny(msg["_liveSeq"])
 	var events []stream.EventData
 
 	switch role {
@@ -17,17 +18,19 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 			text := extractTextFromContent(rc)
 			if text != "" {
 				reasoningID, _ := msg["_reasoningId"].(string)
+				payload := map[string]any{
+					"reasoningId":    reasoningID,
+					"runId":          runID,
+					"text":           text,
+					"taskId":         taskID,
+					"reasoningLabel": stream.ReasoningLabelForID(reasoningID),
+				}
+				addLiveSeq(payload, liveSeq)
 				events = append(events, stream.EventData{
 					Seq:       nextSeq(),
 					Type:      "reasoning.snapshot",
 					Timestamp: ts,
-					Payload: map[string]any{
-						"reasoningId":    reasoningID,
-						"runId":          runID,
-						"text":           text,
-						"taskId":         taskID,
-						"reasoningLabel": stream.ReasoningLabelForID(reasoningID),
-					},
+					Payload:   payload,
 				})
 			}
 		}
@@ -35,16 +38,18 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 			text := extractTextFromContent(c)
 			if text != "" {
 				contentID, _ := msg["_contentId"].(string)
+				payload := map[string]any{
+					"contentId": contentID,
+					"runId":     runID,
+					"text":      text,
+					"taskId":    taskID,
+				}
+				addLiveSeq(payload, liveSeq)
 				events = append(events, stream.EventData{
 					Seq:       nextSeq(),
 					Type:      "content.snapshot",
 					Timestamp: ts,
-					Payload: map[string]any{
-						"contentId": contentID,
-						"runId":     runID,
-						"text":      text,
-						"taskId":    taskID,
-					},
+					Payload:   payload,
 				})
 			}
 		}
@@ -65,34 +70,38 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 				fnArgs, _ := fn["arguments"].(string)
 
 				if actionID != "" {
+					payload := map[string]any{
+						"actionId":   callID,
+						"runId":      runID,
+						"actionName": fnName,
+						"taskId":     taskID,
+						"arguments":  fnArgs,
+					}
+					addLiveSeq(payload, liveSeq)
 					events = append(events, stream.EventData{
 						Seq:       nextSeq(),
 						Type:      "action.snapshot",
 						Timestamp: ts,
-						Payload: map[string]any{
-							"actionId":   callID,
-							"runId":      runID,
-							"actionName": fnName,
-							"taskId":     taskID,
-							"arguments":  fnArgs,
-						},
+						Payload:   payload,
 					})
 				} else {
 					id := toolID
 					if id == "" {
 						id = callID
 					}
+					payload := map[string]any{
+						"toolId":    id,
+						"runId":     runID,
+						"toolName":  fnName,
+						"taskId":    taskID,
+						"arguments": fnArgs,
+					}
+					addLiveSeq(payload, liveSeq)
 					events = append(events, stream.EventData{
 						Seq:       nextSeq(),
 						Type:      "tool.snapshot",
 						Timestamp: ts,
-						Payload: map[string]any{
-							"toolId":    id,
-							"runId":     runID,
-							"toolName":  fnName,
-							"taskId":    taskID,
-							"arguments": fnArgs,
-						},
+						Payload:   payload,
 					})
 				}
 			}
@@ -105,28 +114,32 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 		toolCallID, _ := msg["tool_call_id"].(string)
 
 		if actionID != "" {
+			payload := map[string]any{
+				"actionId": toolCallID,
+				"result":   text,
+			}
+			addLiveSeq(payload, liveSeq)
 			events = append(events, stream.EventData{
 				Seq:       nextSeq(),
 				Type:      "action.result",
 				Timestamp: ts,
-				Payload: map[string]any{
-					"actionId": toolCallID,
-					"result":   text,
-				},
+				Payload:   payload,
 			})
 		} else {
 			id := toolID
 			if id == "" {
 				id = toolCallID
 			}
+			payload := map[string]any{
+				"toolId": id,
+				"result": text,
+			}
+			addLiveSeq(payload, liveSeq)
 			events = append(events, stream.EventData{
 				Seq:       nextSeq(),
 				Type:      "tool.result",
 				Timestamp: ts,
-				Payload: map[string]any{
-					"toolId": id,
-					"result": text,
-				},
+				Payload:   payload,
 			})
 		}
 	}

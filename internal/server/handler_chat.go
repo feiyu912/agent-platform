@@ -9,6 +9,7 @@ import (
 	"agent-platform/internal/api"
 	"agent-platform/internal/chat"
 	"agent-platform/internal/contracts"
+	"agent-platform/internal/stream"
 )
 
 func (s *Server) listChatSummaries(lastRunID string, agentKey string) ([]api.ChatSummaryResponse, error) {
@@ -130,9 +131,44 @@ func (s *Server) loadChatDetail(ctx context.Context, chatID string, includeRawMe
 				filtered = append(filtered, ev)
 			}
 			response.Events = filtered
+			response.ActiveRun.LastSeq = persistedLiveSeqCursor(response.Events, activeRunID)
 		}
 	}
 	return response, nil
+}
+
+func persistedLiveSeqCursor(events []stream.EventData, runID string) int64 {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return 0
+	}
+	var (
+		currentRunID string
+		cursor       int64
+	)
+	for _, event := range events {
+		if eventRunID := strings.TrimSpace(event.String("runId")); eventRunID != "" {
+			currentRunID = eventRunID
+		}
+		if currentRunID == runID {
+			if liveSeq := int64(contracts.AnyIntNode(event.Value("liveSeq"))); liveSeq > cursor {
+				cursor = liveSeq
+			}
+		}
+		if isTerminalRunStreamEvent(event.Type) {
+			currentRunID = ""
+		}
+	}
+	return cursor
+}
+
+func isTerminalRunStreamEvent(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "run.complete", "run.cancel", "run.error":
+		return true
+	default:
+		return false
+	}
 }
 
 const (
