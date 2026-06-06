@@ -403,7 +403,7 @@ func TestPreToolInvocationDeltas_QuestionRegistersAwaitingContext(t *testing.T) 
 		session:    contracts.QuerySession{RunID: "run_1"},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 	}
 
@@ -492,22 +492,22 @@ func TestResolveHITLTimeoutUsesHitlBudgetGlobalAndFallback(t *testing.T) {
 		{
 			name:   "agent hitl budget wins",
 			mode:   "question",
-			budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 600000}, Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
+			budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 600}, Tool: contracts.RetryPolicy{Timeout: 5}},
 			want:   600000,
 		},
 		{
 			name: "mode timeout wins",
 			mode: "plan",
 			budget: contracts.Budget{Hitl: contracts.HitlPolicy{
-				TimeoutMs: 600000,
-				Plan:      contracts.HitlModePolicy{TimeoutMs: 300000},
+				Timeout: 600,
+				Plan:      contracts.HitlModePolicy{Timeout: 300},
 			}},
 			want: 300000,
 		},
 		{
 			name:   "tool timeout no longer affects hitl timeout",
 			mode:   "question",
-			budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 5000}},
+			budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 5}},
 			want:   600000,
 		},
 	}
@@ -589,7 +589,7 @@ func TestRunStreamToolBudgetDerivesStageLimitFromMaxSteps(t *testing.T) {
 func TestResolveHITLTimeoutWithRuleUsesRuleOverride(t *testing.T) {
 	stream := &llmRunStream{
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 600000}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 600}},
 		},
 	}
 
@@ -627,8 +627,8 @@ func TestPreToolInvocationDeltasUsesHitlTimeoutForFrontendAwaiting(t *testing.T)
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
 			Budget: contracts.Budget{
-				Tool: contracts.RetryPolicy{TimeoutMs: 5000},
-				Hitl: contracts.HitlPolicy{TimeoutMs: 600000},
+				Tool: contracts.RetryPolicy{Timeout: 5},
+				Hitl: contracts.HitlPolicy{Timeout: 600},
 			},
 		},
 	}
@@ -666,8 +666,8 @@ func TestPreToolInvocationDeltasUsesArgsTimeoutMsForFrontendAwaiting(t *testing.
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
 			Budget: contracts.Budget{
-				Tool: contracts.RetryPolicy{TimeoutMs: 5000},
-				Hitl: contracts.HitlPolicy{TimeoutMs: 600000},
+				Tool: contracts.RetryPolicy{Timeout: 5},
+				Hitl: contracts.HitlPolicy{Timeout: 600},
 			},
 		},
 	}
@@ -692,8 +692,8 @@ func TestPreToolInvocationDeltasUsesArgsTimeoutMsForFrontendAwaiting(t *testing.
 	if awaiting.TimeoutMs != 900000 {
 		t.Fatalf("expected awaiting context timeout 900000, got %d", awaiting.TimeoutMs)
 	}
-	if awaiting.TimeoutMs <= int64(stream.execCtx.Budget.Tool.TimeoutMs) {
-		t.Fatal("awaiting context timeout must be independent of budget.tool.timeoutMs")
+	if awaiting.TimeoutMs <= int64(stream.execCtx.Budget.Tool.Timeout) {
+		t.Fatal("awaiting context timeout must be independent of budget.tool.timeout")
 	}
 }
 
@@ -706,7 +706,7 @@ func TestEmitHITLConfirmDeltasUsesRuleTimeoutOverride(t *testing.T) {
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 30000}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 30}},
 		},
 	}
 	invocation := &preparedToolInvocation{
@@ -762,7 +762,7 @@ func TestAwaitHITLSubmitAndExecuteUsesRuleTimeoutOverride(t *testing.T) {
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 40}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 1}},
 		},
 		hitlPendingCall: &preparedToolInvocation{
 			toolID:   "tool_1",
@@ -1400,7 +1400,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 				},
 				runControl: runControl,
 				execCtx: &contracts.ExecutionContext{
-					Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+					Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 				},
 			}
 			invocation := &preparedToolInvocation{
@@ -1750,7 +1750,7 @@ func TestBashSecuritySoftBlockApproveExecutesOriginalCommand(t *testing.T) {
 			RunID:     "run_1",
 		},
 		runControl: runControl,
-		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}}},
+		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}}},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
 			toolName: "bash",
@@ -1801,7 +1801,7 @@ func TestBashSecuritySoftBlockPrefixApprovalWhitelistsRule(t *testing.T) {
 			RunID:     "run_1",
 		},
 		runControl: runControl,
-		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}}},
+		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}}},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
 			toolName: "bash",
@@ -3607,7 +3607,7 @@ func TestBashSecuritySoftBlockRejectDoesNotExecute(t *testing.T) {
 			RunID:     "run_1",
 		},
 		runControl: runControl,
-		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}}},
+		execCtx:    &contracts.ExecutionContext{Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}}},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
 			toolName: "bash",
@@ -3649,7 +3649,7 @@ func TestAwaitHITLSubmitAndExecute_RejectEmitsCancelledAnswer(t *testing.T) {
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 		hitlPendingCall: &preparedToolInvocation{
 			toolID:   "tool_1",
@@ -3760,7 +3760,7 @@ func TestAwaitHITLSubmitAndExecute_FormRejectWithFeedbackEmitsRetryableResultAnd
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 	}
 	invocation := &preparedToolInvocation{
@@ -3858,7 +3858,7 @@ func TestAwaitHITLSubmitAndExecute_FormPayloadRebuildFailureEmitsRejectHITLMetad
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 	}
 	invocation := &preparedToolInvocation{
@@ -3954,7 +3954,7 @@ func TestAwaitHITLApprovalBatchAndContinue_HostUsesUnifiedBashToolName(t *testin
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 100}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 			Session: contracts.QuerySession{
 				RunID:                  "run_1",
 				AgentHasRuntimeSandbox: false,
@@ -4057,7 +4057,7 @@ func TestPrepareQueuedBashApprovalBatch_AppendsSingleSummaryAfterAllApprovedResu
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 		checker: commandResultChecker{
 			results: map[string]hitl.InterceptResult{
@@ -4180,7 +4180,7 @@ func TestPrepareQueuedBashApprovalBatch_MergesAllBuiltinApprovalsInSingleAwait(t
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 		checker: commandResultChecker{
 			results: map[string]hitl.InterceptResult{
@@ -4359,7 +4359,7 @@ func TestPrepareQueuedBashApprovalBatch_UsesLargestRuleTimeout(t *testing.T) {
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 30000}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 30}},
 		},
 		checker: commandResultChecker{
 			results: map[string]hitl.InterceptResult{
@@ -4410,7 +4410,7 @@ func TestAwaitHITLApprovalBatchAndContinueUsesLargestRuleTimeout(t *testing.T) {
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 40}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 1}},
 		},
 		checker: commandResultChecker{
 			results: map[string]hitl.InterceptResult{
@@ -4515,7 +4515,7 @@ func TestPrepareQueuedBashApprovalBatch_LeavesHtmlViewportOutsideMergedApprovalA
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 		checker: commandResultChecker{
 			results: map[string]hitl.InterceptResult{
@@ -4667,7 +4667,7 @@ func TestPrepareQueuedBashApprovalBatch_BlocksEntireTurnAndResumesInOriginalOrde
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 		checker: commandResultChecker{
 			results: map[string]hitl.InterceptResult{
@@ -4777,7 +4777,7 @@ func TestAwaitHITLSubmitAndExecute_TimeoutEmitsTerminalAnswer(t *testing.T) {
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 1}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 1}},
 		},
 		hitlPendingCall: &preparedToolInvocation{
 			toolID:   "tool_1",
@@ -4849,7 +4849,7 @@ func TestAwaitHITLSubmitAndExecute_FormTimeoutEmitsHITLMetadataAndSummary(t *tes
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 1}},
+			Budget: contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 1}},
 		},
 		hitlPendingCall: &preparedToolInvocation{
 			toolID:   "tool_1",
@@ -4947,7 +4947,7 @@ func TestInvokeActiveToolCallUsesSkillScopedChecker(t *testing.T) {
 		},
 		runControl: runControl,
 		execCtx: &contracts.ExecutionContext{
-			Budget: contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget: contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 		},
 		activeToolCall: &preparedToolInvocation{
 			toolID:   "tool_1",
@@ -5187,7 +5187,7 @@ func TestInvokeActiveToolCallAutoApprovesBuiltinLevelInCurrentRun(t *testing.T) 
 			RunID:     "run_1",
 		},
 		execCtx: &contracts.ExecutionContext{
-			Budget:            contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget:            contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 			AutoApproveLevels: map[int]bool{2: true},
 		},
 		activeToolCall: &preparedToolInvocation{
@@ -5248,7 +5248,7 @@ func TestInvokeActiveToolCallDoesNotAutoApproveHTMLViewport(t *testing.T) {
 		},
 		runControl: contracts.NewRunControl(context.Background(), "run_1"),
 		execCtx: &contracts.ExecutionContext{
-			Budget:            contracts.Budget{Tool: contracts.RetryPolicy{TimeoutMs: 50}},
+			Budget:            contracts.Budget{Tool: contracts.RetryPolicy{Timeout: 1}},
 			AutoApproveLevels: map[int]bool{2: true},
 		},
 		activeToolCall: &preparedToolInvocation{

@@ -79,7 +79,7 @@ func TestToolRouterFrontendToolDoesNotUseToolTimeoutDeadline(t *testing.T) {
 
 	result, err := router.Invoke(context.Background(), "ask_user_question", map[string]any{"mode": "question"}, &ExecutionContext{
 		Budget: Budget{
-			Tool: RetryPolicy{TimeoutMs: 1},
+			Tool: RetryPolicy{Timeout: 1},
 		},
 	})
 	if err != nil {
@@ -89,6 +89,6 @@ func TestToolRouterFrontendToolDoesNotUseToolTimeoutDeadline(t *testing.T) {
 		t.Fatalf("expected successful frontend result, got %#v", result)
 	}
 	if frontend.hadDeadline {
-		t.Fatal("frontend tools should not inherit budget.tool.timeoutMs as a context deadline")
+		t.Fatal("frontend tools should not inherit budget.tool.timeout as a context deadline")
 	}
 }

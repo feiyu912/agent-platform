@@ -711,13 +711,13 @@ func TestWebSocketPushAwaitingAnswerEmitsErrorStatuses(t *testing.T) {
 		{
 			name: "timeout",
 			configure: func(cfg *config.Config) {
-				cfg.Defaults.Budget.Hitl.TimeoutMs = 20
-				cfg.Defaults.Budget.Tool.TimeoutMs = 20
+				cfg.Defaults.Budget.Hitl.Timeout = 1
+				cfg.Defaults.Budget.Tool.Timeout = 1
 			},
 			act: func(t *testing.T, flow *awaitingPushQuestionFlow, awaitAskData map[string]any) {
 				t.Helper()
-				if timeout, ok := awaitAskData["timeout"].(float64); !ok || timeout != 20 {
-					t.Fatalf("expected awaiting.asking timeout 20, got %#v", awaitAskData)
+				if timeout, ok := awaitAskData["timeout"].(float64); !ok || timeout != 1000 {
+					t.Fatalf("expected awaiting.asking timeout 1000, got %#v", awaitAskData)
 				}
 			},
 			errorCode: "timeout",

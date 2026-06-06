@@ -176,21 +176,27 @@ type DefaultsConfig struct {
 }
 
 type BudgetDefaultsConfig struct {
-	RunTimeoutMs int
-	MaxSteps     int
-	Model        RetryBudgetConfig
-	Tool         RetryBudgetConfig
-	Hitl         HitlBudgetConfig
+	Timeout  int // seconds
+	MaxSteps int
+	Model    RetryBudgetConfig
+	Tool     RetryBudgetConfig
+	Hitl     HitlBudgetConfig
+	Stages   map[string]StageBudgetConfig
 }
 
 type RetryBudgetConfig struct {
 	MaxCalls   int
-	TimeoutMs  int
+	Timeout    int // seconds
 	RetryCount int
 }
 
+type StageBudgetConfig struct {
+	MaxSteps int
+	Tool     RetryBudgetConfig
+}
+
 type HitlBudgetConfig struct {
-	TimeoutMs int
+	Timeout  int // seconds
 	Question  HitlModeBudgetConfig
 	Approval  HitlModeBudgetConfig
 	Form      HitlModeBudgetConfig
@@ -198,7 +204,7 @@ type HitlBudgetConfig struct {
 }
 
 type HitlModeBudgetConfig struct {
-	TimeoutMs int
+	Timeout int // seconds
 }
 
 type ReactDefaultsConfig struct {
@@ -300,10 +306,10 @@ type ContainerHubConfig struct {
 	BaseURL              string
 	AuthToken            string
 	DefaultEnvironmentID string
-	RequestTimeoutMs     int
+	RequestTimeout       int   // 秒
 	DefaultSandboxLevel  string
-	AgentIdleTimeoutMs   int64
-	DestroyQueueDelayMs  int64
+	AgentIdleTimeout     int64 // 秒
+	DestroyQueueDelay    int64 // 秒
 	ResolvedEngine       string
 }
 

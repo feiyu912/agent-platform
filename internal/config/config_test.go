@@ -68,11 +68,11 @@ func TestLoadDefaults(t *testing.T) {
 			if cfg.Logging.LLMInteraction.RecordDir != filepath.Join("runtime", "chats", "llm") {
 				t.Fatalf("unexpected llm chat record dir: %q", cfg.Logging.LLMInteraction.RecordDir)
 			}
-			if cfg.Defaults.Budget.Hitl.TimeoutMs != 0 {
-				t.Fatalf("expected default HITL budget timeout 0, got %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
+			if cfg.Defaults.Budget.Hitl.Timeout != 0 {
+				t.Fatalf("expected default HITL budget timeout 0, got %d", cfg.Defaults.Budget.Hitl.Timeout)
 			}
-			if cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 0 || cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 0 ||
-				cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 0 || cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 0 {
+			if cfg.Defaults.Budget.Hitl.Question.Timeout != 0 || cfg.Defaults.Budget.Hitl.Approval.Timeout != 0 ||
+				cfg.Defaults.Budget.Hitl.Form.Timeout != 0 || cfg.Defaults.Budget.Hitl.Plan.Timeout != 0 {
 				t.Fatalf("expected default HITL mode timeouts unset, got %#v", cfg.Defaults.Budget.Hitl)
 			}
 			if cfg.Defaults.MaxOutputTokens != 4096 {
@@ -210,24 +210,34 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
 		content := "" +
 			"budget:\n" +
+			"  timeout: 301\n" +
+			"  model:\n" +
+			"    timeout: 121\n" +
+			"  tool:\n" +
+			"    timeout: 122\n" +
+			"  stages:\n" +
+			"    execute:\n" +
+			"      maxSteps: 9\n" +
+			"      tool:\n" +
+			"        timeout: 123\n" +
 			"  hitl:\n" +
-			"    timeoutMs: 610000\n" +
+			"    timeout: 610\n" +
 			"    question:\n" +
-			"      timeoutMs: 620000\n" +
+			"      timeout: 620\n" +
 			"    approval:\n" +
-			"      timeoutMs: 630000\n" +
+			"      timeout: 630\n" +
 			"    form:\n" +
-			"      timeoutMs: 640000\n" +
+			"      timeout: 640\n" +
 			"    plan:\n" +
-			"      timeoutMs: 650000\n" +
+			"      timeout: 650\n" +
 			"container-hub:\n" +
 			"  base-url: http://runtime-hub\n" +
 			"  auth-token: runtime-token\n" +
 			"  default-environment-id: runtime-env\n" +
-			"  request-timeout-ms: 123456\n" +
+			"  request-timeout: 123456\n" +
 			"  default-sandbox-level: agent\n" +
-			"  agent-idle-timeout-ms: 654321\n" +
-			"  destroy-queue-delay-ms: 2345\n" +
+			"  agent-idle-timeout: 654321\n" +
+			"  destroy-queue-delay: 2345\n" +
 			"desktop:\n" +
 			"  action:\n" +
 			"    host: 127.0.0.3\n" +
@@ -262,7 +272,7 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 						if cfg.ContainerHub.BaseURL != "http://runtime-hub" || cfg.ContainerHub.AuthToken != "runtime-token" || cfg.ContainerHub.DefaultEnvironmentID != "runtime-env" {
 							t.Fatalf("unexpected container hub identity: %#v", cfg.ContainerHub)
 						}
-						if cfg.ContainerHub.RequestTimeoutMs != 123456 || cfg.ContainerHub.DefaultSandboxLevel != "agent" || cfg.ContainerHub.AgentIdleTimeoutMs != 654321 || cfg.ContainerHub.DestroyQueueDelayMs != 2345 {
+						if cfg.ContainerHub.RequestTimeout != 123456 || cfg.ContainerHub.DefaultSandboxLevel != "agent" || cfg.ContainerHub.AgentIdleTimeout != 654321 || cfg.ContainerHub.DestroyQueueDelay != 2345 {
 							t.Fatalf("unexpected container hub runtime settings: %#v", cfg.ContainerHub)
 						}
 						if cfg.Desktop.Action.BridgeURL != "http://127.0.0.3:17101/actions/runtime" || cfg.Desktop.Action.RequestTimeoutMs != 2345 {
@@ -280,11 +290,18 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 						if cfg.Billing.Currency != "USD" {
 							t.Fatalf("unexpected billing currency: %#v", cfg.Billing)
 						}
-						if cfg.Defaults.Budget.Hitl.TimeoutMs != 610000 ||
-							cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 620000 ||
-							cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 630000 ||
-							cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 640000 ||
-							cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 650000 {
+						if cfg.Defaults.Budget.Timeout != 301 ||
+							cfg.Defaults.Budget.Model.Timeout != 121 ||
+							cfg.Defaults.Budget.Tool.Timeout != 122 ||
+							cfg.Defaults.Budget.Stages["execute"].MaxSteps != 9 ||
+							cfg.Defaults.Budget.Stages["execute"].Tool.Timeout != 123 {
+							t.Fatalf("unexpected runtime budget config: %#v", cfg.Defaults.Budget)
+						}
+						if cfg.Defaults.Budget.Hitl.Timeout != 610 ||
+							cfg.Defaults.Budget.Hitl.Question.Timeout != 620 ||
+							cfg.Defaults.Budget.Hitl.Approval.Timeout != 630 ||
+							cfg.Defaults.Budget.Hitl.Form.Timeout != 640 ||
+							cfg.Defaults.Budget.Hitl.Plan.Timeout != 650 {
 							t.Fatalf("unexpected runtime HITL budget config: %#v", cfg.Defaults.Budget.Hitl)
 						}
 					})
@@ -294,36 +311,86 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 	})
 }
 
+func TestLoadRuntimeConfigRejectsDeprecatedBudgetTimeoutKeys(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"budget:\n" +
+			"  runTimeoutMs: 300000\n"
+		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected deprecated budget runTimeoutMs to be rejected")
+			}
+			if !strings.Contains(err.Error(), "runTimeoutMs") || !strings.Contains(err.Error(), "budget.timeout") {
+				t.Fatalf("expected migration error for deprecated budget timeout, got %v", err)
+			}
+		})
+
+		content = "" +
+			"budget:\n" +
+			"  stages:\n" +
+			"    execute:\n" +
+			"      tool:\n" +
+			"        timeoutMs: 120000\n"
+		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected deprecated stage tool timeoutMs to be rejected")
+			}
+			if !strings.Contains(err.Error(), "timeoutMs") || !strings.Contains(err.Error(), "budget.stages.execute.tool.timeout") {
+				t.Fatalf("expected migration error for deprecated stage tool timeout, got %v", err)
+			}
+		})
+	})
+}
+
+func TestLoadRuntimeConfigRejectsDeprecatedContainerHubTimeoutKeys(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"container-hub:\n" +
+			"  request-timeout-ms: 300000\n"
+		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected deprecated container hub timeout to be rejected")
+			}
+			if !strings.Contains(err.Error(), "request-timeout-ms") || !strings.Contains(err.Error(), "container-hub.request-timeout") {
+				t.Fatalf("expected migration error for deprecated container hub timeout, got %v", err)
+			}
+		})
+	})
+}
+
 func TestLoadEnvOverridesRuntimeBudgetHITLConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"BUDGET_HITL_TIMEOUT_MS":          "710000",
-		"BUDGET_HITL_QUESTION_TIMEOUT_MS": "720000",
-		"BUDGET_HITL_APPROVAL_TIMEOUT_MS": "730000",
-		"BUDGET_HITL_FORM_TIMEOUT_MS":     "740000",
-		"BUDGET_HITL_PLAN_TIMEOUT_MS":     "750000",
+		"BUDGET_HITL_TIMEOUT":          "710",
+		"BUDGET_HITL_QUESTION_TIMEOUT": "720",
+		"BUDGET_HITL_APPROVAL_TIMEOUT": "730",
+		"BUDGET_HITL_FORM_TIMEOUT":     "740",
+		"BUDGET_HITL_PLAN_TIMEOUT":     "750",
 	}, func() {
 		content := "" +
 			"budget:\n" +
 			"  hitl:\n" +
-			"    timeoutMs: 610000\n" +
+			"    timeout: 610\n" +
 			"    question:\n" +
-			"      timeoutMs: 620000\n" +
+			"      timeout: 620\n" +
 			"    approval:\n" +
-			"      timeoutMs: 630000\n" +
+			"      timeout: 630\n" +
 			"    form:\n" +
-			"      timeoutMs: 640000\n" +
+			"      timeout: 640\n" +
 			"    plan:\n" +
-			"      timeoutMs: 650000\n"
+			"      timeout: 650\n"
 		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
 			cfg, err := Load()
 			if err != nil {
 				t.Fatalf("load config: %v", err)
 			}
-			if cfg.Defaults.Budget.Hitl.TimeoutMs != 710000 ||
-				cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 720000 ||
-				cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 730000 ||
-				cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 740000 ||
-				cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 750000 {
+			if cfg.Defaults.Budget.Hitl.Timeout != 710 ||
+				cfg.Defaults.Budget.Hitl.Question.Timeout != 720 ||
+				cfg.Defaults.Budget.Hitl.Approval.Timeout != 730 ||
+				cfg.Defaults.Budget.Hitl.Form.Timeout != 740 ||
+				cfg.Defaults.Budget.Hitl.Plan.Timeout != 750 {
 				t.Fatalf("expected env to override runtime HITL budget config, got %#v", cfg.Defaults.Budget.Hitl)
 			}
 		})
@@ -386,7 +453,7 @@ func TestLoadEnvOverridesRuntimeYAMLConfig(t *testing.T) {
 		content := "" +
 			"container-hub:\n" +
 			"  base-url: http://runtime-hub\n" +
-			"  request-timeout-ms: 111\n"
+			"  request-timeout: 111\n"
 		withProjectFileContents(t, filepath.Join("configs", "container-hub.yml"), nil, func() {
 			withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
 				cfg, err := Load()
@@ -396,8 +463,8 @@ func TestLoadEnvOverridesRuntimeYAMLConfig(t *testing.T) {
 				if cfg.ContainerHub.BaseURL != "http://env-hub" {
 					t.Fatalf("expected env container hub base url to win, got %q", cfg.ContainerHub.BaseURL)
 				}
-				if cfg.ContainerHub.RequestTimeoutMs != 111 {
-					t.Fatalf("expected runtime yaml timeout to remain, got %d", cfg.ContainerHub.RequestTimeoutMs)
+				if cfg.ContainerHub.RequestTimeout != 111 {
+					t.Fatalf("expected runtime yaml timeout to remain, got %d", cfg.ContainerHub.RequestTimeout)
 				}
 			})
 		})
@@ -1092,15 +1159,25 @@ func TestLoadMemoryLogFileEnvOverridesMemoryDirDefault(t *testing.T) {
 
 func TestLoadIgnoresOldEnvVars(t *testing.T) {
 	values := map[string]string{
-		"AGENT_CONTAINER_HUB_BASE_URL":           "http://127.0.0.1:18000",
-		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS":      "true",
-		"AGENT_MEMORY_STORAGE_DIR":               filepath.Join("var", "custom-memory"),
-		"AGENT_CONFIG_DIR":                       "configs",
-		"GATEWAY_WS_URL":                         "wss://gw.example.com/ws/agent?channel=wecom",
-		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS":      "6789",
-		"MEMORY_CHATS_INDEX_SQLITE_FILE":         "old.db",
-		"AGENT_CONTAINER_HUB_REQUEST_TIMEOUT_MS": "1000",
-		"AGENT_AUTH_ENABLED":                     "false",
+		"AGENT_CONTAINER_HUB_BASE_URL":          "http://127.0.0.1:18000",
+		"AGENT_STREAM_INCLUDE_DEBUG_EVENTS":     "true",
+		"AGENT_MEMORY_STORAGE_DIR":              filepath.Join("var", "custom-memory"),
+		"AGENT_CONFIG_DIR":                      "configs",
+		"GATEWAY_WS_URL":                        "wss://gw.example.com/ws/agent?channel=wecom",
+		"AGENT_GATEWAY_WS_RECONNECT_MAX_MS":     "6789",
+		"MEMORY_CHATS_INDEX_SQLITE_FILE":        "old.db",
+		"CONTAINER_HUB_REQUEST_TIMEOUT_MS":      "1000",
+		"CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS":   "2000",
+		"CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS":  "3000",
+		"AGENT_DEFAULT_BUDGET_RUN_TIMEOUT_MS":   "4000",
+		"AGENT_DEFAULT_BUDGET_MODEL_TIMEOUT_MS": "5000",
+		"AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS":  "6000",
+		"BUDGET_HITL_TIMEOUT_MS":                "7000",
+		"BUDGET_HITL_QUESTION_TIMEOUT_MS":       "8000",
+		"BUDGET_HITL_APPROVAL_TIMEOUT_MS":       "9000",
+		"BUDGET_HITL_FORM_TIMEOUT_MS":           "10000",
+		"BUDGET_HITL_PLAN_TIMEOUT_MS":           "11000",
+		"AGENT_AUTH_ENABLED":                    "false",
 	}
 	bashAndFileEnv := []string{
 		"AGENT_BASH_WORKING_DIRECTORY",
@@ -1142,6 +1219,21 @@ func TestLoadIgnoresOldEnvVars(t *testing.T) {
 					}
 					if cfg.ContainerHub.BaseURL != "" || cfg.ContainerHub.Enabled {
 						t.Fatalf("old container hub env should not configure container hub: %#v", cfg.ContainerHub)
+					}
+					if cfg.ContainerHub.RequestTimeout != 300 ||
+						cfg.ContainerHub.AgentIdleTimeout != 600 ||
+						cfg.ContainerHub.DestroyQueueDelay != 5 {
+						t.Fatalf("old container hub timeout env should not affect defaults: %#v", cfg.ContainerHub)
+					}
+					if cfg.Defaults.Budget.Timeout != 300 ||
+						cfg.Defaults.Budget.Model.Timeout != 120 ||
+						cfg.Defaults.Budget.Tool.Timeout != 120 ||
+						cfg.Defaults.Budget.Hitl.Timeout != 0 ||
+						cfg.Defaults.Budget.Hitl.Question.Timeout != 0 ||
+						cfg.Defaults.Budget.Hitl.Approval.Timeout != 0 ||
+						cfg.Defaults.Budget.Hitl.Form.Timeout != 0 ||
+						cfg.Defaults.Budget.Hitl.Plan.Timeout != 0 {
+						t.Fatalf("old budget timeout env should not affect defaults: %#v", cfg.Defaults.Budget)
 					}
 					if cfg.Paths.MemoryDir == filepath.Join("var", "custom-memory") {
 						t.Fatalf("old memory storage env should not affect memory dir")
@@ -1259,12 +1351,12 @@ func TestLoadContainerHubAndBashConfigFromFiles(t *testing.T) {
 
 func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 	withIsolatedEnv(t, map[string]string{
-		"CONTAINER_HUB_BASE_URL":          "http://127.0.0.1:18000",
-		"BUDGET_HITL_TIMEOUT_MS":          "60000",
-		"BUDGET_HITL_QUESTION_TIMEOUT_MS": "70000",
-		"BUDGET_HITL_APPROVAL_TIMEOUT_MS": "75000",
-		"BUDGET_HITL_FORM_TIMEOUT_MS":     "76000",
-		"BUDGET_HITL_PLAN_TIMEOUT_MS":     "80000",
+		"CONTAINER_HUB_BASE_URL":       "http://127.0.0.1:18000",
+		"BUDGET_HITL_TIMEOUT":          "60",
+		"BUDGET_HITL_QUESTION_TIMEOUT": "70",
+		"BUDGET_HITL_APPROVAL_TIMEOUT": "75",
+		"BUDGET_HITL_FORM_TIMEOUT":     "76",
+		"BUDGET_HITL_PLAN_TIMEOUT":     "80",
 	}, func() {
 		content := "" +
 			"bash:\n" +
@@ -1298,13 +1390,13 @@ func TestLoadEnvOverridesAndBashYAMLConfig(t *testing.T) {
 			if got := strings.Join(cfg.Bash.ShellArgs, "|"); got != "-NoProfile|-Command|{{command}}" {
 				t.Fatalf("unexpected shell args: %#v", cfg.Bash.ShellArgs)
 			}
-			if cfg.Defaults.Budget.Hitl.TimeoutMs != 60000 {
-				t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.TimeoutMs)
+			if cfg.Defaults.Budget.Hitl.Timeout != 60 {
+				t.Fatalf("unexpected default HITL budget timeout: %d", cfg.Defaults.Budget.Hitl.Timeout)
 			}
-			if cfg.Defaults.Budget.Hitl.Question.TimeoutMs != 70000 ||
-				cfg.Defaults.Budget.Hitl.Approval.TimeoutMs != 75000 ||
-				cfg.Defaults.Budget.Hitl.Form.TimeoutMs != 76000 ||
-				cfg.Defaults.Budget.Hitl.Plan.TimeoutMs != 80000 {
+			if cfg.Defaults.Budget.Hitl.Question.Timeout != 70 ||
+				cfg.Defaults.Budget.Hitl.Approval.Timeout != 75 ||
+				cfg.Defaults.Budget.Hitl.Form.Timeout != 76 ||
+				cfg.Defaults.Budget.Hitl.Plan.Timeout != 80 {
 				t.Fatalf("unexpected default HITL mode budget timeout: %#v", cfg.Defaults.Budget.Hitl)
 			}
 		})
@@ -1320,7 +1412,7 @@ func TestLoadRejectsDeprecatedBashHITLTimeout(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected deprecated bash HITL timeout to be rejected")
 		}
-		if !strings.Contains(err.Error(), "hitl-default-timeout-ms") || !strings.Contains(err.Error(), "budget.hitl.timeoutMs") {
+		if !strings.Contains(err.Error(), "hitl-default-timeout-ms") || !strings.Contains(err.Error(), "budget.hitl.timeout") {
 			t.Fatalf("expected migration error for deprecated bash HITL timeout, got %v", err)
 		}
 	})
@@ -2010,10 +2102,10 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"CONTAINER_HUB_BASE_URL",
 		"CONTAINER_HUB_AUTH_TOKEN",
 		"CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID",
-		"CONTAINER_HUB_REQUEST_TIMEOUT_MS",
+		"CONTAINER_HUB_REQUEST_TIMEOUT",
 		"CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL",
-		"CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS",
-		"CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS",
+		"CONTAINER_HUB_AGENT_IDLE_TIMEOUT",
+		"CONTAINER_HUB_DESTROY_QUEUE_DELAY",
 		"AGENT_BASH_WORKING_DIRECTORY",
 		"AGENT_BASH_ALLOWED_PATHS",
 		"AGENT_BASH_ALLOWED_COMMANDS",
@@ -2063,19 +2155,19 @@ func withIsolatedEnv(t *testing.T, values map[string]string, fn func()) {
 		"AGENT_MEMORY_HYBRID_FTS_WEIGHT",
 		"AGENT_MEMORY_DUAL_WRITE_MARKDOWN",
 		"AGENT_DEFAULT_MAX_OUTPUT_TOKENS",
-		"AGENT_DEFAULT_BUDGET_RUN_TIMEOUT_MS",
+		"AGENT_DEFAULT_BUDGET_TIMEOUT",
 		"AGENT_DEFAULT_BUDGET_MAX_STEPS",
 		"AGENT_DEFAULT_BUDGET_MODEL_MAX_CALLS",
-		"AGENT_DEFAULT_BUDGET_MODEL_TIMEOUT_MS",
+		"AGENT_DEFAULT_BUDGET_MODEL_TIMEOUT",
 		"AGENT_DEFAULT_BUDGET_MODEL_RETRY_COUNT",
 		"AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS",
-		"AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS",
+		"AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT",
 		"AGENT_DEFAULT_BUDGET_TOOL_RETRY_COUNT",
-		"BUDGET_HITL_TIMEOUT_MS",
-		"BUDGET_HITL_QUESTION_TIMEOUT_MS",
-		"BUDGET_HITL_APPROVAL_TIMEOUT_MS",
-		"BUDGET_HITL_FORM_TIMEOUT_MS",
-		"BUDGET_HITL_PLAN_TIMEOUT_MS",
+		"BUDGET_HITL_TIMEOUT",
+		"BUDGET_HITL_QUESTION_TIMEOUT",
+		"BUDGET_HITL_APPROVAL_TIMEOUT",
+		"BUDGET_HITL_FORM_TIMEOUT",
+		"BUDGET_HITL_PLAN_TIMEOUT",
 		"AGENT_DEFAULT_REACT_MAX_STEPS",
 		"AGENT_DEFAULT_PLAN_EXECUTE_MAX_STEPS",
 		"AGENT_DEFAULT_PLAN_EXECUTE_MAX_WORK_ROUNDS_PER_TASK",

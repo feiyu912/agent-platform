@@ -113,7 +113,7 @@ func (e *LLMAgentEngine) newRunStreamWithOptions(ctx context.Context, req api.Qu
 	if execCtx.RunControl == nil {
 		execCtx.RunControl = RunControlFromContext(ctx)
 	}
-	if execCtx.Budget.RunTimeoutMs <= 0 || execCtx.Budget.MaxSteps <= 0 {
+	if execCtx.Budget.Timeout <= 0 || execCtx.Budget.MaxSteps <= 0 {
 		execCtx.Budget = NormalizeBudget(session.ResolvedBudget)
 	}
 	if execCtx.StartedAt.IsZero() {

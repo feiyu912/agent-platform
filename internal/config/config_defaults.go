@@ -69,20 +69,20 @@ func defaultConfig() Config {
 		Defaults: DefaultsConfig{
 			MaxOutputTokens: 4096,
 			Budget: BudgetDefaultsConfig{
-				RunTimeoutMs: 300000,
+				Timeout: 300,
 				MaxSteps:     100,
 				Model: RetryBudgetConfig{
 					MaxCalls:   100,
-					TimeoutMs:  120000,
+					Timeout:  120,
 					RetryCount: 0,
 				},
 				Tool: RetryBudgetConfig{
 					MaxCalls:   60,
-					TimeoutMs:  120000,
+					Timeout:  120,
 					RetryCount: 0,
 				},
 				Hitl: HitlBudgetConfig{
-					TimeoutMs: 0,
+					Timeout: 0,
 				},
 			},
 			React: ReactDefaultsConfig{MaxSteps: 60},
@@ -152,10 +152,10 @@ func defaultConfig() Config {
 		},
 		ContainerHub: ContainerHubConfig{
 			Enabled:             false,
-			RequestTimeoutMs:    300000,
+			RequestTimeout:      300,
 			DefaultSandboxLevel: "run",
-			AgentIdleTimeoutMs:  600000,
-			DestroyQueueDelayMs: 5000,
+			AgentIdleTimeout:  600,
+			DestroyQueueDelay: 5,
 		},
 		Desktop: DesktopConfig{
 			Action: DesktopBridgeConfig{

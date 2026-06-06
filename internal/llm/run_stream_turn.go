@@ -429,7 +429,7 @@ func (s *llmRunStream) newAssistantTurnMessage(turn *providerTurnStream, content
 
 func (s *llmRunStream) checkBudgetBeforeModelCall() map[string]any {
 	budget := NormalizeBudget(s.execCtx.Budget)
-	if budget.RunTimeoutMs > 0 && time.Since(s.execCtx.StartedAt) > budget.RunTimeout() {
+	if budget.Timeout > 0 && time.Since(s.execCtx.StartedAt) > budget.RunTimeout() {
 		return NewErrorPayload(
 			"run_timeout",
 			"run exceeded configured timeout",
@@ -437,7 +437,7 @@ func (s *llmRunStream) checkBudgetBeforeModelCall() map[string]any {
 			ErrorCategoryTimeout,
 			map[string]any{
 				"elapsedMs": time.Since(s.execCtx.StartedAt).Milliseconds(),
-				"timeoutMs": budget.RunTimeoutMs,
+				"timeoutMs": budget.Timeout * 1000,
 			},
 		)
 	}

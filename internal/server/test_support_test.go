@@ -228,11 +228,11 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 		"      destination: /skills",
 		"      mode: ro",
 		"mode: REACT",
-		"budget:",
-		"  tool:",
-		"    timeoutMs: 210000",
-		"  hitl:",
-		"    timeoutMs: 210000",
+	"budget:",
+	"  tool:",
+	"    timeout: 210",
+	"  hitl:",
+	"    timeout: 210",
 		"react:",
 		"  maxSteps: 6",
 	}, "\n")), 0o644); err != nil {
@@ -291,7 +291,7 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 		ContainerHub: config.ContainerHubConfig{
 			Enabled:          true,
 			BaseURL:          containerHubServer.URL,
-			RequestTimeoutMs: 1000,
+			RequestTimeout: 1000,
 			ResolvedEngine:   "local",
 		},
 	}

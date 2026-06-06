@@ -14,5 +14,5 @@ func maxInt(value int, fallback int) int {
 }
 
 func toolTimeout(policy contracts.RetryPolicy) time.Duration {
-	return time.Duration(maxInt(policy.TimeoutMs, 1)) * time.Millisecond
+	return policy.TimeoutDuration()
 }

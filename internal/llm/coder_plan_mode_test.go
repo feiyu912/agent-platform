@@ -170,8 +170,8 @@ func TestCoderPlanningConfirmationUsesPlanMode(t *testing.T) {
 				PlanningID: "run_1_planning_1",
 			},
 			Budget: contracts.Budget{
-				Tool: contracts.RetryPolicy{TimeoutMs: 120000},
-				Hitl: contracts.HitlPolicy{TimeoutMs: 600000},
+				Tool: contracts.RetryPolicy{Timeout: 120},
+				Hitl: contracts.HitlPolicy{Timeout: 600},
 			},
 		},
 	}

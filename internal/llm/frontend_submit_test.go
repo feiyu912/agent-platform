@@ -49,7 +49,7 @@ func TestFrontendSubmitCoordinatorAwait_AskUserQuestionPreservesRawParams(t *tes
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "ask_user_question",
 		Budget: contracts.Budget{
-			Tool: contracts.RetryPolicy{TimeoutMs: 50},
+			Tool: contracts.RetryPolicy{Timeout: 1},
 		},
 	}, map[string]any{
 		"questions": []any{
@@ -99,7 +99,7 @@ func TestFrontendSubmitCoordinatorAwait_AskUserQuestionIgnoresSubmittedIDs(t *te
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "ask_user_question",
 		Budget: contracts.Budget{
-			Tool: contracts.RetryPolicy{TimeoutMs: 50},
+			Tool: contracts.RetryPolicy{Timeout: 1},
 		},
 	}, map[string]any{
 		"questions": []any{
@@ -144,7 +144,7 @@ func TestFrontendSubmitCoordinatorAwait_AskUserQuestionCancelClearsRawParams(t *
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "ask_user_question",
 		Budget: contracts.Budget{
-			Tool: contracts.RetryPolicy{TimeoutMs: 50},
+			Tool: contracts.RetryPolicy{Timeout: 1},
 		},
 	}, map[string]any{
 		"questions": []any{map[string]any{"question": "Pick a plan", "type": "select"}},
@@ -177,7 +177,7 @@ func TestFrontendSubmitCoordinatorAwait_MissingHandlerReturnsConfigError(t *test
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "_missing_frontend_tool_",
 		Budget: contracts.Budget{
-			Tool: contracts.RetryPolicy{TimeoutMs: 50},
+			Tool: contracts.RetryPolicy{Timeout: 1},
 		},
 	}, map[string]any{"mode": "question"})
 	if err != nil {
@@ -197,7 +197,7 @@ func TestFrontendSubmitCoordinatorAwait_TimeoutReturnsCompactStructuredError(t *
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "ask_user_question",
 		Budget: contracts.Budget{
-			Hitl: contracts.HitlPolicy{TimeoutMs: 1},
+			Hitl: contracts.HitlPolicy{Timeout: 1},
 		},
 	}, map[string]any{"mode": "question"})
 	if err != nil {
@@ -236,7 +236,7 @@ func TestFrontendSubmitCoordinatorAwait_UsesAwaitingAskTimeoutOverToolBudget(t *
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "ask_user_question",
 		Budget: contracts.Budget{
-			Tool: contracts.RetryPolicy{TimeoutMs: 1200000},
+			Tool: contracts.RetryPolicy{Timeout: 1200},
 		},
 	}, map[string]any{"mode": "question"})
 	if err != nil {
@@ -264,7 +264,7 @@ func TestFrontendSubmitTimeoutUsesDisplayedAwaitingAskTimeout(t *testing.T) {
 		CurrentToolID:   "tool_1",
 		CurrentToolName: "ask_user_question",
 		Budget: contracts.Budget{
-			Tool: contracts.RetryPolicy{TimeoutMs: 120000},
+			Tool: contracts.RetryPolicy{Timeout: 120},
 		},
 	})
 	if timeout.Milliseconds() != 600000 {

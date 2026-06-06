@@ -197,7 +197,7 @@ func TestDeltaMapper_GenericFrontendToolEmitsFormAwaitAsk(t *testing.T) {
 			},
 		},
 	}
-	mapper := NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 5000}}, tools, frontendtools.NewDefaultRegistry())
+	mapper := NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 5}}, tools, frontendtools.NewDefaultRegistry())
 
 	inputs := mapper.Map(contracts.DeltaToolCall{
 		Index:     0,
@@ -233,11 +233,11 @@ func newQuestionDeltaMapper() *DeltaMapper {
 			},
 		},
 	}
-	return NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 5000}}, tools, frontendtools.NewDefaultRegistry())
+	return NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 5}}, tools, frontendtools.NewDefaultRegistry())
 }
 
 func TestDeltaMapperCloneIsolatedStartsFreshState(t *testing.T) {
-	mapper := NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 5000}}, stubToolLookup{}, frontendtools.NewDefaultRegistry())
+	mapper := NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 5}}, stubToolLookup{}, frontendtools.NewDefaultRegistry())
 
 	first := mapper.Map(contracts.DeltaContent{Text: "root"})
 	content, ok := first[0].(stream.ContentDelta)
@@ -263,7 +263,7 @@ func TestDeltaMapperCloneIsolatedStartsFreshState(t *testing.T) {
 }
 
 func TestDeltaMapper_ArtifactPublishPreservesBatchPayload(t *testing.T) {
-	mapper := NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 5000}}, stubToolLookup{}, frontendtools.NewDefaultRegistry())
+	mapper := NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 5}}, stubToolLookup{}, frontendtools.NewDefaultRegistry())
 
 	inputs := mapper.Map(contracts.DeltaArtifactPublish{
 		ChatID:        "chat_1",

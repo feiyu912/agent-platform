@@ -289,6 +289,9 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 	contextTags := listStrings(contextConfig["tags"])
 	def.ContextTags = normalizeContextTags(contextTags)
 	if budget := mapNode(root["budget"]); len(budget) > 0 {
+		if err := rejectDeprecatedAgentBudgetKeys(path, "budget", budget); err != nil {
+			return AgentDefinition{}, nil, err
+		}
 		def.Budget = contracts.CloneMap(budget)
 	}
 	if stageSettings := mapNode(root["stageSettings"]); len(stageSettings) > 0 {
@@ -533,6 +536,37 @@ func isMemoryTool(name string) bool {
 	default:
 		return false
 	}
+}
+
+func rejectDeprecatedAgentBudgetKeys(path string, fieldPath string, values map[string]any) error {
+	for _, key := range []string{"runTimeoutMs", "timeoutMs"} {
+		if _, ok := values[key]; ok {
+			return fmt.Errorf("%s: %q has moved to %s.timeout", path, fieldPath+"."+key, fieldPath)
+		}
+	}
+	for key, raw := range values {
+		child, ok := raw.(map[string]any)
+		if !ok || len(child) == 0 {
+			continue
+		}
+		nextPath := fieldPath + "." + key
+		if key == "stages" {
+			for stageKey, stageRaw := range child {
+				stage, ok := stageRaw.(map[string]any)
+				if !ok || len(stage) == 0 {
+					continue
+				}
+				if err := rejectDeprecatedAgentBudgetKeys(path, nextPath+"."+stageKey, stage); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if err := rejectDeprecatedAgentBudgetKeys(path, nextPath, child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateReservedBashToolNames(tools []string, overrides map[string]api.ToolDetailResponse) error {

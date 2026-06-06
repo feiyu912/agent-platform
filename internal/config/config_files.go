@@ -6,7 +6,9 @@ import (
 )
 
 func (c *Config) applyStructuredConfig() error {
-	c.applyRuntimeFile(ConfigFile("configs/runtime.yml"))
+	if err := c.applyRuntimeFile(ConfigFile("configs/runtime.yml")); err != nil {
+		return err
+	}
 	if err := c.applyHostToolsFile(ConfigFile("configs/host-tools.yml")); err != nil {
 		return err
 	}
@@ -49,26 +51,38 @@ func parseDesktopBridgeConfig(raw any, fallback DesktopBridgeConfig) DesktopBrid
 	return fallback
 }
 
-func (c *Config) applyContainerHubValues(values map[string]any) {
+func (c *Config) applyContainerHubValues(path string, values map[string]any) error {
+	if err := rejectDeprecatedYAMLKeys(path, "container-hub.request-timeout", values, "request-timeout-ms"); err != nil {
+		return err
+	}
+	if err := rejectDeprecatedYAMLKeys(path, "container-hub.agent-idle-timeout", values, "agent-idle-timeout-ms"); err != nil {
+		return err
+	}
+	if err := rejectDeprecatedYAMLKeys(path, "container-hub.destroy-queue-delay", values, "destroy-queue-delay-ms"); err != nil {
+		return err
+	}
 	c.ContainerHub.BaseURL = stringValue(anyValue(values["base-url"], c.ContainerHub.BaseURL), c.ContainerHub.BaseURL)
 	c.ContainerHub.AuthToken = stringValue(anyValue(values["auth-token"], c.ContainerHub.AuthToken), c.ContainerHub.AuthToken)
 	c.ContainerHub.DefaultEnvironmentID = stringValue(anyValue(values["default-environment-id"], c.ContainerHub.DefaultEnvironmentID), c.ContainerHub.DefaultEnvironmentID)
-	c.ContainerHub.RequestTimeoutMs = intValue(anyValue(values["request-timeout-ms"], c.ContainerHub.RequestTimeoutMs), c.ContainerHub.RequestTimeoutMs)
+	c.ContainerHub.RequestTimeout = intValue(anyValue(values["request-timeout"], c.ContainerHub.RequestTimeout), c.ContainerHub.RequestTimeout)
 	c.ContainerHub.DefaultSandboxLevel = strings.ToLower(stringValue(anyValue(values["default-sandbox-level"], c.ContainerHub.DefaultSandboxLevel), c.ContainerHub.DefaultSandboxLevel))
-	c.ContainerHub.AgentIdleTimeoutMs = int64Value(anyValue(values["agent-idle-timeout-ms"], c.ContainerHub.AgentIdleTimeoutMs), c.ContainerHub.AgentIdleTimeoutMs)
-	c.ContainerHub.DestroyQueueDelayMs = int64Value(anyValue(values["destroy-queue-delay-ms"], c.ContainerHub.DestroyQueueDelayMs), c.ContainerHub.DestroyQueueDelayMs)
+	c.ContainerHub.AgentIdleTimeout = int64Value(anyValue(values["agent-idle-timeout"], c.ContainerHub.AgentIdleTimeout), c.ContainerHub.AgentIdleTimeout)
+	c.ContainerHub.DestroyQueueDelay = int64Value(anyValue(values["destroy-queue-delay"], c.ContainerHub.DestroyQueueDelay), c.ContainerHub.DestroyQueueDelay)
+	return nil
 }
 
-func (c *Config) applyRuntimeFile(path string) {
+func (c *Config) applyRuntimeFile(path string) error {
 	values, err := loadYAMLMap(path)
 	if err != nil {
-		return
+		return nil
 	}
 	if len(values) == 0 {
-		return
+		return nil
 	}
 	if containerHub, ok := values["container-hub"].(map[string]any); ok && len(containerHub) > 0 {
-		c.applyContainerHubValues(containerHub)
+		if err := c.applyContainerHubValues(path, containerHub); err != nil {
+			return err
+		}
 	}
 	if desktop, ok := values["desktop"].(map[string]any); ok && len(desktop) > 0 {
 		c.applyDesktopValues(desktop)
@@ -80,8 +94,12 @@ func (c *Config) applyRuntimeFile(path string) {
 		c.applyBillingValues(billing)
 	}
 	if budget, ok := values["budget"].(map[string]any); ok && len(budget) > 0 {
+		if err := rejectDeprecatedBudgetKeys(path, "budget", budget); err != nil {
+			return err
+		}
 		c.applyRuntimeBudgetValues(budget)
 	}
+	return nil
 }
 
 func (c *Config) applyBillingValues(values map[string]any) {
@@ -89,15 +107,58 @@ func (c *Config) applyBillingValues(values map[string]any) {
 }
 
 func (c *Config) applyRuntimeBudgetValues(budget map[string]any) {
+	c.Defaults.Budget.Timeout = intValue(anyValue(budget["timeout"], c.Defaults.Budget.Timeout), c.Defaults.Budget.Timeout)
+	c.Defaults.Budget.Model = parseRetryBudgetConfig(budget["model"], c.Defaults.Budget.Model)
+	c.Defaults.Budget.Tool = parseRetryBudgetConfig(budget["tool"], c.Defaults.Budget.Tool)
 	hitl, _ := budget["hitl"].(map[string]any)
-	if len(hitl) == 0 {
-		return
+	if len(hitl) > 0 {
+		c.Defaults.Budget.Hitl.Timeout = intValue(anyValue(hitl["timeout"], c.Defaults.Budget.Hitl.Timeout), c.Defaults.Budget.Hitl.Timeout)
+		c.Defaults.Budget.Hitl.Question = parseHitlModeBudgetConfig(hitl["question"], c.Defaults.Budget.Hitl.Question)
+		c.Defaults.Budget.Hitl.Approval = parseHitlModeBudgetConfig(hitl["approval"], c.Defaults.Budget.Hitl.Approval)
+		c.Defaults.Budget.Hitl.Form = parseHitlModeBudgetConfig(hitl["form"], c.Defaults.Budget.Hitl.Form)
+		c.Defaults.Budget.Hitl.Plan = parseHitlModeBudgetConfig(hitl["plan"], c.Defaults.Budget.Hitl.Plan)
 	}
-	c.Defaults.Budget.Hitl.TimeoutMs = intValue(anyValue(hitl["timeoutMs"], c.Defaults.Budget.Hitl.TimeoutMs), c.Defaults.Budget.Hitl.TimeoutMs)
-	c.Defaults.Budget.Hitl.Question = parseHitlModeBudgetConfig(hitl["question"], c.Defaults.Budget.Hitl.Question)
-	c.Defaults.Budget.Hitl.Approval = parseHitlModeBudgetConfig(hitl["approval"], c.Defaults.Budget.Hitl.Approval)
-	c.Defaults.Budget.Hitl.Form = parseHitlModeBudgetConfig(hitl["form"], c.Defaults.Budget.Hitl.Form)
-	c.Defaults.Budget.Hitl.Plan = parseHitlModeBudgetConfig(hitl["plan"], c.Defaults.Budget.Hitl.Plan)
+	c.Defaults.Budget.Stages = parseStageBudgetConfigs(budget["stages"], c.Defaults.Budget.Stages)
+}
+
+func parseRetryBudgetConfig(raw any, fallback RetryBudgetConfig) RetryBudgetConfig {
+	values, _ := raw.(map[string]any)
+	if len(values) == 0 {
+		return fallback
+	}
+	fallback.MaxCalls = intValue(anyValue(values["maxCalls"], fallback.MaxCalls), fallback.MaxCalls)
+	fallback.Timeout = intValue(anyValue(values["timeout"], fallback.Timeout), fallback.Timeout)
+	fallback.RetryCount = intValue(anyValue(values["retryCount"], fallback.RetryCount), fallback.RetryCount)
+	return fallback
+}
+
+func parseStageBudgetConfigs(raw any, fallback map[string]StageBudgetConfig) map[string]StageBudgetConfig {
+	values, _ := raw.(map[string]any)
+	if len(values) == 0 {
+		return fallback
+	}
+	out := make(map[string]StageBudgetConfig, len(fallback)+len(values))
+	for key, value := range fallback {
+		out[strings.ToLower(strings.TrimSpace(key))] = value
+	}
+	for rawKey, rawValue := range values {
+		key := strings.ToLower(strings.TrimSpace(rawKey))
+		if key == "" {
+			continue
+		}
+		stageValues, _ := rawValue.(map[string]any)
+		if len(stageValues) == 0 {
+			continue
+		}
+		stage := out[key]
+		stage.MaxSteps = intValue(anyValue(stageValues["maxSteps"], stage.MaxSteps), stage.MaxSteps)
+		stage.Tool = parseRetryBudgetConfig(stageValues["tool"], stage.Tool)
+		out[key] = stage
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func parseHitlModeBudgetConfig(raw any, fallback HitlModeBudgetConfig) HitlModeBudgetConfig {
@@ -105,7 +166,7 @@ func parseHitlModeBudgetConfig(raw any, fallback HitlModeBudgetConfig) HitlModeB
 	if len(values) == 0 {
 		return fallback
 	}
-	fallback.TimeoutMs = intValue(anyValue(values["timeoutMs"], fallback.TimeoutMs), fallback.TimeoutMs)
+	fallback.Timeout = intValue(anyValue(values["timeout"], fallback.Timeout), fallback.Timeout)
 	return fallback
 }
 
@@ -201,6 +262,35 @@ func rejectDeprecatedYAMLKeys(path string, target string, values map[string]any,
 	return nil
 }
 
+func rejectDeprecatedBudgetKeys(path string, fieldPath string, values map[string]any) error {
+	if err := rejectDeprecatedYAMLKeys(path, fieldPath+".timeout", values, "runTimeoutMs", "timeoutMs"); err != nil {
+		return err
+	}
+	for key, raw := range values {
+		child, ok := raw.(map[string]any)
+		if !ok || len(child) == 0 {
+			continue
+		}
+		nextPath := fieldPath + "." + key
+		if key == "stages" {
+			for stageKey, stageRaw := range child {
+				stage, ok := stageRaw.(map[string]any)
+				if !ok || len(stage) == 0 {
+					continue
+				}
+				if err := rejectDeprecatedBudgetKeys(path, nextPath+"."+stageKey, stage); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if err := rejectDeprecatedBudgetKeys(path, nextPath, child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Config) applyHostToolsFile(path string) error {
 	values, err := loadYAMLMap(path)
 	if err != nil {
@@ -216,7 +306,7 @@ func (c *Config) applyHostToolsFile(path string) error {
 		if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", bash, "allowed-paths", "path-checked-commands", "path-check-bypass-commands"); err != nil {
 			return err
 		}
-		if err := rejectDeprecatedYAMLKeys(path, "budget.hitl.timeoutMs", bash, "hitl-default-timeout-ms"); err != nil {
+		if err := rejectDeprecatedYAMLKeys(path, "budget.hitl.timeout", bash, "hitl-default-timeout-ms"); err != nil {
 			return err
 		}
 		c.applyBashValues(bash)

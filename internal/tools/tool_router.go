@@ -265,7 +265,7 @@ func (r *ToolRouter) invokeWithPolicy(ctx context.Context, toolName string, exec
 	}
 	retryCount := 0
 	timeout := 30 * time.Second
-	if budget.Tool.TimeoutMs > 0 {
+	if budget.Tool.Timeout > 0 {
 		timeout = toolTimeout(budget.Tool)
 	}
 	if budget.Tool.RetryCount > 0 {

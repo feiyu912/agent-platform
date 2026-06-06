@@ -9,7 +9,7 @@ import (
 )
 
 func toolTimeout(policy contracts.RetryPolicy) time.Duration {
-	return time.Duration(maxInt(policy.TimeoutMs, 1)) * time.Millisecond
+	return policy.TimeoutDuration()
 }
 
 func structuredOrOutput(result contracts.ToolExecutionResult) any {

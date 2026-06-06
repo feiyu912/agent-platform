@@ -90,6 +90,7 @@ function Convert-LegacyHitlBudgetConfig {
   if ([string]::IsNullOrWhiteSpace($timeoutMs)) {
     $timeoutMs = '600000'
   }
+  $timeoutSeconds = [int][Math]::Ceiling(([double]$timeoutMs) / 1000)
 
   $updatedLegacyText = [regex]::Replace($legacyText, '(?m)^[ \t]*hitl-default-timeout-ms:[ \t]*.*\r?\n?', '')
   Set-Content -LiteralPath $legacyFile -Value $updatedLegacyText -NoNewline
@@ -99,11 +100,11 @@ function Convert-LegacyHitlBudgetConfig {
     $runtimeText = Get-Content -LiteralPath $runtimeFile -Raw
   }
   if ($runtimeText -notmatch '(?m)^budget:[ \t]*$') {
-    $budgetText = "budget:`n  hitl:`n    timeoutMs: $timeoutMs`n`n"
+    $budgetText = "budget:`n  hitl:`n    timeout: $timeoutSeconds`n`n"
     Set-Content -LiteralPath $runtimeFile -Value ($budgetText + $runtimeText) -NoNewline
   }
 
-  Write-Host '[program-deploy] migrated bash.hitl-default-timeout-ms to budget.hitl.timeoutMs'
+  Write-Host '[program-deploy] migrated bash.hitl-default-timeout-ms to budget.hitl.timeout'
 }
 
 function Import-ProgramEnv {

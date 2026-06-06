@@ -1,16 +1,21 @@
 # Runtime integration config. Copy to configs/runtime.yml to customize locally.
 
 budget:
+  timeout: 300
+  model:
+    timeout: 120
+  tool:
+    timeout: 120
   hitl:
-    timeoutMs: 600000
+    timeout: 600
     question:
-      timeoutMs: 600000
+      timeout: 600
     approval:
-      timeoutMs: 600000
+      timeout: 600
     form:
-      timeoutMs: 600000
+      timeout: 600
     plan:
-      timeoutMs: 600000
+      timeout: 600
 
 container-hub:
   base-url: ${CONTAINER_HUB_BASE_URL:http://host.docker.internal:11960}
@@ -18,10 +23,10 @@ container-hub:
   # Optional overrides; code defaults apply when omitted.
   # auth-token:
   # default-environment-id:
-  # request-timeout-ms: 300000
+  # request-timeout: 300
   # default-sandbox-level: run
-  # agent-idle-timeout-ms: 600000
-  # destroy-queue-delay-ms: 5000
+  # agent-idle-timeout: 600
+  # destroy-queue-delay: 5
 
   # Default mounts come from runtime directory config:
   # /workspace -> CHATS_DIR/<chatId> (rw)

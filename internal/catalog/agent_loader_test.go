@@ -580,8 +580,8 @@ func TestParseAgentFileAppliesCoderProfileDefaults(t *testing.T) {
 	if !reflect.DeepEqual(def.ContextTags, wantTags) {
 		t.Fatalf("context tags = %#v, want %#v", def.ContextTags, wantTags)
 	}
-	if got := intNode(def.Budget["runTimeoutMs"]); got != 1800000 {
-		t.Fatalf("runTimeoutMs = %d, want 1800000", got)
+	if got := intNode(def.Budget["timeout"]); got != 1800 {
+		t.Fatalf("timeout = %d, want 1800", got)
 	}
 	if got := intNode(def.Budget["maxSteps"]); got != 240 {
 		t.Fatalf("maxSteps = %d, want 240", got)
@@ -611,7 +611,7 @@ func TestParseAgentFileAllowsCoderProfileOverrides(t *testing.T) {
 		"  tags:\n" +
 		"    - owner\n" +
 		"budget:\n" +
-		"  runTimeoutMs: 1234\n" +
+		"  timeout: 1234\n" +
 		"react:\n" +
 		"  maxSteps: 12\n" +
 		"runtimeConfig:\n" +
@@ -630,11 +630,36 @@ func TestParseAgentFileAllowsCoderProfileOverrides(t *testing.T) {
 	if !reflect.DeepEqual(def.ContextTags, []string{"owner"}) {
 		t.Fatalf("context tags = %#v, want explicit override", def.ContextTags)
 	}
-	if got := intNode(def.Budget["runTimeoutMs"]); got != 1234 {
-		t.Fatalf("runTimeoutMs = %d, want explicit override", got)
+	if got := intNode(def.Budget["timeout"]); got != 1234 {
+		t.Fatalf("timeout = %d, want explicit override", got)
 	}
 	if def.ReactMaxSteps != 12 {
 		t.Fatalf("react max steps = %d, want explicit override", def.ReactMaxSteps)
+	}
+}
+
+func TestParseAgentFileRejectsDeprecatedBudgetTimeoutKeys(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.yml")
+	content := "" +
+		"key: demo\n" +
+		"name: Demo\n" +
+		"mode: REACT\n" +
+		"modelConfig:\n" +
+		"  modelKey: demo-model\n" +
+		"budget:\n" +
+		"  tool:\n" +
+		"    timeoutMs: 120000\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+
+	_, err := parseAgentFile(path)
+	if err == nil {
+		t.Fatal("expected deprecated budget timeoutMs to be rejected")
+	}
+	if !strings.Contains(err.Error(), "budget.tool.timeoutMs") || !strings.Contains(err.Error(), "budget.tool.timeout") {
+		t.Fatalf("expected migration error for deprecated budget timeout, got %v", err)
 	}
 }
 

@@ -27,7 +27,7 @@ var coderAgentProfile = agentModeProfile{
 	},
 	ContextTags: []string{"system", "session"},
 	Budget: map[string]any{
-		"runTimeoutMs": 1800000,
+		"timeout": 1800,
 		"maxSteps":     240,
 		"tool": map[string]any{
 			"maxCalls": 200,

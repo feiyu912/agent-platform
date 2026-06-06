@@ -46,7 +46,7 @@ func (c *Config) applyEnv() {
 	c.Memory.StorageDir = pathEnv("MEMORY_DIR", c.Memory.StorageDir)
 
 	c.Defaults.MaxOutputTokens = intEnv("AGENT_DEFAULT_MAX_OUTPUT_TOKENS", c.Defaults.MaxOutputTokens)
-	c.Defaults.Budget.RunTimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_RUN_TIMEOUT_MS", c.Defaults.Budget.RunTimeoutMs)
+	c.Defaults.Budget.Timeout = intEnv("AGENT_DEFAULT_BUDGET_TIMEOUT", c.Defaults.Budget.Timeout)
 	_, defaultBudgetMaxStepsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_MAX_STEPS")
 	_, legacyModelMaxCallsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_MODEL_MAX_CALLS")
 	_, defaultToolMaxCallsEnv := os.LookupEnv("AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS")
@@ -55,19 +55,19 @@ func (c *Config) applyEnv() {
 	if !defaultBudgetMaxStepsEnv && legacyModelMaxCallsEnv && c.Defaults.Budget.Model.MaxCalls > 0 {
 		c.Defaults.Budget.MaxSteps = c.Defaults.Budget.Model.MaxCalls
 	}
-	c.Defaults.Budget.Model.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_MODEL_TIMEOUT_MS", c.Defaults.Budget.Model.TimeoutMs)
+	c.Defaults.Budget.Model.Timeout = intEnv("AGENT_DEFAULT_BUDGET_MODEL_TIMEOUT", c.Defaults.Budget.Model.Timeout)
 	c.Defaults.Budget.Model.RetryCount = intEnv("AGENT_DEFAULT_BUDGET_MODEL_RETRY_COUNT", c.Defaults.Budget.Model.RetryCount)
 	c.Defaults.Budget.Tool.MaxCalls = intEnv("AGENT_DEFAULT_BUDGET_TOOL_MAX_CALLS", c.Defaults.Budget.Tool.MaxCalls)
 	if (defaultBudgetMaxStepsEnv || legacyModelMaxCallsEnv) && !defaultToolMaxCallsEnv && c.Defaults.Budget.MaxSteps > 0 {
 		c.Defaults.Budget.Tool.MaxCalls = c.Defaults.Budget.MaxSteps * 2
 	}
-	c.Defaults.Budget.Tool.TimeoutMs = intEnv("AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT_MS", c.Defaults.Budget.Tool.TimeoutMs)
+	c.Defaults.Budget.Tool.Timeout = intEnv("AGENT_DEFAULT_BUDGET_TOOL_TIMEOUT", c.Defaults.Budget.Tool.Timeout)
 	c.Defaults.Budget.Tool.RetryCount = intEnv("AGENT_DEFAULT_BUDGET_TOOL_RETRY_COUNT", c.Defaults.Budget.Tool.RetryCount)
-	c.Defaults.Budget.Hitl.TimeoutMs = intEnv("BUDGET_HITL_TIMEOUT_MS", c.Defaults.Budget.Hitl.TimeoutMs)
-	c.Defaults.Budget.Hitl.Question.TimeoutMs = intEnv("BUDGET_HITL_QUESTION_TIMEOUT_MS", c.Defaults.Budget.Hitl.Question.TimeoutMs)
-	c.Defaults.Budget.Hitl.Approval.TimeoutMs = intEnv("BUDGET_HITL_APPROVAL_TIMEOUT_MS", c.Defaults.Budget.Hitl.Approval.TimeoutMs)
-	c.Defaults.Budget.Hitl.Form.TimeoutMs = intEnv("BUDGET_HITL_FORM_TIMEOUT_MS", c.Defaults.Budget.Hitl.Form.TimeoutMs)
-	c.Defaults.Budget.Hitl.Plan.TimeoutMs = intEnv("BUDGET_HITL_PLAN_TIMEOUT_MS", c.Defaults.Budget.Hitl.Plan.TimeoutMs)
+	c.Defaults.Budget.Hitl.Timeout = intEnv("BUDGET_HITL_TIMEOUT", c.Defaults.Budget.Hitl.Timeout)
+	c.Defaults.Budget.Hitl.Question.Timeout = intEnv("BUDGET_HITL_QUESTION_TIMEOUT", c.Defaults.Budget.Hitl.Question.Timeout)
+	c.Defaults.Budget.Hitl.Approval.Timeout = intEnv("BUDGET_HITL_APPROVAL_TIMEOUT", c.Defaults.Budget.Hitl.Approval.Timeout)
+	c.Defaults.Budget.Hitl.Form.Timeout = intEnv("BUDGET_HITL_FORM_TIMEOUT", c.Defaults.Budget.Hitl.Form.Timeout)
+	c.Defaults.Budget.Hitl.Plan.Timeout = intEnv("BUDGET_HITL_PLAN_TIMEOUT", c.Defaults.Budget.Hitl.Plan.Timeout)
 	c.Defaults.React.MaxSteps = intEnv("AGENT_DEFAULT_REACT_MAX_STEPS", c.Defaults.React.MaxSteps)
 	c.Defaults.Plan.MaxSteps = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_STEPS", c.Defaults.Plan.MaxSteps)
 	c.Defaults.Plan.MaxWorkRoundsPerTask = intEnv("AGENT_DEFAULT_PLAN_EXECUTE_MAX_WORK_ROUNDS_PER_TASK", c.Defaults.Plan.MaxWorkRoundsPerTask)
@@ -119,10 +119,10 @@ func (c *Config) applyEnv() {
 	c.ContainerHub.BaseURL = stringEnv("CONTAINER_HUB_BASE_URL", c.ContainerHub.BaseURL)
 	c.ContainerHub.AuthToken = stringEnv("CONTAINER_HUB_AUTH_TOKEN", c.ContainerHub.AuthToken)
 	c.ContainerHub.DefaultEnvironmentID = stringEnv("CONTAINER_HUB_DEFAULT_ENVIRONMENT_ID", c.ContainerHub.DefaultEnvironmentID)
-	c.ContainerHub.RequestTimeoutMs = intEnv("CONTAINER_HUB_REQUEST_TIMEOUT_MS", c.ContainerHub.RequestTimeoutMs)
+	c.ContainerHub.RequestTimeout = intEnv("CONTAINER_HUB_REQUEST_TIMEOUT", c.ContainerHub.RequestTimeout)
 	c.ContainerHub.DefaultSandboxLevel = strings.ToLower(stringEnv("CONTAINER_HUB_DEFAULT_SANDBOX_LEVEL", c.ContainerHub.DefaultSandboxLevel))
-	c.ContainerHub.AgentIdleTimeoutMs = int64Env("CONTAINER_HUB_AGENT_IDLE_TIMEOUT_MS", c.ContainerHub.AgentIdleTimeoutMs)
-	c.ContainerHub.DestroyQueueDelayMs = int64Env("CONTAINER_HUB_DESTROY_QUEUE_DELAY_MS", c.ContainerHub.DestroyQueueDelayMs)
+	c.ContainerHub.AgentIdleTimeout = int64Env("CONTAINER_HUB_AGENT_IDLE_TIMEOUT", c.ContainerHub.AgentIdleTimeout)
+	c.ContainerHub.DestroyQueueDelay = int64Env("CONTAINER_HUB_DESTROY_QUEUE_DELAY", c.ContainerHub.DestroyQueueDelay)
 
 	c.Run.ReaperIntervalMs = int64Env("AGENT_RUN_REAPER_INTERVAL_MS", c.Run.ReaperIntervalMs)
 	c.Run.MaxBackgroundDurationMs = int64Env("AGENT_RUN_MAX_BACKGROUND_DURATION_MS", c.Run.MaxBackgroundDurationMs)

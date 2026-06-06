@@ -246,7 +246,7 @@ func (s *ContainerHubSandboxService) releaseAgentSession(agentKey string) {
 	managed.activeUsers--
 	managed.lastUsed = time.Now()
 	sessionID := managed.session.SessionID
-	idle := time.Duration(maxInt64(s.cfg.AgentIdleTimeoutMs, 0)) * time.Millisecond
+	idle := time.Duration(maxInt64(s.cfg.AgentIdleTimeout, 0)) * time.Second
 	s.mu.Unlock()
 	if idle <= 0 {
 		if _, err := s.client.StopSession(context.Background(), sessionID); err != nil {
@@ -288,7 +288,7 @@ func (s *ContainerHubSandboxService) releaseRunSession(sessionKey string) {
 	managed.activeUsers--
 	managed.lastUsed = time.Now()
 	sessionID := managed.session.SessionID
-	idle := time.Duration(maxInt64(s.cfg.DestroyQueueDelayMs, 0)) * time.Millisecond
+	idle := time.Duration(maxInt64(s.cfg.DestroyQueueDelay, 0)) * time.Second
 	s.mu.Unlock()
 	if idle <= 0 {
 		if _, err := s.client.StopSession(context.Background(), sessionID); err != nil {

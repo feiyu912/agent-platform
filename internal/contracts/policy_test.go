@@ -10,12 +10,12 @@ func TestResolveBudgetSupportsHitlTimeoutOverride(t *testing.T) {
 	cfg := config.Config{
 		Defaults: config.DefaultsConfig{
 			Budget: config.BudgetDefaultsConfig{
-				RunTimeoutMs: 300000,
-				Model:        config.RetryBudgetConfig{MaxCalls: 30, TimeoutMs: 120000},
-				Tool:         config.RetryBudgetConfig{MaxCalls: 20, TimeoutMs: 60000},
+				Timeout: 300,
+				Model:   config.RetryBudgetConfig{MaxCalls: 30, Timeout: 120},
+				Tool:    config.RetryBudgetConfig{MaxCalls: 20, Timeout: 60},
 				Hitl: config.HitlBudgetConfig{
-					TimeoutMs: 15000,
-					Question:  config.HitlModeBudgetConfig{TimeoutMs: 16000},
+					Timeout:  15,
+					Question: config.HitlModeBudgetConfig{Timeout: 16},
 				},
 			},
 		},
@@ -23,26 +23,26 @@ func TestResolveBudgetSupportsHitlTimeoutOverride(t *testing.T) {
 
 	budget := ResolveBudget(cfg, map[string]any{
 		"hitl": map[string]any{
-			"timeoutMs": 45000,
-			"question":  map[string]any{"timeoutMs": 55000},
-			"approval":  map[string]any{"timeoutMs": 65000},
+			"timeout":  45,
+			"question": map[string]any{"timeout": 55},
+			"approval": map[string]any{"timeout": 65},
 		},
 	})
-	if budget.Hitl.TimeoutMs != 45000 || budget.Hitl.Question.TimeoutMs != 55000 || budget.Hitl.Approval.TimeoutMs != 65000 {
-		t.Fatalf("expected HITL timeout override 45000, got %#v", budget)
+	if budget.Hitl.Timeout != 45 || budget.Hitl.Question.Timeout != 55 || budget.Hitl.Approval.Timeout != 65 {
+		t.Fatalf("expected HITL timeout override 45, got %#v", budget)
 	}
-	if budget.Hitl.Form.TimeoutMs != 0 || budget.Hitl.Plan.TimeoutMs != 0 {
+	if budget.Hitl.Form.Timeout != 0 || budget.Hitl.Plan.Timeout != 0 {
 		t.Fatalf("did not expect unset HITL mode timeouts, got %#v", budget.Hitl)
 	}
 }
 
 func TestNormalizeBudgetLeavesUnsetHitlTimeoutAtZero(t *testing.T) {
 	budget := NormalizeBudget(Budget{})
-	if budget.Hitl.TimeoutMs != 0 {
+	if budget.Hitl.Timeout != 0 {
 		t.Fatalf("expected unset HITL timeout to stay 0, got %#v", budget)
 	}
-	if budget.Hitl.Question.TimeoutMs != 0 || budget.Hitl.Approval.TimeoutMs != 0 ||
-		budget.Hitl.Form.TimeoutMs != 0 || budget.Hitl.Plan.TimeoutMs != 0 {
+	if budget.Hitl.Question.Timeout != 0 || budget.Hitl.Approval.Timeout != 0 ||
+		budget.Hitl.Form.Timeout != 0 || budget.Hitl.Plan.Timeout != 0 {
 		t.Fatalf("expected unset HITL mode timeouts to stay 0, got %#v", budget.Hitl)
 	}
 	if budget.MaxSteps != 100 {
@@ -63,11 +63,11 @@ func TestNormalizeBudgetLeavesUnsetHitlTimeoutAtZero(t *testing.T) {
 
 func TestResolveHITLTimeoutUsesModeItemAndFallbackPriority(t *testing.T) {
 	budget := Budget{Hitl: HitlPolicy{
-		TimeoutMs: 100000,
-		Question:  HitlModePolicy{TimeoutMs: 110000},
-		Approval:  HitlModePolicy{TimeoutMs: 120000},
-		Form:      HitlModePolicy{TimeoutMs: 130000},
-		Plan:      HitlModePolicy{TimeoutMs: 140000},
+		Timeout:  100,
+		Question: HitlModePolicy{Timeout: 110},
+		Approval: HitlModePolicy{Timeout: 120},
+		Form:     HitlModePolicy{Timeout: 130},
+		Plan:     HitlModePolicy{Timeout: 140},
 	}}
 
 	// question: item-specific timeout > mode budget
@@ -95,7 +95,7 @@ func TestResolveHITLTimeoutUsesModeItemAndFallbackPriority(t *testing.T) {
 		t.Fatalf("approval timeout = %d, want mode override 120000", got)
 	}
 	// question: no mode or item → global hitl
-	if got := ResolveHITLTimeout("question", 0, Budget{Hitl: HitlPolicy{TimeoutMs: 100000}}); got != 100000 {
+	if got := ResolveHITLTimeout("question", 0, Budget{Hitl: HitlPolicy{Timeout: 100}}); got != 100000 {
 		t.Fatalf("question timeout = %d, want global override 100000", got)
 	}
 	// question: nothing set → default
@@ -108,10 +108,10 @@ func TestResolveBudgetMaxStepsAndLegacyModelFallback(t *testing.T) {
 	cfg := config.Config{
 		Defaults: config.DefaultsConfig{
 			Budget: config.BudgetDefaultsConfig{
-				RunTimeoutMs: 300000,
-				MaxSteps:     100,
-				Model:        config.RetryBudgetConfig{MaxCalls: 100, TimeoutMs: 120000},
-				Tool:         config.RetryBudgetConfig{MaxCalls: 60, TimeoutMs: 60000},
+				Timeout:  300,
+				MaxSteps: 100,
+				Model:    config.RetryBudgetConfig{MaxCalls: 100, Timeout: 120},
+				Tool:     config.RetryBudgetConfig{MaxCalls: 60, Timeout: 60},
 			},
 		},
 	}
@@ -144,10 +144,10 @@ func TestResolveBudgetStageToolDerivesFromStageMaxSteps(t *testing.T) {
 	cfg := config.Config{
 		Defaults: config.DefaultsConfig{
 			Budget: config.BudgetDefaultsConfig{
-				RunTimeoutMs: 300000,
-				MaxSteps:     100,
-				Model:        config.RetryBudgetConfig{MaxCalls: 100, TimeoutMs: 120000},
-				Tool:         config.RetryBudgetConfig{MaxCalls: 60, TimeoutMs: 60000},
+				Timeout:  300,
+				MaxSteps: 100,
+				Model:    config.RetryBudgetConfig{MaxCalls: 100, Timeout: 120},
+				Tool:     config.RetryBudgetConfig{MaxCalls: 60, Timeout: 60},
 			},
 		},
 	}

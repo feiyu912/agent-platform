@@ -9,12 +9,12 @@ import (
 
 type RetryPolicy struct {
 	MaxCalls   int `json:"maxCalls,omitempty"`
-	TimeoutMs  int `json:"timeoutMs,omitempty"`
+	Timeout    int `json:"timeout,omitempty"`
 	RetryCount int `json:"retryCount,omitempty"`
 }
 
 type HitlPolicy struct {
-	TimeoutMs int            `json:"timeoutMs,omitempty"`
+	Timeout  int            `json:"timeout,omitempty"`
 	Question  HitlModePolicy `json:"question,omitempty"`
 	Approval  HitlModePolicy `json:"approval,omitempty"`
 	Form      HitlModePolicy `json:"form,omitempty"`
@@ -22,7 +22,7 @@ type HitlPolicy struct {
 }
 
 type HitlModePolicy struct {
-	TimeoutMs int `json:"timeoutMs,omitempty"`
+	Timeout int `json:"timeout,omitempty"`
 }
 
 type StageBudget struct {
@@ -31,7 +31,7 @@ type StageBudget struct {
 }
 
 type Budget struct {
-	RunTimeoutMs int                    `json:"runTimeoutMs,omitempty"`
+	Timeout  int                    `json:"timeout,omitempty"`
 	MaxSteps     int                    `json:"maxSteps,omitempty"`
 	Model        RetryPolicy            `json:"model,omitempty"`
 	Tool         RetryPolicy            `json:"tool,omitempty"`
@@ -41,26 +41,52 @@ type Budget struct {
 
 func DefaultBudget(cfg config.Config) Budget {
 	return Budget{
-		RunTimeoutMs: cfg.Defaults.Budget.RunTimeoutMs,
+		Timeout: cfg.Defaults.Budget.Timeout,
 		MaxSteps:     cfg.Defaults.Budget.MaxSteps,
 		Model: RetryPolicy{
 			MaxCalls:   cfg.Defaults.Budget.Model.MaxCalls,
-			TimeoutMs:  cfg.Defaults.Budget.Model.TimeoutMs,
+			Timeout:  cfg.Defaults.Budget.Model.Timeout,
 			RetryCount: cfg.Defaults.Budget.Model.RetryCount,
 		},
 		Tool: RetryPolicy{
 			MaxCalls:   cfg.Defaults.Budget.Tool.MaxCalls,
-			TimeoutMs:  cfg.Defaults.Budget.Tool.TimeoutMs,
+			Timeout:  cfg.Defaults.Budget.Tool.Timeout,
 			RetryCount: cfg.Defaults.Budget.Tool.RetryCount,
 		},
 		Hitl: HitlPolicy{
-			TimeoutMs: cfg.Defaults.Budget.Hitl.TimeoutMs,
+			Timeout: cfg.Defaults.Budget.Hitl.Timeout,
 			Question:  hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Question),
 			Approval:  hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Approval),
 			Form:      hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Form),
 			Plan:      hitlModePolicyFromConfig(cfg.Defaults.Budget.Hitl.Plan),
 		},
+		Stages: stageBudgetsFromConfig(cfg.Defaults.Budget.Stages),
 	}
+}
+
+func stageBudgetsFromConfig(values map[string]config.StageBudgetConfig) map[string]StageBudget {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]StageBudget, len(values))
+	for key, value := range values {
+		key = normalizeStageBudgetKey(key)
+		if key == "" {
+			continue
+		}
+		out[key] = StageBudget{
+			MaxSteps: value.MaxSteps,
+			Tool: RetryPolicy{
+				MaxCalls:   value.Tool.MaxCalls,
+				Timeout:    value.Tool.Timeout,
+				RetryCount: value.Tool.RetryCount,
+			},
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func ResolveBudget(cfg config.Config, overrides map[string]any) Budget {
@@ -70,8 +96,8 @@ func ResolveBudget(cfg config.Config, overrides map[string]any) Budget {
 	}
 	rootStepsOverridden := false
 	rootToolExplicit := false
-	if value := anyIntNode(overrides["runTimeoutMs"]); value > 0 {
-		budget.RunTimeoutMs = value
+	if value := anyIntNode(overrides["timeout"]); value > 0 {
+		budget.Timeout = value
 	}
 	if value := anyIntNode(overrides["maxSteps"]); value > 0 {
 		budget.MaxSteps = value
@@ -104,8 +130,8 @@ func ResolveBudget(cfg config.Config, overrides map[string]any) Budget {
 
 func normalizeBudget(b Budget) Budget {
 	hadStepOverride := b.MaxSteps > 0 || b.Model.MaxCalls > 0
-	if b.RunTimeoutMs <= 0 {
-		b.RunTimeoutMs = 300000
+	if b.Timeout <= 0 {
+		b.Timeout = 300
 	}
 	if b.MaxSteps <= 0 {
 		b.MaxSteps = b.Model.MaxCalls
@@ -113,18 +139,18 @@ func normalizeBudget(b Budget) Budget {
 	if b.MaxSteps <= 0 {
 		b.MaxSteps = 100
 	}
-	b.Model = normalizeRetryPolicy(b.Model, RetryPolicy{MaxCalls: b.MaxSteps, TimeoutMs: 120000, RetryCount: 0})
+	b.Model = normalizeRetryPolicy(b.Model, RetryPolicy{MaxCalls: b.MaxSteps, Timeout: 120, RetryCount: 0})
 	b.Model.MaxCalls = b.MaxSteps
 	toolFallbackMaxCalls := 60
 	if hadStepOverride {
 		toolFallbackMaxCalls = b.MaxSteps * 2
 	}
-	b.Tool = normalizeRetryPolicy(b.Tool, RetryPolicy{MaxCalls: toolFallbackMaxCalls, TimeoutMs: 300000, RetryCount: 0})
+	b.Tool = normalizeRetryPolicy(b.Tool, RetryPolicy{MaxCalls: toolFallbackMaxCalls, Timeout: 300, RetryCount: 0})
 	if b.Stages != nil {
 		normalizedStages := map[string]StageBudget{}
 		for key, stage := range b.Stages {
 			stage = normalizeStageBudget(stage)
-			if stage.MaxSteps > 0 || stage.Tool.MaxCalls > 0 || stage.Tool.TimeoutMs > 0 || stage.Tool.RetryCount > 0 {
+			if stage.MaxSteps > 0 || stage.Tool.MaxCalls > 0 || stage.Tool.Timeout > 0 || stage.Tool.RetryCount > 0 {
 				normalizedStages[normalizeStageBudgetKey(key)] = stage
 			}
 		}
@@ -137,7 +163,7 @@ func normalizeBudget(b Budget) Budget {
 }
 
 func hitlModePolicyFromConfig(cfg config.HitlModeBudgetConfig) HitlModePolicy {
-	return HitlModePolicy{TimeoutMs: cfg.TimeoutMs}
+	return HitlModePolicy{Timeout: cfg.Timeout}
 }
 
 func normalizeStageBudget(stage StageBudget) StageBudget {
@@ -154,8 +180,8 @@ func normalizeRetryPolicy(policy RetryPolicy, fallback RetryPolicy) RetryPolicy 
 	if policy.MaxCalls <= 0 {
 		policy.MaxCalls = fallback.MaxCalls
 	}
-	if policy.TimeoutMs <= 0 {
-		policy.TimeoutMs = fallback.TimeoutMs
+	if policy.Timeout <= 0 {
+		policy.Timeout = fallback.Timeout
 	}
 	if policy.RetryCount < 0 {
 		policy.RetryCount = 0
@@ -168,8 +194,8 @@ func mergeRetryPolicy(base RetryPolicy, overrides map[string]any) RetryPolicy {
 	if value := anyIntNode(overrides["maxCalls"]); value > 0 {
 		policy.MaxCalls = value
 	}
-	if value := anyIntNode(overrides["timeoutMs"]); value > 0 {
-		policy.TimeoutMs = value
+	if value := anyIntNode(overrides["timeout"]); value > 0 {
+		policy.Timeout = value
 	}
 	if value, ok := readOptionalInt(overrides["retryCount"]); ok {
 		policy.RetryCount = maxInt(value, 0)
@@ -179,8 +205,8 @@ func mergeRetryPolicy(base RetryPolicy, overrides map[string]any) RetryPolicy {
 
 func mergeHitlPolicy(base HitlPolicy, overrides map[string]any) HitlPolicy {
 	policy := base
-	if value := anyIntNode(overrides["timeoutMs"]); value > 0 {
-		policy.TimeoutMs = value
+	if value := anyIntNode(overrides["timeout"]); value > 0 {
+		policy.Timeout = value
 	}
 	policy.Question = mergeHitlModePolicy(policy.Question, anyMapNode(overrides["question"]))
 	policy.Approval = mergeHitlModePolicy(policy.Approval, anyMapNode(overrides["approval"]))
@@ -191,8 +217,8 @@ func mergeHitlPolicy(base HitlPolicy, overrides map[string]any) HitlPolicy {
 
 func mergeHitlModePolicy(base HitlModePolicy, overrides map[string]any) HitlModePolicy {
 	policy := base
-	if value := anyIntNode(overrides["timeoutMs"]); value > 0 {
-		policy.TimeoutMs = value
+	if value := anyIntNode(overrides["timeout"]); value > 0 {
+		policy.Timeout = value
 	}
 	return policy
 }
@@ -206,10 +232,10 @@ func ResolveHITLTimeout(mode string, itemTimeoutMs int64, budget Budget) int64 {
 		return itemTimeoutMs
 	}
 	if modeTimeout := hitlModeTimeout(hitl, mode); modeTimeout > 0 {
-		return int64(modeTimeout)
+		return int64(modeTimeout) * 1000
 	}
-	if hitl.TimeoutMs > 0 {
-		return int64(hitl.TimeoutMs)
+	if hitl.Timeout > 0 {
+		return int64(hitl.Timeout) * 1000
 	}
 	return DefaultHITLTimeoutMs
 }
@@ -217,13 +243,13 @@ func ResolveHITLTimeout(mode string, itemTimeoutMs int64, budget Budget) int64 {
 func hitlModeTimeout(hitl HitlPolicy, mode string) int {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "question":
-		return hitl.Question.TimeoutMs
+		return hitl.Question.Timeout
 	case "approval":
-		return hitl.Approval.TimeoutMs
+		return hitl.Approval.Timeout
 	case "form":
-		return hitl.Form.TimeoutMs
+		return hitl.Form.Timeout
 	case "plan":
-		return hitl.Plan.TimeoutMs
+		return hitl.Plan.Timeout
 	default:
 		return 0
 	}
@@ -281,9 +307,9 @@ func readOptionalInt(value any) (int, bool) {
 }
 
 func (b Budget) RunTimeout() time.Duration {
-	return time.Duration(maxInt(b.RunTimeoutMs, 1)) * time.Millisecond
+	return time.Duration(maxInt(b.Timeout, 1)) * time.Second
 }
 
-func (p RetryPolicy) Timeout() time.Duration {
-	return time.Duration(maxInt(p.TimeoutMs, 1)) * time.Millisecond
+func (p RetryPolicy) TimeoutDuration() time.Duration {
+	return time.Duration(maxInt(p.Timeout, 1)) * time.Second
 }

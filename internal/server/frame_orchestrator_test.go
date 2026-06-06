@@ -202,7 +202,7 @@ func newTestFrameOrchestratorWithContext(runCtx context.Context, agent contracts
 				WorkspaceRoot: agentDef.Workspace.Root,
 			}, nil
 		},
-		mapper: llm.NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 5000}}, nil, frontendtools.NewDefaultRegistry()),
+		mapper: llm.NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 5}}, nil, frontendtools.NewDefaultRegistry()),
 		emitDelta: func(delta contracts.AgentDelta) {
 			if emitted != nil {
 				*emitted = append(*emitted, delta)
@@ -845,7 +845,7 @@ func TestSubTaskReactStepPersistsContentMessage(t *testing.T) {
 	}
 	child := &stubOrchestratableStream{finalText: "马到成功"}
 	assembler := stream.NewAssembler(stream.StreamRequest{RunID: "run_1", ChatID: "chat_1"})
-	mapper := llm.NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{TimeoutMs: 5000}}, nil, frontendtools.NewDefaultRegistry())
+	mapper := llm.NewDeltaMapper("run_1", "chat_1", contracts.Budget{Hitl: contracts.HitlPolicy{Timeout: 5}}, nil, frontendtools.NewDefaultRegistry())
 	writer := chat.NewStepWriter(store, "chat_1", "run_1", "react", false)
 	orchestrator := newTestFrameOrchestrator(&orchestratorAgentEngine{streams: []contracts.AgentStream{child}}, map[string]catalog.AgentDefinition{
 		"writer": {Key: "writer", Name: "Writer", Mode: "REACT"},

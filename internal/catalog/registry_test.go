@@ -91,7 +91,7 @@ func TestParseAgentFileReadsContextTagsBudgetStageSettingsAndControls(t *testing
 			"  tags:\n"+
 			"    - session\n"+
 			"budget:\n"+
-			"  runTimeoutMs: 1000\n"+
+			"  timeout: 1000\n"+
 			"stageSettings:\n"+
 			"  stage: alpha\n",
 	), 0o644); err != nil {
@@ -102,7 +102,7 @@ func TestParseAgentFileReadsContextTagsBudgetStageSettingsAndControls(t *testing
 	if err != nil {
 		t.Fatalf("parse agent file: %v", err)
 	}
-	if len(def.ContextTags) != 1 || def.ContextTags[0] != "session" || def.Budget["runTimeoutMs"] != int64(1000) && def.Budget["runTimeoutMs"] != 1000 {
+	if len(def.ContextTags) != 1 || def.ContextTags[0] != "session" || def.Budget["timeout"] != int64(1000) && def.Budget["timeout"] != 1000 {
 		t.Fatalf("expected parsed context tags and budget, got %#v", def)
 	}
 	if def.StageSettings["stage"] != "alpha" {

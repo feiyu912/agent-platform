@@ -40,9 +40,9 @@ func NewContainerHubClient(cfg config.ContainerHubConfig) *ContainerHubClient {
 	return &ContainerHubClient{
 		baseURL:   strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
 		authToken: strings.TrimSpace(cfg.AuthToken),
-		timeout:   time.Duration(maxInt(cfg.RequestTimeoutMs, 1)) * time.Millisecond,
+		timeout:   time.Duration(maxInt(cfg.RequestTimeout, 1)) * time.Second,
 		httpClient: &http.Client{
-			Timeout: time.Duration(maxInt(cfg.RequestTimeoutMs, 1)) * time.Millisecond,
+			Timeout: time.Duration(maxInt(cfg.RequestTimeout, 1)) * time.Second,
 		},
 	}
 }
