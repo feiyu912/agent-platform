@@ -214,6 +214,56 @@ func TestHandleAwaitingLifecycleBroadcastsViewportMetadata(t *testing.T) {
 	}
 }
 
+func TestHandleAwaitingLifecycleBroadcastsAwaitAskPushForApprovalAndPlan(t *testing.T) {
+	testCases := []struct {
+		mode       string
+		awaitingID string
+		timeout    int
+	}{
+		{mode: "approval", awaitingID: "await-approval", timeout: 600000},
+		{mode: "plan", awaitingID: "await-plan", timeout: 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.mode, func(t *testing.T) {
+			notifications := &recordingNotificationSink{}
+			tracker := &awaitingTracker{}
+			handleAwaitingLifecycle(RunExecutorParams{
+				Session: QuerySession{
+					ChatID:   "chat-1",
+					RunID:    "run-1",
+					AgentKey: "agent-a",
+				},
+				Notifications: notifications,
+			}, stream.EventData{
+				Type:      "awaiting.ask",
+				Timestamp: 1234,
+				Payload: map[string]any{
+					"awaitingId": tc.awaitingID,
+					"runId":      "run-1",
+					"mode":       tc.mode,
+					"timeout":    tc.timeout,
+				},
+			}, tracker)
+
+			if eventTypes := notifications.EventTypes(); !reflect.DeepEqual(eventTypes, []string{"awaiting.asking"}) {
+				t.Fatalf("unexpected event types: %#v", eventTypes)
+			}
+			payloads := notifications.Payloads()
+			if len(payloads) != 1 {
+				t.Fatalf("expected one notification payload, got %#v", payloads)
+			}
+			payload := payloads[0]
+			if payload["chatId"] != "chat-1" || payload["runId"] != "run-1" || payload["agentKey"] != "agent-a" {
+				t.Fatalf("unexpected awaiting.asking identity payload %#v", payload)
+			}
+			if payload["awaitingId"] != tc.awaitingID || payload["mode"] != tc.mode || payload["timeout"] != tc.timeout || payload["createdAt"] != int64(1234) {
+				t.Fatalf("unexpected awaiting.asking payload %#v", payload)
+			}
+		})
+	}
+}
+
 func TestRunExecutorFinalizesAfterStreamDrain(t *testing.T) {
 	chats, err := chat.NewFileStore(t.TempDir())
 	if err != nil {

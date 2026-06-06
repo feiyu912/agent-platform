@@ -212,7 +212,7 @@ func TestInvokeReadAllowsSessionSkillsDir(t *testing.T) {
 	}
 }
 
-func TestInvokeReadAddsLineNumbersByDefault(t *testing.T) {
+func TestInvokeReadReturnsRawContentByDefaultAndCanAddLineNumbers(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
@@ -223,11 +223,22 @@ func TestInvokeReadAddsLineNumbersByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invokeRead: %v", err)
 	}
-	if result.Structured["lineNumbered"] != true {
-		t.Fatalf("expected lineNumbered, got %#v", result.Structured)
+	if result.Structured["lineNumbered"] == true {
+		t.Fatalf("expected raw default read, got %#v", result.Structured)
 	}
-	if result.Structured["content"] != "     1\tone\n     2\ttwo\n" {
-		t.Fatalf("unexpected numbered content: %#v", result.Structured["content"])
+	if result.Structured["content"] != "one\ntwo\n" {
+		t.Fatalf("unexpected default content: %#v", result.Structured["content"])
+	}
+
+	numbered, err := executor.invokeRead(map[string]any{"file_path": "notes.txt", "add_line_numbers": true}, &contracts.ExecutionContext{})
+	if err != nil {
+		t.Fatalf("invokeRead numbered: %v", err)
+	}
+	if numbered.Structured["lineNumbered"] != true {
+		t.Fatalf("expected lineNumbered, got %#v", numbered.Structured)
+	}
+	if numbered.Structured["content"] != "     1\tone\n     2\ttwo\n" {
+		t.Fatalf("unexpected numbered content: %#v", numbered.Structured["content"])
 	}
 }
 
@@ -326,7 +337,7 @@ func TestInvokeReadDedupRespectsLineNumberOption(t *testing.T) {
 	}
 	executor := fileToolExecutor(root, true)
 	execCtx := &contracts.ExecutionContext{}
-	if _, err := executor.invokeRead(map[string]any{"file_path": "notes.txt"}, execCtx); err != nil {
+	if _, err := executor.invokeRead(map[string]any{"file_path": "notes.txt", "add_line_numbers": true}, execCtx); err != nil {
 		t.Fatalf("first read: %v", err)
 	}
 	result, err := executor.invokeRead(map[string]any{"file_path": "notes.txt", "add_line_numbers": false}, execCtx)

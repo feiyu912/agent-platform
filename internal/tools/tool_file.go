@@ -780,7 +780,7 @@ func recordReadSnapshot(execCtx *ExecutionContext, path string, info os.FileInfo
 
 func addLineNumbersArg(args map[string]any) bool {
 	if _, ok := args["add_line_numbers"]; !ok {
-		return true
+		return false
 	}
 	return boolArg(args, "add_line_numbers")
 }
