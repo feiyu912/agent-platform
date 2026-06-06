@@ -6,7 +6,7 @@ vision-recognize:
   profiles:
     general:
       model-key: bailian-qwen3_6-plus
-      timeout-ms: 60000
+      timeout: 60
       max-images: 4
       max-image-bytes: 20971520
       output-format: text
@@ -15,7 +15,7 @@ vision-recognize:
 
     ocr:
       model-key: bailian-qwen3_6-plus
-      timeout-ms: 60000
+      timeout: 60
       max-images: 4
       max-image-bytes: 20971520
       output-format: json

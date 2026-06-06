@@ -102,7 +102,7 @@ func (m *Manager) AfterFileChange(ctx context.Context, event contracts.FileChang
 		return result
 	}
 
-	timeout := time.Duration(m.cfg.TimeoutMs) * time.Millisecond
+	timeout := time.Duration(m.cfg.Timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 3 * time.Second
 	}
@@ -215,8 +215,8 @@ func DetectLanguageID(path string) string {
 }
 
 func normalizeConfig(cfg config.LSPDiagnosticsHookConfig) config.LSPDiagnosticsHookConfig {
-	if cfg.TimeoutMs <= 0 {
-		cfg.TimeoutMs = 3000
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = 3
 	}
 	if len(cfg.Languages) == 0 {
 		cfg.Languages = []string{"go", "typescript", "javascript", "python", "rust"}

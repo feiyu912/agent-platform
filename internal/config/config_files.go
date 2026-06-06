@@ -227,7 +227,7 @@ func (c *Config) applyBashValues(values map[string]any) {
 	c.Bash.ShellFeaturesEnabled = boolValue(anyValue(values["shell-features-enabled"], c.Bash.ShellFeaturesEnabled), c.Bash.ShellFeaturesEnabled)
 	c.Bash.ShellExecutable = stringValue(anyValue(values["shell-executable"], c.Bash.ShellExecutable), c.Bash.ShellExecutable)
 	c.Bash.ShellArgs = csvOrList(anyValue(values["shell-args"], c.Bash.ShellArgs), c.Bash.ShellArgs)
-	c.Bash.ShellTimeoutMs = intValue(anyValue(values["shell-timeout-ms"], c.Bash.ShellTimeoutMs), c.Bash.ShellTimeoutMs)
+	c.Bash.ShellTimeout = intValue(anyValue(values["shell-timeout"], c.Bash.ShellTimeout), c.Bash.ShellTimeout)
 	c.Bash.MaxCommandChars = intValue(anyValue(values["max-command-chars"], c.Bash.MaxCommandChars), c.Bash.MaxCommandChars)
 }
 
@@ -306,6 +306,9 @@ func (c *Config) applyHostToolsFile(path string) error {
 		if err := rejectDeprecatedYAMLKeys(path, "configs/host-tools.yml > access-policy", bash, "allowed-paths", "path-checked-commands", "path-check-bypass-commands"); err != nil {
 			return err
 		}
+		if err := rejectDeprecatedYAMLKeys(path, "bash.shell-timeout", bash, "shell-timeout-ms"); err != nil {
+			return err
+		}
 		if err := rejectDeprecatedYAMLKeys(path, "budget.hitl.timeout", bash, "hitl-default-timeout-ms"); err != nil {
 			return err
 		}
@@ -317,6 +320,16 @@ func (c *Config) applyHostToolsFile(path string) error {
 		}
 		if err := c.applyFileToolsValues(path, fileTools); err != nil {
 			return err
+		}
+		// Check LSP diagnostics inside file-tools.hooks.after-file-change
+		if hooks, ok := fileTools["hooks"].(map[string]any); ok && len(hooks) > 0 {
+			if after, ok := hooks["after-file-change"].(map[string]any); ok && len(after) > 0 {
+				if lspValues, ok := after["lsp-diagnostics"].(map[string]any); ok && len(lspValues) > 0 {
+					if err := rejectDeprecatedYAMLKeys(path, "file-tools.hooks.after-file-change.lsp-diagnostics.timeout", lspValues, "timeout-ms"); err != nil {
+						return err
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -337,7 +350,7 @@ func parseFileToolsHooksConfig(raw any, fallback FileToolsHooksConfig) FileTools
 	}
 	cfg := fallback.AfterFileChange.LSPDiagnostics
 	cfg.Enabled = boolValue(anyValue(lspValues["enabled"], cfg.Enabled), cfg.Enabled)
-	cfg.TimeoutMs = intValue(anyValue(lspValues["timeout-ms"], cfg.TimeoutMs), cfg.TimeoutMs)
+	cfg.Timeout = intValue(anyValue(lspValues["timeout"], cfg.Timeout), cfg.Timeout)
 	cfg.Languages = csvOrList(anyValue(lspValues["languages"], cfg.Languages), cfg.Languages)
 	cfg.Servers = parseLSPServerConfigs(lspValues["servers"], cfg.Servers)
 	fallback.AfterFileChange.LSPDiagnostics = cfg
@@ -381,8 +394,8 @@ func cloneLSPServerConfigs(src map[string]LSPServerConfig) map[string]LSPServerC
 
 func normalizeLSPDiagnosticsHookConfig(cfg LSPDiagnosticsHookConfig) LSPDiagnosticsHookConfig {
 	defaults := defaultLSPDiagnosticsHookConfig()
-	if cfg.TimeoutMs <= 0 {
-		cfg.TimeoutMs = defaults.TimeoutMs
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = defaults.Timeout
 	}
 	if len(cfg.Languages) == 0 {
 		cfg.Languages = append([]string(nil), defaults.Languages...)
@@ -526,9 +539,12 @@ func parseCoderACPProxies(raw any, fallback map[string]CoderACPProxyConfig) (map
 		}
 		cfg.BaseURL = stringValue(anyValue(proxyValues["base-url"], cfg.BaseURL), cfg.BaseURL)
 		cfg.AuthToken = stringValue(anyValue(proxyValues["auth-token"], cfg.AuthToken), cfg.AuthToken)
-		cfg.TimeoutMs = intValue(anyValue(proxyValues["timeout-ms"], cfg.TimeoutMs), cfg.TimeoutMs)
-		if cfg.TimeoutMs <= 0 {
-			cfg.TimeoutMs = 300000
+		if err := rejectDeprecatedYAMLKeys("coder-settings config", "acp-proxies."+id+".timeout", proxyValues, "timeout-ms"); err != nil {
+			return nil, err
+		}
+		cfg.Timeout = intValue(anyValue(proxyValues["timeout"], cfg.Timeout), cfg.Timeout)
+		if cfg.Timeout <= 0 {
+			cfg.Timeout = 300
 		}
 		if strings.TrimSpace(cfg.BaseURL) == "" {
 			return nil, fmt.Errorf("coder-settings config: acp-proxies.%s.base-url is required", id)
@@ -569,6 +585,15 @@ func (c *Config) applyAIToolsFile(path string) error {
 		return nil
 	}
 	if visionRecognize, ok := values["vision-recognize"].(map[string]any); ok && len(visionRecognize) > 0 {
+		if profiles, ok := visionRecognize["profiles"].(map[string]any); ok && len(profiles) > 0 {
+			for profileKey, profileRaw := range profiles {
+				if profileValues, ok := profileRaw.(map[string]any); ok && len(profileValues) > 0 {
+					if err := rejectDeprecatedYAMLKeys(path, "vision-recognize.profiles."+profileKey+".timeout", profileValues, "timeout-ms"); err != nil {
+						return err
+					}
+				}
+			}
+		}
 		c.applyVisionRecognizeValues(visionRecognize)
 	}
 	return nil
@@ -580,7 +605,7 @@ func parseVisionRecognizeProfileConfig(raw any, fallback VisionRecognizeProfileC
 		return fallback
 	}
 	fallback.ModelKey = stringValue(anyValue(values["model-key"], fallback.ModelKey), fallback.ModelKey)
-	fallback.TimeoutMs = intValue(anyValue(values["timeout-ms"], fallback.TimeoutMs), fallback.TimeoutMs)
+	fallback.Timeout = intValue(anyValue(values["timeout"], fallback.Timeout), fallback.Timeout)
 	fallback.MaxImages = intValue(anyValue(values["max-images"], fallback.MaxImages), fallback.MaxImages)
 	fallback.MaxImageBytes = intValue(anyValue(values["max-image-bytes"], fallback.MaxImageBytes), fallback.MaxImageBytes)
 	fallback.OutputFormat = stringValue(anyValue(values["output-format"], fallback.OutputFormat), fallback.OutputFormat)

@@ -20,7 +20,6 @@ import (
 	"agent-platform/internal/multimodal"
 )
 
-const defaultVisionRecognizeTimeoutMs = 60000
 const defaultVisionRecognizeMaxImages = 4
 
 func (t *RuntimeToolExecutor) invokeVisionRecognize(ctx context.Context, args map[string]any, execCtx *ExecutionContext) (ToolExecutionResult, error) {
@@ -65,7 +64,7 @@ func (t *RuntimeToolExecutor) invokeVisionRecognize(ctx context.Context, args ma
 		return result, nil
 	}
 
-	timeout := time.Duration(maxInt(profile.TimeoutMs, defaultVisionRecognizeTimeoutMs)) * time.Millisecond
+	timeout := time.Duration(maxInt(profile.Timeout, 60)) * time.Second
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	content, usage, err := t.completeVisionRecognition(callCtx, model, provider, profile, outputFormat, prompt, images)

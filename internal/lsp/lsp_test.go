@@ -36,7 +36,7 @@ func TestDetectLanguageID(t *testing.T) {
 func TestAfterFileChangeSkipsMissingServer(t *testing.T) {
 	manager := NewManager(config.LSPDiagnosticsHookConfig{
 		Enabled:   true,
-		TimeoutMs: 100,
+		Timeout: 100,
 		Languages: []string{"go"},
 		Servers: map[string]config.LSPServerConfig{
 			"go": {Command: "definitely-not-a-real-lsp-command"},
@@ -105,7 +105,7 @@ func fakeManager(t *testing.T, publishDiagnostics bool, timeoutMs int) (*Manager
 	t.Helper()
 	manager := NewManager(config.LSPDiagnosticsHookConfig{
 		Enabled:   true,
-		TimeoutMs: timeoutMs,
+		Timeout: timeoutMs,
 		Languages: []string{"go"},
 		Servers: map[string]config.LSPServerConfig{
 			"go": {Command: "fake-lsp"},

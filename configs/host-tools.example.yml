@@ -49,7 +49,7 @@ bash:
   working-directory: .
   allowed-commands: ls,pwd,cat,head,tail,top,free,df,git,rg,find,echo,printf,sed,awk,grep,wc,sort,uniq,tr,cut,xargs,cd,stat,file,du,test,which,mkdir,touch,cp,mv,rm,ln,chmod,env,date,bash,sh,make,go,npm,yarn,pnpm,node,python,python3,pip,curl,wget
   shell-features-enabled: true
-  shell-timeout-ms: 30000
+  shell-timeout: 30
   max-command-chars: 16000
 
   # Command-open preset: only opens the command allowlist.
@@ -74,7 +74,7 @@ file-tools:
     after-file-change:
       lsp-diagnostics:
         enabled: true
-        timeout-ms: 3000
+        timeout: 3
         languages: ["go", "typescript", "javascript", "python", "rust"]
         servers:
           go:

@@ -716,7 +716,7 @@ func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
 			"    auth-token: ${CODEX_ACP_PROXY_TOKEN:}\n" +
 			"  codex-alt:\n" +
 			"    base-url: http://127.0.0.1:3212\n" +
-			"    timeout-ms: 420000\n" +
+			"    timeout: 420\n" +
 			"workspace-agents:\n" +
 			"  enabled: true\n" +
 			"  file: RULES.md\n"
@@ -731,10 +731,10 @@ func TestLoadCoderSettingsConfigFromFile(t *testing.T) {
 			if cfg.CoderSettings.DefaultAgent.ModelKey != "deepseek-v4-pro" || cfg.CoderSettings.DefaultAgent.ReasoningEffort != "MEDIUM" {
 				t.Fatalf("unexpected coder default agent override: %#v", cfg.CoderSettings.DefaultAgent)
 			}
-			if got := cfg.CoderSettings.ACPProxies["codex"]; got.BaseURL != "http://127.0.0.1:3211" || got.AuthToken != "coder-token" || got.TimeoutMs != 300000 {
+			if got := cfg.CoderSettings.ACPProxies["codex"]; got.BaseURL != "http://127.0.0.1:3211" || got.AuthToken != "coder-token" || got.Timeout != 300 {
 				t.Fatalf("unexpected codex ACP proxy config: %#v", got)
 			}
-			if got := cfg.CoderSettings.ACPProxies["codex-alt"]; got.BaseURL != "http://127.0.0.1:3212" || got.TimeoutMs != 420000 {
+			if got := cfg.CoderSettings.ACPProxies["codex-alt"]; got.BaseURL != "http://127.0.0.1:3212" || got.Timeout != 420 {
 				t.Fatalf("unexpected codex-alt ACP proxy config: %#v", got)
 			}
 		})
@@ -746,11 +746,30 @@ func TestLoadCoderSettingsRejectsACPProxyWithoutBaseURL(t *testing.T) {
 		content := "" +
 			"acp-proxies:\n" +
 			"  codex:\n" +
-			"    timeout-ms: 300000\n"
+			"    timeout: 300\n"
 		withProjectFileContents(t, filepath.Join("configs", "coder-settings.yml"), &content, func() {
 			_, err := Load()
 			if err == nil || !strings.Contains(err.Error(), "acp-proxies.codex.base-url is required") {
 				t.Fatalf("expected missing base-url error, got %v", err)
+			}
+		})
+	})
+}
+
+func TestLoadCoderSettingsRejectsDeprecatedACPProxyTimeoutMs(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"acp-proxies:\n" +
+			"  codex:\n" +
+			"    base-url: http://127.0.0.1:3211\n" +
+			"    timeout-ms: 300000\n"
+		withProjectFileContents(t, filepath.Join("configs", "coder-settings.yml"), &content, func() {
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected deprecated ACP proxy timeout-ms to be rejected")
+			}
+			if !strings.Contains(err.Error(), "timeout-ms") || !strings.Contains(err.Error(), "acp-proxies.codex.timeout") {
+				t.Fatalf("expected migration error for ACP proxy timeout-ms, got %v", err)
 			}
 		})
 	})
@@ -784,7 +803,7 @@ func TestLoadVisionRecognizeConfigFromFile(t *testing.T) {
 			"  profiles:\n" +
 			"    ocr:\n" +
 			"      model-key: bailian-qwen3_5-plus\n" +
-			"      timeout-ms: 12345\n" +
+			"      timeout: 12\n" +
 			"      max-images: 3\n" +
 			"      max-image-bytes: 456789\n" +
 			"      output-format: json\n" +
@@ -803,11 +822,32 @@ func TestLoadVisionRecognizeConfigFromFile(t *testing.T) {
 				t.Fatalf("unexpected default profile: %q", cfg.VisionRecognize.DefaultProfile)
 			}
 			profile := cfg.VisionRecognize.Profiles["ocr"]
-			if profile.ModelKey != "bailian-qwen3_5-plus" || profile.TimeoutMs != 12345 || profile.MaxImages != 3 || profile.MaxImageBytes != 456789 || profile.OutputFormat != "json" {
+			if profile.ModelKey != "bailian-qwen3_5-plus" || profile.Timeout != 12 || profile.MaxImages != 3 || profile.MaxImageBytes != 456789 || profile.OutputFormat != "json" {
 				t.Fatalf("unexpected profile: %#v", profile)
 			}
 			if profile.SystemPrompt != "extract text\nreturn json" {
 				t.Fatalf("unexpected system prompt: %q", profile.SystemPrompt)
+			}
+		})
+	})
+}
+
+func TestLoadAIToolsRejectsDeprecatedVisionTimeoutMs(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"vision-recognize:\n" +
+			"  enabled: true\n" +
+			"  profiles:\n" +
+			"    general:\n" +
+			"      model-key: bailian-qwen3_5-plus\n" +
+			"      timeout-ms: 60000\n"
+		withProjectFileContents(t, filepath.Join("configs", "ai-tools.yml"), &content, func() {
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected deprecated vision timeout-ms to be rejected")
+			}
+			if !strings.Contains(err.Error(), "timeout-ms") || !strings.Contains(err.Error(), "vision-recognize.profiles.general.timeout") {
+				t.Fatalf("expected migration error for vision timeout-ms, got %v", err)
 			}
 		})
 	})
@@ -822,7 +862,7 @@ func TestLoadAIToolsConfigFromFile(t *testing.T) {
 			"  profiles:\n" +
 			"    ocr:\n" +
 			"      model-key: bailian-qwen3_5-plus\n" +
-			"      timeout-ms: 23456\n" +
+			"      timeout: 23\n" +
 			"      max-images: 2\n" +
 			"      max-image-bytes: 567890\n" +
 			"      output-format: json\n" +
@@ -851,7 +891,7 @@ func TestLoadAIToolsConfigFromFile(t *testing.T) {
 					t.Fatalf("unexpected default profile: %q", cfg.VisionRecognize.DefaultProfile)
 				}
 				profile := cfg.VisionRecognize.Profiles["ocr"]
-				if profile.ModelKey != "bailian-qwen3_5-plus" || profile.TimeoutMs != 23456 || profile.MaxImages != 2 || profile.MaxImageBytes != 567890 || profile.OutputFormat != "json" {
+				if profile.ModelKey != "bailian-qwen3_5-plus" || profile.Timeout != 23 || profile.MaxImages != 2 || profile.MaxImageBytes != 567890 || profile.OutputFormat != "json" {
 					t.Fatalf("unexpected profile: %#v", profile)
 				}
 				if profile.SystemPrompt != "extract merged text" {
@@ -1598,7 +1638,7 @@ func TestFileToolsConfigLSPHookYAMLOverrides(t *testing.T) {
 			"    after-file-change:\n" +
 			"      lsp-diagnostics:\n" +
 			"        enabled: false\n" +
-			"        timeout-ms: 42\n" +
+			"        timeout: 42\n" +
 			"        languages: [\"go\", \"python\"]\n" +
 			"        servers:\n" +
 			"          go:\n" +
@@ -1613,8 +1653,8 @@ func TestFileToolsConfigLSPHookYAMLOverrides(t *testing.T) {
 			if lsp.Enabled {
 				t.Fatalf("expected lsp diagnostics hook disabled from yaml")
 			}
-			if lsp.TimeoutMs != 42 {
-				t.Fatalf("unexpected timeout: %d", lsp.TimeoutMs)
+			if lsp.Timeout != 42 {
+				t.Fatalf("unexpected timeout: %d", lsp.Timeout)
 			}
 			if strings.Join(lsp.Languages, ",") != "go,python" {
 				t.Fatalf("unexpected languages: %#v", lsp.Languages)
@@ -1624,6 +1664,26 @@ func TestFileToolsConfigLSPHookYAMLOverrides(t *testing.T) {
 			}
 			if got := lsp.Servers["typescript"]; got.Command != "typescript-language-server" {
 				t.Fatalf("expected default typescript server to remain, got %#v", got)
+			}
+		})
+	})
+}
+
+func TestFileToolsConfigRejectsDeprecatedLSPTimeoutMs(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"file-tools:\n" +
+			"  hooks:\n" +
+			"    after-file-change:\n" +
+			"      lsp-diagnostics:\n" +
+			"        timeout-ms: 3000\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected deprecated lsp timeout-ms to be rejected")
+			}
+			if !strings.Contains(err.Error(), "timeout-ms") || !strings.Contains(err.Error(), "file-tools.hooks.after-file-change.lsp-diagnostics.timeout") {
+				t.Fatalf("expected migration error for lsp timeout-ms, got %v", err)
 			}
 		})
 	})
@@ -1650,7 +1710,7 @@ func TestHostToolsConfigYAMLOverrides(t *testing.T) {
 			"  allowed-commands: pwd,echo\n" +
 			"  shell-features-enabled: true\n" +
 			"  shell-executable: bash\n" +
-			"  shell-timeout-ms: 12345\n" +
+			"  shell-timeout: 12345\n" +
 			"  max-command-chars: 4321\n" +
 			"file-tools:\n" +
 			"  working-directory: " + filepath.ToSlash(filepath.Join("tmp", "merged-files")) + "\n" +
@@ -1675,7 +1735,7 @@ func TestHostToolsConfigYAMLOverrides(t *testing.T) {
 						if level.Approvals.ReadOutsideRoots != "block" {
 							t.Fatalf("unexpected read outside action: %#v", level.Approvals)
 						}
-						if cfg.Bash.WorkingDirectory != filepath.Join("var", "host") || cfg.Bash.ShellExecutable != "bash" || cfg.Bash.ShellTimeoutMs != 12345 || cfg.Bash.MaxCommandChars != 4321 {
+						if cfg.Bash.WorkingDirectory != filepath.Join("var", "host") || cfg.Bash.ShellExecutable != "bash" || cfg.Bash.ShellTimeout != 12345 || cfg.Bash.MaxCommandChars != 4321 {
 							t.Fatalf("unexpected bash config: %#v", cfg.Bash)
 						}
 						if strings.Join(cfg.Bash.AllowedCommands, ",") != "pwd,echo" {
@@ -1696,6 +1756,23 @@ func TestHostToolsConfigYAMLOverrides(t *testing.T) {
 					})
 				})
 			})
+		})
+	})
+}
+
+func TestHostToolsConfigRejectsDeprecatedShellTimeoutMs(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"bash:\n" +
+			"  shell-timeout-ms: 30000\n"
+		withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &content, func() {
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected deprecated shell-timeout-ms to be rejected")
+			}
+			if !strings.Contains(err.Error(), "shell-timeout-ms") || !strings.Contains(err.Error(), "bash.shell-timeout") {
+				t.Fatalf("expected migration error for shell-timeout-ms, got %v", err)
+			}
 		})
 	})
 }

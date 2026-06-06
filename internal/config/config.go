@@ -127,7 +127,7 @@ type CoderDefaultAgentConfig struct {
 type CoderACPProxyConfig struct {
 	BaseURL   string
 	AuthToken string
-	TimeoutMs int
+	Timeout   int // seconds
 }
 
 type VisionRecognizeConfig struct {
@@ -138,7 +138,7 @@ type VisionRecognizeConfig struct {
 
 type VisionRecognizeProfileConfig struct {
 	ModelKey      string
-	TimeoutMs     int
+	Timeout       int // seconds
 	MaxImages     int
 	MaxImageBytes int
 	OutputFormat  string
@@ -338,7 +338,7 @@ type BashConfig struct {
 	ShellFeaturesEnabled    bool
 	ShellExecutable         string
 	ShellArgs               []string
-	ShellTimeoutMs          int
+	ShellTimeout            int // seconds
 	MaxCommandChars         int
 }
 
@@ -389,7 +389,7 @@ type FileAfterChangeHooksConfig struct {
 
 type LSPDiagnosticsHookConfig struct {
 	Enabled   bool
-	TimeoutMs int
+	Timeout   int // seconds
 	Languages []string
 	Servers   map[string]LSPServerConfig
 }

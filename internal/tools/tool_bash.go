@@ -67,7 +67,7 @@ func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[strin
 
 	timeoutMs := int64Arg(args, "timeout_ms")
 	if timeoutMs <= 0 {
-		timeoutMs = int64(maxInt(t.cfg.Bash.ShellTimeoutMs, 30000))
+		timeoutMs = int64(maxInt(t.cfg.Bash.ShellTimeout, 10)) * 1000
 	}
 	timeout := time.Duration(timeoutMs) * time.Millisecond
 	runCtx, cancel := context.WithTimeout(ctx, timeout)

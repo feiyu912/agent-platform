@@ -229,7 +229,7 @@ func TestACPCoderQueryUsesGlobalProxyAndForwardsWorkspaceAndModel(t *testing.T) 
 	}, testFixtureOptions{
 		configure: func(cfg *config.Config) {
 			cfg.CoderSettings.ACPProxies = map[string]config.CoderACPProxyConfig{
-				"codex": {BaseURL: upstream.URL, AuthToken: "coder-token", TimeoutMs: 420000},
+				"codex": {BaseURL: upstream.URL, AuthToken: "coder-token", Timeout: 420},
 			}
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {

@@ -175,7 +175,7 @@ func visionTestExecutor(chatsDir string, registry *models.ModelRegistry, client 
 			Profiles: map[string]config.VisionRecognizeProfileConfig{
 				"general": {
 					ModelKey:      "vision-model",
-					TimeoutMs:     60000,
+					Timeout: 60,
 					MaxImages:     4,
 					MaxImageBytes: 20971520,
 					OutputFormat:  "text",

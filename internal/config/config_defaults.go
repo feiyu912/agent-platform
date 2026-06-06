@@ -182,7 +182,7 @@ func defaultConfig() Config {
 			ShellFeaturesEnabled:    true,
 			ShellExecutable:         "",
 			ShellArgs:               nil,
-			ShellTimeoutMs:          10000,
+			ShellTimeout:            10,
 			MaxCommandChars:         16000,
 		},
 		FileTools: FileToolsConfig{
@@ -228,7 +228,7 @@ func memoryLogFileDefault(memoryDir string) string {
 func defaultLSPDiagnosticsHookConfig() LSPDiagnosticsHookConfig {
 	return LSPDiagnosticsHookConfig{
 		Enabled:   true,
-		TimeoutMs: 3000,
+		Timeout:   3,
 		Languages: []string{"go", "typescript", "javascript", "python", "rust"},
 		Servers: map[string]LSPServerConfig{
 			"go":         {Command: "gopls"},
