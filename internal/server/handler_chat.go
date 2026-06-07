@@ -103,9 +103,9 @@ func (s *Server) loadChatDetail(ctx context.Context, chatID string, includeRawMe
 		response.Artifact = detail.Artifact
 	}
 	if summary != nil {
-		response.Usage = chatUsageBreakdown(summary.Usage, runs, detail.ReplayUsage)
+		response.Usage = chatUsageBreakdown(summary.Usage, runs, detail.ReplayUsage, detail.ContextWindow, s.deps.Models, s.deps.Config.Billing)
 	} else {
-		response.Usage = chatUsageBreakdown(nil, runs, detail.ReplayUsage)
+		response.Usage = chatUsageBreakdown(nil, runs, detail.ReplayUsage, detail.ContextWindow, s.deps.Models, s.deps.Config.Billing)
 	}
 	if s.deps.Runs != nil {
 		activeRun, ok, activeErr := s.deps.Runs.ActiveRunForChat(chatID)

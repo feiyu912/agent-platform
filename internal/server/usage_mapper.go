@@ -5,7 +5,9 @@ import (
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/chat"
+	"agent-platform/internal/config"
 	"agent-platform/internal/contracts"
+	"agent-platform/internal/models"
 	"agent-platform/internal/stream"
 )
 
@@ -73,20 +75,29 @@ func latestUsageFromEvents(events []stream.EventData, key string) *api.ChatUsage
 	return latest
 }
 
-func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, replayUsage chat.ReplayUsage) *api.ChatUsageBreakdown {
-	lastRun := latestRunUsageFromSummaries(runs)
+func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, replayUsage chat.ReplayUsage, contextWindow map[string]any, models *models.ModelRegistry, billing config.BillingConfig) *api.ChatUsageBreakdown {
+	lastRun, lastRunModelKey := latestRunUsageWithModelFromSummaries(runs)
 	if replayRunID := strings.TrimSpace(replayUsage.LastRunID); replayRunID != "" {
-		if completedRun := runUsageForID(runs, replayRunID); completedRun != nil {
-			if completedRun.EstimatedCost != nil {
-				lastRun = completedRun
-			} else if strings.TrimSpace(replayUsage.LastRun.EstimatedCostCurrency) != "" {
-				applyEstimatedCost(completedRun, replayUsage.LastRun)
-				lastRun = completedRun
-			} else {
-				lastRun = completedRun
+		if completedRun, completedRunModelKey, foundCompletedRun := runUsageWithModelForID(runs, replayRunID); foundCompletedRun {
+			if completedRun != nil {
+				if completedRun.EstimatedCost != nil {
+					lastRun = completedRun
+					lastRunModelKey = completedRunModelKey
+				} else if strings.TrimSpace(replayUsage.LastRun.EstimatedCostCurrency) != "" {
+					applyEstimatedCost(completedRun, replayUsage.LastRun)
+					lastRun = completedRun
+					lastRunModelKey = completedRunModelKey
+				} else {
+					lastRun = completedRun
+					lastRunModelKey = completedRunModelKey
+				}
+			} else if mapped := mapUsageDataPtr(&replayUsage.LastRun); mapped != nil {
+				lastRun = mapped
+				lastRunModelKey = completedRunModelKey
 			}
 		} else if mapped := mapUsageDataPtr(&replayUsage.LastRun); mapped != nil {
 			lastRun = mapped
+			lastRunModelKey = contextWindowModelKey(contextWindow)
 		}
 	}
 
@@ -101,6 +112,19 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, re
 		}
 	}
 
+	// Read-time cost fallback: 对 lastRun 和 chat 兜底估算 cost
+	applyReadTimeCostFallback(lastRun, lastRunModelKey, models, billing)
+
+	// chat 兜底：仅当 chat 与 lastRun token 一致时才补 cost（单轮 chat）
+	if chatUsage != nil && lastRun != nil {
+		same := chatUsage.PromptTokens == lastRun.PromptTokens &&
+			chatUsage.CompletionTokens == lastRun.CompletionTokens &&
+			chatUsage.TotalTokens == lastRun.TotalTokens
+		if same {
+			applyReadTimeCostFallback(chatUsage, lastRunModelKey, models, billing)
+		}
+	}
+
 	if lastRun == nil && chatUsage == nil {
 		return nil
 	}
@@ -108,6 +132,62 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, re
 		LastRun: lastRun,
 		Chat:    chatUsage,
 	}
+}
+
+func applyReadTimeCostFallback(target *api.ChatUsageData, modelKey string, models *models.ModelRegistry, billing config.BillingConfig) {
+	if target == nil {
+		return
+	}
+	if target.EstimatedCost != nil {
+		return // 已有 cost，跳过
+	}
+	if target.TotalTokens <= 0 {
+		return // 无 token，跳过
+	}
+
+	modelKey = strings.TrimSpace(modelKey)
+	if modelKey == "" {
+		return
+	}
+	if models == nil {
+		return
+	}
+	model, err := models.GetModel(modelKey)
+	if err != nil {
+		return
+	}
+	if !modelPricingEnabled(model.Pricing) {
+		return
+	}
+
+	// 将 api.ChatUsageData 转成 chat.UsageData 后调用 estimateUsageCost
+	ud := chat.UsageData{
+		ModelKey:              modelKey,
+		PromptTokens:          target.PromptTokens,
+		CompletionTokens:      target.CompletionTokens,
+		TotalTokens:           target.TotalTokens,
+		PromptCacheHitTokens:  0,
+		PromptCacheMissTokens: target.PromptTokens,
+		CachedTokens:          0,
+	}
+	if details := target.PromptTokensDetails; details != nil {
+		ud.PromptCacheHitTokens = details.CacheHitTokens
+		ud.PromptCacheMissTokens = details.CacheMissTokens
+		ud.CachedTokens = details.CacheHitTokens
+	}
+	ud = estimateUsageCost(ud, model.Pricing, billing)
+
+	target.EstimatedCost = &api.EstimatedCost{
+		Currency:       ud.EstimatedCostCurrency,
+		InputCacheHit:  ud.EstimatedCostInputHit,
+		InputCacheMiss: ud.EstimatedCostInputMiss,
+		Output:         ud.EstimatedCostOutput,
+		Total:          ud.EstimatedCostTotal,
+	}
+}
+
+func contextWindowModelKey(contextWindow map[string]any) string {
+	return strings.TrimSpace(contracts.FirstNonEmptyString(contextWindow["modelKey"], contextWindow["model_key"]))
 }
 
 func applyEstimatedCost(target *api.ChatUsageData, source chat.UsageData) {
@@ -137,33 +217,45 @@ func replayChatCostShouldSupplement(replay chat.UsageData, summary *chat.UsageDa
 }
 
 func latestRunUsageFromSummaries(runs []chat.RunSummary) *api.ChatUsageData {
+	usage, _ := latestRunUsageWithModelFromSummaries(runs)
+	return usage
+}
+
+func latestRunUsageWithModelFromSummaries(runs []chat.RunSummary) (*api.ChatUsageData, string) {
 	for _, run := range runs {
 		usage := run.Usage
+		modelKey := strings.TrimSpace(usage.ModelKey)
 		usage.ModelKey = ""
 		if mapped := mapUsageDataPtr(&usage); mapped != nil {
-			return mapped
+			return mapped, modelKey
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 func runUsageForID(runs []chat.RunSummary, runID string) *api.ChatUsageData {
+	usage, _, _ := runUsageWithModelForID(runs, runID)
+	return usage
+}
+
+func runUsageWithModelForID(runs []chat.RunSummary, runID string) (*api.ChatUsageData, string, bool) {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
-		return nil
+		return nil, "", false
 	}
 	for _, run := range runs {
 		if strings.TrimSpace(run.RunID) != runID {
 			continue
 		}
 		usage := run.Usage
+		modelKey := strings.TrimSpace(usage.ModelKey)
 		usage.ModelKey = ""
 		if mapped := mapUsageDataPtr(&usage); mapped != nil {
-			return mapped
+			return mapped, modelKey, true
 		}
-		return nil
+		return nil, modelKey, true
 	}
-	return nil
+	return nil, "", false
 }
 
 func replayChatUsageIsNewer(replay chat.UsageData, summary *chat.UsageData) bool {
