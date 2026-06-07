@@ -92,11 +92,11 @@ func NewConn(socket *gws.Conn, hub *Hub, cfg config.WebSocketConfig, heartbeatIn
 	if cfg.MaxMessageSizeBytes <= 0 {
 		cfg.MaxMessageSizeBytes = 1 << 20
 	}
-	if cfg.PingIntervalMs <= 0 {
-		cfg.PingIntervalMs = 30000
+	if cfg.PingInterval <= 0 {
+		cfg.PingInterval = 30
 	}
-	if cfg.WriteTimeoutMs <= 0 {
-		cfg.WriteTimeoutMs = 15000
+	if cfg.WriteTimeout <= 0 {
+		cfg.WriteTimeout = 15
 	}
 	if cfg.WriteQueueSize <= 0 {
 		cfg.WriteQueueSize = 256
@@ -105,7 +105,7 @@ func NewConn(socket *gws.Conn, hub *Hub, cfg config.WebSocketConfig, heartbeatIn
 		cfg.MaxObservesPerConn = 8
 	}
 	if heartbeatInterval <= 0 {
-		heartbeatInterval = time.Duration(cfg.PingIntervalMs) * time.Millisecond
+		heartbeatInterval = time.Duration(cfg.PingInterval) * time.Second
 	}
 	remoteAddr := ""
 	if socket != nil && socket.RemoteAddr() != nil {
@@ -158,7 +158,7 @@ func (c *Conn) Run(dispatch RouteHandler) {
 	}
 	defer c.close(gws.CloseNormalClosure, "connection closed")
 
-	pongWait := 2 * time.Duration(c.cfg.PingIntervalMs) * time.Millisecond
+	pongWait := 2 * time.Duration(c.cfg.PingInterval) * time.Second
 	if pongWait <= 0 {
 		pongWait = 60 * time.Second
 	}
@@ -424,7 +424,7 @@ func (c *Conn) enqueue(message outboundMessage) bool {
 }
 
 func (c *Conn) writeLoop() {
-	pingTicker := time.NewTicker(time.Duration(c.cfg.PingIntervalMs) * time.Millisecond)
+	pingTicker := time.NewTicker(time.Duration(c.cfg.PingInterval) * time.Second)
 	defer pingTicker.Stop()
 	heartbeatTicker := time.NewTicker(c.heartbeatInterval)
 	defer heartbeatTicker.Stop()
@@ -477,7 +477,7 @@ func (c *Conn) writeJSON(payload any) error {
 	if c == nil || c.socket == nil {
 		return nil
 	}
-	_ = c.socket.SetWriteDeadline(time.Now().Add(time.Duration(c.cfg.WriteTimeoutMs) * time.Millisecond))
+	_ = c.socket.SetWriteDeadline(time.Now().Add(time.Duration(c.cfg.WriteTimeout) * time.Second))
 	return c.socket.WriteJSON(payload)
 }
 
@@ -485,8 +485,8 @@ func (c *Conn) writeControl(messageType int, payload []byte) error {
 	if c == nil || c.socket == nil {
 		return nil
 	}
-	_ = c.socket.SetWriteDeadline(time.Now().Add(time.Duration(c.cfg.WriteTimeoutMs) * time.Millisecond))
-	return c.socket.WriteControl(messageType, payload, time.Now().Add(time.Duration(c.cfg.WriteTimeoutMs)*time.Millisecond))
+	_ = c.socket.SetWriteDeadline(time.Now().Add(time.Duration(c.cfg.WriteTimeout) * time.Second))
+	return c.socket.WriteControl(messageType, payload, time.Now().Add(time.Duration(c.cfg.WriteTimeout)*time.Second))
 }
 
 func (c *Conn) expiresAt() int64 {
@@ -524,7 +524,7 @@ func (c *Conn) close(code int, text string) {
 			}
 		}
 		if c.socket != nil {
-			_ = c.socket.WriteControl(gws.CloseMessage, gws.FormatCloseMessage(code, text), time.Now().Add(time.Duration(c.cfg.WriteTimeoutMs)*time.Millisecond))
+			_ = c.socket.WriteControl(gws.CloseMessage, gws.FormatCloseMessage(code, text), time.Now().Add(time.Duration(c.cfg.WriteTimeout)*time.Second))
 			_ = c.socket.Close()
 		}
 	})

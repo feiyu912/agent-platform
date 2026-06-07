@@ -119,7 +119,7 @@ func TestCoderModelOptionsWS(t *testing.T) {
 	}, testFixtureOptions{
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 		setupRuntime: func(_ string, cfg *config.Config) {
 			setupCoderRuntime(t, cfg)

@@ -62,11 +62,11 @@ func NewWriter(w http.ResponseWriter, opts Options) (*Writer, error) {
 }
 
 func (w *Writer) StartHeartbeat() {
-	if w.opts.SSE.HeartbeatIntervalMs <= 0 {
+	if w.opts.SSE.HeartbeatInterval <= 0 {
 		return
 	}
 	go func() {
-		ticker := time.NewTicker(time.Duration(w.opts.SSE.HeartbeatIntervalMs) * time.Millisecond)
+		ticker := time.NewTicker(time.Duration(w.opts.SSE.HeartbeatInterval) * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
@@ -163,7 +163,7 @@ func (w *Writer) writeFrame(next frame) error {
 }
 
 func (w *Writer) bufferingEnabled() bool {
-	return w.opts.Render.FlushIntervalMs > 0 || w.opts.Render.MaxBufferedChars > 0 || w.opts.Render.MaxBufferedEvents > 0
+	return w.opts.Render.FlushInterval > 0 || w.opts.Render.MaxBufferedChars > 0 || w.opts.Render.MaxBufferedEvents > 0
 }
 
 func (w *Writer) shouldFlushLocked(latest frame) bool {
@@ -177,10 +177,10 @@ func (w *Writer) shouldFlushLocked(latest frame) bool {
 }
 
 func (w *Writer) scheduleFlushLocked() {
-	if w.opts.Render.FlushIntervalMs <= 0 || w.timer != nil {
+	if w.opts.Render.FlushInterval <= 0 || w.timer != nil {
 		return
 	}
-	w.timer = time.AfterFunc(time.Duration(w.opts.Render.FlushIntervalMs)*time.Millisecond, func() {
+	w.timer = time.AfterFunc(time.Duration(w.opts.Render.FlushInterval)*time.Second, func() {
 		_ = w.flushPending()
 	})
 }

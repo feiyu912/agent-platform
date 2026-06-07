@@ -109,7 +109,7 @@ func TestDeferredSubmitWSRestoresPendingAwaitingAfterRestart(t *testing.T) {
 		notifications: hub,
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 

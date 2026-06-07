@@ -501,12 +501,12 @@ func desktopScreenshotServer(t *testing.T, data string, ok bool) *httptest.Serve
 func newDesktopTestExecutor(actionURL string, cdpURL string) *RuntimeToolExecutor {
 	return &RuntimeToolExecutor{cfg: config.Config{Desktop: config.DesktopConfig{
 		Action: config.DesktopBridgeConfig{
-			BridgeURL:        actionURL,
-			RequestTimeoutMs: 20000,
+			BridgeURL:      actionURL,
+			RequestTimeout: 20,
 		},
 		CDP: config.DesktopBridgeConfig{
-			BridgeURL:        cdpURL,
-			RequestTimeoutMs: 20000,
+			BridgeURL:      cdpURL,
+			RequestTimeout: 20,
 		},
 	}}}
 }

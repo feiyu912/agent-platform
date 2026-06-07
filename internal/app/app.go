@@ -296,7 +296,7 @@ func New(rootCtx context.Context) (*App, error) {
 		gwRegistry = gateway.New(
 			backgroundCtx,
 			cfg.WebSocket,
-			time.Duration(cfg.SSE.HeartbeatIntervalMs)*time.Millisecond,
+			time.Duration(cfg.SSE.HeartbeatInterval)*time.Second,
 			wsHub,
 			handler.Dispatch,
 		)

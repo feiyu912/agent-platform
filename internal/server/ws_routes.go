@@ -45,7 +45,7 @@ func (a wsTokenAuthenticator) VerifyToken(ctx context.Context, token string) (ws
 }
 
 func (s *Server) newWSHandler(hub *ws.Hub) *ws.Handler {
-	handler := ws.NewHandler(s.deps.Config.WebSocket, time.Duration(s.deps.Config.SSE.HeartbeatIntervalMs)*time.Millisecond, hub, wsTokenAuthenticator{server: s})
+	handler := ws.NewHandler(s.deps.Config.WebSocket, time.Duration(s.deps.Config.SSE.HeartbeatInterval)*time.Second, hub, wsTokenAuthenticator{server: s})
 	s.registerWSRoutes(handler)
 	handler.SetDispatch(s.logWSDispatch(handler.Dispatch))
 	return handler

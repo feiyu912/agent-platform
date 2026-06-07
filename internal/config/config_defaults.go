@@ -96,11 +96,11 @@ func defaultConfig() Config {
 			DebugEventsEnabled:       false,
 		},
 		SSE: SSEConfig{
-			HeartbeatIntervalMs: 15000,
+			HeartbeatInterval: 15, // seconds
 		},
 		H2A: H2AConfig{
 			Render: H2ARenderConfig{
-				FlushIntervalMs:      0,
+				FlushInterval:      0, // seconds; 0 means disabled
 				MaxBufferedChars:     0,
 				MaxBufferedEvents:    0,
 				HeartbeatPassThrough: true,
@@ -159,10 +159,10 @@ func defaultConfig() Config {
 		},
 		Desktop: DesktopConfig{
 			Action: DesktopBridgeConfig{
-				RequestTimeoutMs: 20000,
+				RequestTimeout: 20, // seconds
 			},
 			CDP: DesktopBridgeConfig{
-				RequestTimeoutMs: 20000,
+				RequestTimeout: 20, // seconds
 			},
 		},
 		AccessPolicy: defaultAccessPolicyConfig(),
@@ -202,16 +202,16 @@ func defaultConfig() Config {
 			},
 		},
 		Run: RunConfig{
-			ReaperIntervalMs:        30000,
-			MaxBackgroundDurationMs: 600000,
-			CompletedRetentionMs:    600000,
-			EventBusMaxEvents:       10000,
-			MaxDisconnectedWaitMs:   600000,
+			ReaperInterval:        30,  // seconds
+			MaxBackgroundDuration: 600, // seconds
+			CompletedRetention:    600, // seconds
+			EventBusMaxEvents:      10000,
+			MaxDisconnectedWait:   600, // seconds
 		},
 		WebSocket: WebSocketConfig{
 			MaxMessageSizeBytes: 1 << 20,
-			PingIntervalMs:      30000,
-			WriteTimeoutMs:      15000,
+			PingInterval:        30, // seconds
+			WriteTimeout:        15, // seconds
 			WriteQueueSize:      256,
 			MaxObservesPerConn:  8,
 		},
@@ -351,8 +351,8 @@ func (c *Config) normalize() error {
 func normalizeDesktopBridgeConfig(cfg DesktopBridgeConfig) DesktopBridgeConfig {
 	cfg.Host = strings.TrimSpace(cfg.Host)
 	cfg.Path = strings.TrimSpace(cfg.Path)
-	if cfg.RequestTimeoutMs <= 0 {
-		cfg.RequestTimeoutMs = 20000
+	if cfg.RequestTimeout <= 0 {
+		cfg.RequestTimeout = 20
 	}
 	if cfg.Host == "" || cfg.Port <= 0 || cfg.Path == "" {
 		cfg.BridgeURL = ""
@@ -516,9 +516,9 @@ func (c *Config) normalizeChannels() error {
 			URL:                strings.TrimSpace(channelCfg.Gateway.URL),
 			JwtToken:           strings.TrimSpace(channelCfg.Gateway.JwtToken),
 			BaseURL:            strings.TrimSpace(channelCfg.Gateway.BaseURL),
-			HandshakeTimeoutMs: channelCfg.Gateway.HandshakeTimeoutMs,
-			ReconnectMinMs:     channelCfg.Gateway.ReconnectMinMs,
-			ReconnectMaxMs:     channelCfg.Gateway.ReconnectMaxMs,
+			HandshakeTimeout:   channelCfg.Gateway.HandshakeTimeout,
+			ReconnectMin:       channelCfg.Gateway.ReconnectMin,
+			ReconnectMax:       channelCfg.Gateway.ReconnectMax,
 		})
 		existingGatewayIDs[channelID] = struct{}{}
 		existingGatewayChannels[channelID] = struct{}{}
@@ -532,14 +532,14 @@ func (c *Config) normalizeGateways() error {
 		if strings.TrimSpace(g.ID) == "" {
 			g.ID = fmt.Sprintf("gateway-%d", i)
 		}
-		if g.HandshakeTimeoutMs == 0 {
-			g.HandshakeTimeoutMs = defaultGatewayHandshakeTimeoutMs
+		if g.HandshakeTimeout == 0 {
+			g.HandshakeTimeout = defaultGatewayHandshakeTimeout
 		}
-		if g.ReconnectMinMs == 0 {
-			g.ReconnectMinMs = defaultGatewayReconnectMinMs
+		if g.ReconnectMin == 0 {
+			g.ReconnectMin = defaultGatewayReconnectMin
 		}
-		if g.ReconnectMaxMs == 0 {
-			g.ReconnectMaxMs = defaultGatewayReconnectMaxMs
+		if g.ReconnectMax == 0 {
+			g.ReconnectMax = defaultGatewayReconnectMax
 		}
 		if strings.TrimSpace(g.BaseURL) == "" && strings.TrimSpace(g.URL) != "" {
 			if parsed, err := neturl.Parse(strings.TrimSpace(g.URL)); err == nil && parsed.Host != "" {

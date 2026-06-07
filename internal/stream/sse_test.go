@@ -108,7 +108,7 @@ func TestWriterFlushesByInterval(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writer, err := NewWriter(rec, Options{
 		Render: config.H2ARenderConfig{
-			FlushIntervalMs:      10,
+			FlushInterval:      1,
 			HeartbeatPassThrough: true,
 		},
 	})
@@ -125,7 +125,7 @@ func TestWriterFlushesByInterval(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("write json: %v", err)
 	}
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(1100 * time.Millisecond)
 
 	if !strings.Contains(rec.Body.String(), `"type":"content.delta"`) {
 		t.Fatalf("expected buffered event flushed by timer, got %s", rec.Body.String())

@@ -47,13 +47,13 @@ desktop:
     host: 127.0.0.1
     port: 11788
     path: /actions/call
-    request-timeout-ms: 20000
+    request-timeout: 20
 
   cdp:
     host: 127.0.0.1
     port: 11788
     path: /cdp/call
-    request-timeout-ms: 20000
+    request-timeout: 20
 
 cors:
   enabled: false

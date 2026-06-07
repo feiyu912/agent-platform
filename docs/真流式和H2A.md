@@ -27,8 +27,8 @@ HTTP query
 
 - `POST /api/query`：发起 run，返回 SSE。
 - `GET /api/attach`：按 `runId + agentKey + lastSeq` 续接 backlog。
-- `AGENT_SSE_HEARTBEAT_INTERVAL_MS`：SSE heartbeat 间隔。
-- `AGENT_H2A_RENDER_FLUSH_INTERVAL_MS`：H2A 定时 flush。
+- `AGENT_SSE_HEARTBEAT_INTERVAL`：SSE heartbeat 间隔，单位秒。
+- `AGENT_H2A_RENDER_FLUSH_INTERVAL`：H2A 定时 flush 间隔，单位秒。
 - `AGENT_H2A_RENDER_MAX_BUFFERED_CHARS`：最大缓冲字符数。
 - `AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS`：最大缓冲事件数。
 - `AGENT_H2A_RENDER_HEARTBEAT_PASS_THROUGH`：是否透传 heartbeat。

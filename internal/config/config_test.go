@@ -15,12 +15,12 @@ func TestLoadDefaults(t *testing.T) {
 			"    host: 127.0.0.1\n" +
 			"    port: 11788\n" +
 			"    path: /actions/call\n" +
-			"    request-timeout-ms: 20000\n" +
+			"    request-timeout: 20\n" +
 			"  cdp:\n" +
 			"    host: 127.0.0.1\n" +
 			"    port: 11788\n" +
 			"    path: /cdp/call\n" +
-			"    request-timeout-ms: 20000\n"
+			"    request-timeout: 20\n"
 		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &runtimeConfig, func() {
 			cfg, err := Load()
 			if err != nil {
@@ -53,8 +53,8 @@ func TestLoadDefaults(t *testing.T) {
 			if cfg.Stream.DebugEventsEnabled {
 				t.Fatalf("expected stream debug events disabled by default")
 			}
-			if cfg.SSE.HeartbeatIntervalMs != 15000 {
-				t.Fatalf("expected default heartbeat interval 15000, got %d", cfg.SSE.HeartbeatIntervalMs)
+			if cfg.SSE.HeartbeatInterval != 15 {
+				t.Fatalf("expected default heartbeat interval 15, got %d", cfg.SSE.HeartbeatInterval)
 			}
 			if cfg.H2A.Render.HeartbeatPassThrough != true {
 				t.Fatalf("expected heartbeat pass-through enabled by default")
@@ -179,12 +179,12 @@ func TestLoadDesktopConfigFromFile(t *testing.T) {
 			"    host: 127.0.0.2\n" +
 			"    port: 17001\n" +
 			"    path: actions/custom\n" +
-			"    request-timeout-ms: 1234\n" +
+			"    request-timeout: 12\n" +
 			"  cdp:\n" +
 			"    host: localhost\n" +
 			"    port: 17002\n" +
 			"    path: /cdp/custom\n" +
-			"    request-timeout-ms: 5678\n"
+			"    request-timeout: 56\n"
 		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
 			cfg, err := Load()
 			if err != nil {
@@ -193,14 +193,29 @@ func TestLoadDesktopConfigFromFile(t *testing.T) {
 			if cfg.Desktop.Action.BridgeURL != "http://127.0.0.2:17001/actions/custom" {
 				t.Fatalf("unexpected desktop action bridge url: %q", cfg.Desktop.Action.BridgeURL)
 			}
-			if cfg.Desktop.Action.RequestTimeoutMs != 1234 {
-				t.Fatalf("unexpected desktop action timeout: %d", cfg.Desktop.Action.RequestTimeoutMs)
+			if cfg.Desktop.Action.RequestTimeout != 12 {
+				t.Fatalf("unexpected desktop action timeout: %d", cfg.Desktop.Action.RequestTimeout)
 			}
 			if cfg.Desktop.CDP.BridgeURL != "http://localhost:17002/cdp/custom" {
 				t.Fatalf("unexpected desktop cdp bridge url: %q", cfg.Desktop.CDP.BridgeURL)
 			}
-			if cfg.Desktop.CDP.RequestTimeoutMs != 5678 {
-				t.Fatalf("unexpected desktop cdp timeout: %d", cfg.Desktop.CDP.RequestTimeoutMs)
+			if cfg.Desktop.CDP.RequestTimeout != 56 {
+				t.Fatalf("unexpected desktop cdp timeout: %d", cfg.Desktop.CDP.RequestTimeout)
+			}
+		})
+	})
+}
+
+func TestLoadRuntimeRejectsDeprecatedDesktopTimeoutMs(t *testing.T) {
+	withIsolatedEnv(t, nil, func() {
+		content := "" +
+			"desktop:\n" +
+			"  action:\n" +
+			"    request-timeout-ms: 20000\n"
+		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &content, func() {
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "request-timeout-ms") || !strings.Contains(err.Error(), "desktop.action.request-timeout") {
+				t.Fatalf("expected deprecated desktop request-timeout-ms error, got %v", err)
 			}
 		})
 	})
@@ -234,7 +249,7 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 			"  base-url: http://runtime-hub\n" +
 			"  auth-token: runtime-token\n" +
 			"  default-environment-id: runtime-env\n" +
-			"  request-timeout: 123456\n" +
+			"  request-timeout: 123\n" +
 			"  default-sandbox-level: agent\n" +
 			"  agent-idle-timeout: 654321\n" +
 			"  destroy-queue-delay: 2345\n" +
@@ -243,12 +258,12 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 			"    host: 127.0.0.3\n" +
 			"    port: 17101\n" +
 			"    path: actions/runtime\n" +
-			"    request-timeout-ms: 2345\n" +
+			"    request-timeout: 23\n" +
 			"  cdp:\n" +
 			"    host: localhost\n" +
 			"    port: 17102\n" +
 			"    path: /cdp/runtime\n" +
-			"    request-timeout-ms: 6789\n" +
+			"    request-timeout: 67\n" +
 			"cors:\n" +
 			"  enabled: true\n" +
 			"  path-pattern: /runtime/**\n" +
@@ -272,13 +287,13 @@ func TestLoadRuntimeConfigFromFile(t *testing.T) {
 						if cfg.ContainerHub.BaseURL != "http://runtime-hub" || cfg.ContainerHub.AuthToken != "runtime-token" || cfg.ContainerHub.DefaultEnvironmentID != "runtime-env" {
 							t.Fatalf("unexpected container hub identity: %#v", cfg.ContainerHub)
 						}
-						if cfg.ContainerHub.RequestTimeout != 123456 || cfg.ContainerHub.DefaultSandboxLevel != "agent" || cfg.ContainerHub.AgentIdleTimeout != 654321 || cfg.ContainerHub.DestroyQueueDelay != 2345 {
+						if cfg.ContainerHub.RequestTimeout != 123 || cfg.ContainerHub.DefaultSandboxLevel != "agent" || cfg.ContainerHub.AgentIdleTimeout != 654321 || cfg.ContainerHub.DestroyQueueDelay != 2345 {
 							t.Fatalf("unexpected container hub runtime settings: %#v", cfg.ContainerHub)
 						}
-						if cfg.Desktop.Action.BridgeURL != "http://127.0.0.3:17101/actions/runtime" || cfg.Desktop.Action.RequestTimeoutMs != 2345 {
+						if cfg.Desktop.Action.BridgeURL != "http://127.0.0.3:17101/actions/runtime" || cfg.Desktop.Action.RequestTimeout != 23 {
 							t.Fatalf("unexpected desktop action config: %#v", cfg.Desktop.Action)
 						}
-						if cfg.Desktop.CDP.BridgeURL != "http://localhost:17102/cdp/runtime" || cfg.Desktop.CDP.RequestTimeoutMs != 6789 {
+						if cfg.Desktop.CDP.BridgeURL != "http://localhost:17102/cdp/runtime" || cfg.Desktop.CDP.RequestTimeout != 67 {
 							t.Fatalf("unexpected desktop cdp config: %#v", cfg.Desktop.CDP)
 						}
 						if !cfg.CORS.Enabled || cfg.CORS.PathPattern != "/runtime/**" || !cfg.CORS.AllowCredentials || cfg.CORS.MaxAgeSeconds != 99 {
@@ -1217,6 +1232,14 @@ func TestLoadIgnoresOldEnvVars(t *testing.T) {
 		"BUDGET_HITL_APPROVAL_TIMEOUT_MS":       "9000",
 		"BUDGET_HITL_FORM_TIMEOUT_MS":           "10000",
 		"BUDGET_HITL_PLAN_TIMEOUT_MS":           "11000",
+		"AGENT_SSE_HEARTBEAT_INTERVAL_MS":       "12000",
+		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS":    "13000",
+		"AGENT_RUN_REAPER_INTERVAL_MS":          "14000",
+		"AGENT_RUN_MAX_BACKGROUND_DURATION_MS":  "15000",
+		"AGENT_RUN_COMPLETED_RETENTION_MS":      "16000",
+		"AGENT_RUN_MAX_DISCONNECTED_WAIT_MS":    "17000",
+		"AGENT_WS_PING_INTERVAL_MS":             "18000",
+		"AGENT_WS_WRITE_TIMEOUT_MS":             "19000",
 		"AGENT_AUTH_ENABLED":                    "false",
 	}
 	bashAndFileEnv := []string{
@@ -1278,6 +1301,18 @@ func TestLoadIgnoresOldEnvVars(t *testing.T) {
 					if cfg.Paths.MemoryDir == filepath.Join("var", "custom-memory") {
 						t.Fatalf("old memory storage env should not affect memory dir")
 					}
+					if cfg.SSE.HeartbeatInterval != 15 || cfg.H2A.Render.FlushInterval != 0 {
+						t.Fatalf("old stream timeout env should not affect defaults: sse=%d h2a=%d", cfg.SSE.HeartbeatInterval, cfg.H2A.Render.FlushInterval)
+					}
+					if cfg.Run.ReaperInterval != 30 ||
+						cfg.Run.MaxBackgroundDuration != 600 ||
+						cfg.Run.CompletedRetention != 600 ||
+						cfg.Run.MaxDisconnectedWait != 600 {
+						t.Fatalf("old run timeout env should not affect defaults: %#v", cfg.Run)
+					}
+					if cfg.WebSocket.PingInterval != 30 || cfg.WebSocket.WriteTimeout != 15 {
+						t.Fatalf("old websocket timeout env should not affect defaults: %#v", cfg.WebSocket)
+					}
 				})
 			})
 		})
@@ -1291,11 +1326,17 @@ func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 		"CHAT_RESOURCE_TICKET_TTL_SECONDS":        "300",
 		"STREAM_INCLUDE_TOOL_PAYLOAD_EVENTS":      "true",
 		"DEBUG_EVENTS_ENABLED":                    "true",
-		"AGENT_SSE_HEARTBEAT_INTERVAL_MS":         "3000",
-		"AGENT_H2A_RENDER_FLUSH_INTERVAL_MS":      "25",
+		"AGENT_SSE_HEARTBEAT_INTERVAL":            "3",
+		"AGENT_H2A_RENDER_FLUSH_INTERVAL":         "25",
 		"AGENT_H2A_RENDER_MAX_BUFFERED_CHARS":     "256",
 		"AGENT_H2A_RENDER_MAX_BUFFERED_EVENTS":    "3",
 		"AGENT_H2A_RENDER_HEARTBEAT_PASS_THROUGH": "false",
+		"AGENT_RUN_REAPER_INTERVAL":               "31",
+		"AGENT_RUN_MAX_BACKGROUND_DURATION":       "601",
+		"AGENT_RUN_COMPLETED_RETENTION":           "602",
+		"AGENT_RUN_MAX_DISCONNECTED_WAIT":         "603",
+		"AGENT_WS_PING_INTERVAL":                  "32",
+		"AGENT_WS_WRITE_TIMEOUT":                  "16",
 		"AGENT_DEFAULT_REACT_MAX_STEPS":           "12",
 		"AGENT_AUTOMATION_ENABLED":                "false",
 		"AGENT_AUTOMATION_DEFAULT_ZONE_ID":        "Asia/Shanghai",
@@ -1321,11 +1362,11 @@ func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 		if !cfg.Stream.DebugEventsEnabled {
 			t.Fatalf("expected stream debug event flag enabled")
 		}
-		if cfg.SSE.HeartbeatIntervalMs != 3000 {
-			t.Fatalf("unexpected heartbeat interval: %d", cfg.SSE.HeartbeatIntervalMs)
+		if cfg.SSE.HeartbeatInterval != 3 {
+			t.Fatalf("unexpected heartbeat interval: %d", cfg.SSE.HeartbeatInterval)
 		}
-		if cfg.H2A.Render.FlushIntervalMs != 25 {
-			t.Fatalf("unexpected flush interval: %d", cfg.H2A.Render.FlushIntervalMs)
+		if cfg.H2A.Render.FlushInterval != 25 {
+			t.Fatalf("unexpected flush interval: %d", cfg.H2A.Render.FlushInterval)
 		}
 		if cfg.H2A.Render.MaxBufferedChars != 256 {
 			t.Fatalf("unexpected max buffered chars: %d", cfg.H2A.Render.MaxBufferedChars)
@@ -1335,6 +1376,15 @@ func TestLoadAcceptsJavaEnvContract(t *testing.T) {
 		}
 		if cfg.H2A.Render.HeartbeatPassThrough {
 			t.Fatalf("expected heartbeat pass-through disabled from env")
+		}
+		if cfg.Run.ReaperInterval != 31 ||
+			cfg.Run.MaxBackgroundDuration != 601 ||
+			cfg.Run.CompletedRetention != 602 ||
+			cfg.Run.MaxDisconnectedWait != 603 {
+			t.Fatalf("unexpected run lifecycle config from env: %#v", cfg.Run)
+		}
+		if cfg.WebSocket.PingInterval != 32 || cfg.WebSocket.WriteTimeout != 16 {
+			t.Fatalf("unexpected websocket timeout config from env: %#v", cfg.WebSocket)
 		}
 		if cfg.Defaults.React.MaxSteps != 12 {
 			t.Fatalf("unexpected react max steps: %d", cfg.Defaults.React.MaxSteps)
@@ -1862,7 +1912,7 @@ func TestLoadContainerHubDisabledWhenBaseURLMissing(t *testing.T) {
 		content := "" +
 			"auth-token:\n" +
 			"default-environment-id:\n" +
-			"request-timeout-ms: 300000\n" +
+			"request-timeout: 300\n" +
 			"default-sandbox-level: run\n"
 		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), nil, func() {
 			withProjectFileContents(t, filepath.Join("configs", "container-hub.yml"), &content, func() {
@@ -2123,6 +2173,37 @@ func TestLoadGatewayConfigFromChannels(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestLoadChannelsRejectsDeprecatedGatewayTimeoutMs(t *testing.T) {
+	cases := []struct {
+		name       string
+		legacyKey  string
+		targetPath string
+	}{
+		{name: "handshake", legacyKey: "handshake-timeout-ms", targetPath: "handshake-timeout"},
+		{name: "reconnect min", legacyKey: "reconnect-min-ms", targetPath: "reconnect-min"},
+		{name: "reconnect max", legacyKey: "reconnect-max-ms", targetPath: "reconnect-max"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withIsolatedEnv(t, nil, func() {
+				content := "" +
+					"channels:\n" +
+					"  mobile:\n" +
+					"    type: gateway\n" +
+					"    gateway:\n" +
+					"      url: ws://127.0.0.1:17999/gw?channel=mobile\n" +
+					"      " + tc.legacyKey + ": 10000\n"
+				withProjectFileContents(t, filepath.Join("configs", "channels.yml"), &content, func() {
+					_, err := Load()
+					if err == nil || !strings.Contains(err.Error(), tc.legacyKey) || !strings.Contains(err.Error(), tc.targetPath) {
+						t.Fatalf("expected deprecated gateway timeout error for %s, got %v", tc.legacyKey, err)
+					}
+				})
+			})
+		})
+	}
 }
 
 func TestLoadFailsWhenExplicitPanDirDoesNotExist(t *testing.T) {

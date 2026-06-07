@@ -222,7 +222,7 @@ type StreamConfig struct {
 }
 
 type SSEConfig struct {
-	HeartbeatIntervalMs int64
+	HeartbeatInterval int64 // seconds
 }
 
 type H2AConfig struct {
@@ -230,7 +230,7 @@ type H2AConfig struct {
 }
 
 type H2ARenderConfig struct {
-	FlushIntervalMs      int64
+	FlushInterval        int64 // seconds; 0 means disabled
 	MaxBufferedChars     int
 	MaxBufferedEvents    int
 	HeartbeatPassThrough bool
@@ -322,7 +322,7 @@ type DesktopBridgeConfig struct {
 	Host             string
 	Port             int
 	Path             string
-	RequestTimeoutMs int
+	RequestTimeout   int // seconds
 	BridgeURL        string
 }
 
@@ -400,26 +400,26 @@ type LSPServerConfig struct {
 }
 
 type RunConfig struct {
-	ReaperIntervalMs        int64
-	MaxBackgroundDurationMs int64
-	CompletedRetentionMs    int64
-	EventBusMaxEvents       int
-	MaxDisconnectedWaitMs   int64
-	MaxObserversPerRun      int
+	ReaperInterval        int64 // seconds
+	MaxBackgroundDuration int64 // seconds
+	CompletedRetention    int64 // seconds
+	EventBusMaxEvents     int
+	MaxDisconnectedWait   int64 // seconds
+	MaxObserversPerRun    int
 }
 
 type WebSocketConfig struct {
 	MaxMessageSizeBytes int
-	PingIntervalMs      int64
-	WriteTimeoutMs      int64
+	PingInterval        int64 // seconds
+	WriteTimeout        int64 // seconds
 	WriteQueueSize      int
 	MaxObservesPerConn  int
 }
 
 const (
-	defaultGatewayHandshakeTimeoutMs int64 = 10000
-	defaultGatewayReconnectMinMs     int64 = 1000
-	defaultGatewayReconnectMaxMs     int64 = 30000
+	defaultGatewayHandshakeTimeout int64 = 10  // seconds
+	defaultGatewayReconnectMin     int64 = 1   // seconds
+	defaultGatewayReconnectMax     int64 = 30  // seconds
 )
 
 // GatewayEntry 描述单个 gateway 反向连接条目。
@@ -436,9 +436,9 @@ type GatewayEntry struct {
 	URL                string
 	JwtToken           string
 	BaseURL            string
-	HandshakeTimeoutMs int64
-	ReconnectMinMs     int64
-	ReconnectMaxMs     int64
+	HandshakeTimeout   int64 // seconds
+	ReconnectMin       int64 // seconds
+	ReconnectMax       int64 // seconds
 }
 
 type ChannelType string
@@ -462,9 +462,9 @@ type ChannelGatewayConfig struct {
 	URL                string
 	JwtToken           string
 	BaseURL            string
-	HandshakeTimeoutMs int64
-	ReconnectMinMs     int64
-	ReconnectMaxMs     int64
+	HandshakeTimeout   int64 // seconds
+	ReconnectMin       int64 // seconds
+	ReconnectMax       int64 // seconds
 }
 
 // 网关 HTTP 旁路的路径约定，由网关侧固定，不再做成可配置。

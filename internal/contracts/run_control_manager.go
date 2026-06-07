@@ -53,20 +53,20 @@ func (m *InMemoryRunManager) ConfigureRunLifecycle(cfg config.RunConfig) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if cfg.ReaperIntervalMs > 0 {
-		m.reaperInterval = time.Duration(cfg.ReaperIntervalMs) * time.Millisecond
+	if cfg.ReaperInterval > 0 {
+		m.reaperInterval = time.Duration(cfg.ReaperInterval) * time.Second
 	}
-	if cfg.MaxBackgroundDurationMs > 0 {
-		m.maxBackgroundDuration = time.Duration(cfg.MaxBackgroundDurationMs) * time.Millisecond
+	if cfg.MaxBackgroundDuration > 0 {
+		m.maxBackgroundDuration = time.Duration(cfg.MaxBackgroundDuration) * time.Second
 	}
-	if cfg.CompletedRetentionMs > 0 {
-		m.completedRetention = time.Duration(cfg.CompletedRetentionMs) * time.Millisecond
+	if cfg.CompletedRetention > 0 {
+		m.completedRetention = time.Duration(cfg.CompletedRetention) * time.Second
 	}
 	if cfg.EventBusMaxEvents > 0 {
 		m.eventBusMaxEvents = cfg.EventBusMaxEvents
 	}
-	if cfg.MaxDisconnectedWaitMs > 0 {
-		m.maxDisconnectedWait = time.Duration(cfg.MaxDisconnectedWaitMs) * time.Millisecond
+	if cfg.MaxDisconnectedWait > 0 {
+		m.maxDisconnectedWait = time.Duration(cfg.MaxDisconnectedWait) * time.Second
 	}
 	if cfg.MaxObserversPerRun > 0 {
 		m.maxObserversPerRun = cfg.MaxObserversPerRun

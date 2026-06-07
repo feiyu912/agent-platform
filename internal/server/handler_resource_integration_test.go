@@ -399,7 +399,7 @@ func TestWebSocketUploadDownloadsGatewayURLAndReturnsUploadTicket(t *testing.T) 
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -515,7 +515,7 @@ func TestWebSocketResourcePushesLocalFileToGateway(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -597,7 +597,7 @@ func TestWebSocketResourceRejectsMissingLocalFile(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -679,7 +679,7 @@ func TestWebSocketUploadRejectsInvalidUploadMetadata(t *testing.T) {
 				notifications: ws.NewHub(),
 				configure: func(cfg *config.Config) {
 					cfg.WebSocket.WriteQueueSize = 4
-					cfg.WebSocket.PingIntervalMs = 30000
+					cfg.WebSocket.PingInterval = 30000
 				},
 			})
 

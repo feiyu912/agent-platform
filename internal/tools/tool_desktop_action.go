@@ -171,7 +171,7 @@ func (t *RuntimeToolExecutor) invokeDesktopBridge(ctx context.Context, bridge co
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
 
-	timeout := time.Duration(bridge.RequestTimeoutMs) * time.Millisecond
+	timeout := time.Duration(bridge.RequestTimeout) * time.Second
 	if timeout <= 0 {
 		timeout = 20 * time.Second
 	}

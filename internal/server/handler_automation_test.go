@@ -48,7 +48,7 @@ func newAutomationTestServer(t *testing.T, websocket bool) automationTestServer 
 	var hub *ws.Hub
 	if websocket {
 		cfg.WebSocket.WriteQueueSize = 4
-		cfg.WebSocket.PingIntervalMs = 30000
+		cfg.WebSocket.PingInterval = 30000
 		hub = ws.NewHub()
 		t.Cleanup(func() { hub.CloseAll(gws.CloseNormalClosure, "test done") })
 	}

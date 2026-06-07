@@ -47,7 +47,7 @@ func parseDesktopBridgeConfig(raw any, fallback DesktopBridgeConfig) DesktopBrid
 	fallback.Host = stringValue(anyValue(values["host"], fallback.Host), fallback.Host)
 	fallback.Port = intValue(anyValue(values["port"], fallback.Port), fallback.Port)
 	fallback.Path = stringValue(anyValue(values["path"], fallback.Path), fallback.Path)
-	fallback.RequestTimeoutMs = intValue(anyValue(values["request-timeout-ms"], fallback.RequestTimeoutMs), fallback.RequestTimeoutMs)
+	fallback.RequestTimeout = intValue(anyValue(values["request-timeout"], fallback.RequestTimeout), fallback.RequestTimeout)
 	return fallback
 }
 
@@ -85,6 +85,16 @@ func (c *Config) applyRuntimeFile(path string) error {
 		}
 	}
 	if desktop, ok := values["desktop"].(map[string]any); ok && len(desktop) > 0 {
+		if action, ok := desktop["action"].(map[string]any); ok && len(action) > 0 {
+			if err := rejectDeprecatedYAMLKeys(path, "desktop.action.request-timeout", action, "request-timeout-ms"); err != nil {
+				return err
+			}
+		}
+		if cdp, ok := desktop["cdp"].(map[string]any); ok && len(cdp) > 0 {
+			if err := rejectDeprecatedYAMLKeys(path, "desktop.cdp.request-timeout", cdp, "request-timeout-ms"); err != nil {
+				return err
+			}
+		}
 		c.applyDesktopValues(desktop)
 	}
 	if cors, ok := values["cors"].(map[string]any); ok && len(cors) > 0 {
@@ -676,9 +686,18 @@ func parseChannelConfig(channelID string, values map[string]any) (ChannelConfig,
 		URL:                stringValue(anyValue(gatewayMap["url"], ""), ""),
 		JwtToken:           stringValue(anyValue(gatewayMap["jwt-token"], ""), ""),
 		BaseURL:            stringValue(anyValue(gatewayMap["base-url"], ""), ""),
-		HandshakeTimeoutMs: int64Value(anyValue(gatewayMap["handshake-timeout-ms"], 0), 0),
-		ReconnectMinMs:     int64Value(anyValue(gatewayMap["reconnect-min-ms"], 0), 0),
-		ReconnectMaxMs:     int64Value(anyValue(gatewayMap["reconnect-max-ms"], 0), 0),
+		HandshakeTimeout:   int64Value(anyValue(gatewayMap["handshake-timeout"], 0), 0),
+		ReconnectMin:       int64Value(anyValue(gatewayMap["reconnect-min"], 0), 0),
+		ReconnectMax:       int64Value(anyValue(gatewayMap["reconnect-max"], 0), 0),
+	}
+	if err := rejectDeprecatedYAMLKeys("channels "+channelID+" gateway", "handshake-timeout", gatewayMap, "handshake-timeout-ms"); err != nil {
+		return ChannelConfig{}, err
+	}
+	if err := rejectDeprecatedYAMLKeys("channels "+channelID+" gateway", "reconnect-min", gatewayMap, "reconnect-min-ms"); err != nil {
+		return ChannelConfig{}, err
+	}
+	if err := rejectDeprecatedYAMLKeys("channels "+channelID+" gateway", "reconnect-max", gatewayMap, "reconnect-max-ms"); err != nil {
+		return ChannelConfig{}, err
 	}
 	return cfg, nil
 }

@@ -291,7 +291,7 @@ func newTestFixtureWithModelHandlerAndOptions(t *testing.T, modelHandler http.Ha
 		ContainerHub: config.ContainerHubConfig{
 			Enabled:        true,
 			BaseURL:        containerHubServer.URL,
-			RequestTimeout: 1000,
+			RequestTimeout: 1,
 			ResolvedEngine: "local",
 		},
 	}

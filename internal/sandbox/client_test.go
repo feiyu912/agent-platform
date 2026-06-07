@@ -26,8 +26,8 @@ func TestCreateSessionIncludesContainerHubErrorDetail(t *testing.T) {
 	defer server.Close()
 
 	client := NewContainerHubClient(config.ContainerHubConfig{
-		BaseURL:          server.URL,
-		RequestTimeout: 1000,
+		BaseURL:        server.URL,
+		RequestTimeout: 1,
 	})
 	_, err := client.CreateSession(context.Background(), map[string]any{"session_id": "run-test"})
 	if err == nil {
@@ -47,8 +47,8 @@ func TestExecuteSessionIncludesContainerHubErrorDetail(t *testing.T) {
 	defer server.Close()
 
 	client := NewContainerHubClient(config.ContainerHubConfig{
-		BaseURL:          server.URL,
-		RequestTimeout: 1000,
+		BaseURL:        server.URL,
+		RequestTimeout: 1,
 	})
 	_, _, err := client.ExecuteSessionRaw(context.Background(), "run-test", map[string]any{"command": "/bin/sh"})
 	if err == nil {
@@ -81,7 +81,7 @@ func TestRunLevelSandboxSessionIDReusesRunIDAcrossRequestIDs(t *testing.T) {
 		Enabled:              true,
 		BaseURL:              server.URL,
 		DefaultEnvironmentID: "daily-office-pro",
-		RequestTimeout:     1000,
+		RequestTimeout:       1,
 	}, paths)
 
 	first := sandboxTestExecutionContext("run_shared", "req_alpha")

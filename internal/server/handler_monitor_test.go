@@ -21,7 +21,7 @@ func TestMonitorEndpointsExposeWebSocketSnapshot(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 8
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 

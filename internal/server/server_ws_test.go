@@ -61,7 +61,7 @@ func TestWebSocketUpgradeAcceptsValidTokenThroughStatusRecorder(t *testing.T) {
 				Issuer:             "zenmind-local",
 			}
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -102,7 +102,7 @@ func TestWebSocketRequestFramesAreLogged(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 8
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -177,7 +177,7 @@ func TestWebSocketQueryAvailabilityAlwaysAllowsAgentQuery(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 8
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -227,7 +227,7 @@ func TestWebSocketChatReturnsActiveRunConflict(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -304,7 +304,7 @@ func TestWebSocketAgentsKeepsChatWithActiveRunConflictError(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -397,7 +397,7 @@ func TestWebSocketPushesChatReadAfterMarkRead(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -470,7 +470,7 @@ func TestWebSocketPushesChatUnreadAfterRunCompletion(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -533,7 +533,7 @@ func TestWebSocketRunCompletionPushOrdering(t *testing.T) {
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 8
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -604,7 +604,7 @@ func TestWebSocketRunStreamClosesDuringShutdown(t *testing.T) {
 		notifications: hub,
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 4
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 	})
 
@@ -909,7 +909,7 @@ func TestWebSocketQueryDebugVisibilityFollowsStreamConfig(t *testing.T) {
 				notifications: ws.NewHub(),
 				configure: func(cfg *config.Config) {
 					cfg.WebSocket.WriteQueueSize = 8
-					cfg.WebSocket.PingIntervalMs = 30000
+					cfg.WebSocket.PingInterval = 30000
 					cfg.Stream.DebugEventsEnabled = tc.includeDebug
 				},
 			})
@@ -979,7 +979,7 @@ func TestWebSocketQueryToolPayloadVisibilityFollowsStreamConfig(t *testing.T) {
 				notifications: ws.NewHub(),
 				configure: func(cfg *config.Config) {
 					cfg.WebSocket.WriteQueueSize = 8
-					cfg.WebSocket.PingIntervalMs = 30000
+					cfg.WebSocket.PingInterval = 30000
 					cfg.Stream.IncludeToolPayloadEvents = tc.includePayload
 				},
 			})
@@ -1063,7 +1063,7 @@ Plan should stream over websocket.
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 16
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 		},
 		setupRuntime: func(root string, cfg *config.Config) {
 			workspace := filepath.Join(root, "workspace")
@@ -1182,7 +1182,7 @@ func startAwaitingPushQuestionFlow(t *testing.T, configure func(*config.Config))
 		notifications: ws.NewHub(),
 		configure: func(cfg *config.Config) {
 			cfg.WebSocket.WriteQueueSize = 8
-			cfg.WebSocket.PingIntervalMs = 30000
+			cfg.WebSocket.PingInterval = 30000
 			if configure != nil {
 				configure(cfg)
 			}
