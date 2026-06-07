@@ -74,7 +74,7 @@ program_migrate_hitl_budget_config() {
   elif [[ -f "$runtime_file" ]] && grep -Eq '^[[:space:]]*hitl-default-timeout-ms:' "$runtime_file"; then
     legacy_file="$runtime_file"
   else
-    return
+    return 0
   fi
 
   timeout_ms="$(
