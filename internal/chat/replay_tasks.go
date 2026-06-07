@@ -19,6 +19,11 @@ type chatRunData struct {
 	totalPromptCacheMissTokens      int
 	totalLlmChatCompletionCount     int
 	totalToolCallCount              int
+	estimatedCostCurrency           string
+	estimatedCostInputHit           float64
+	estimatedCostInputMiss          float64
+	estimatedCostOutput             float64
+	estimatedCostTotal              float64
 	chatTotalPromptTokens           int
 	chatTotalCompletionTokens       int
 	chatTotalTotalTokens            int

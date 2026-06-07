@@ -166,7 +166,7 @@ func pendingAwaitingFromRow(awaitingID string, runID string, mode string, create
 }
 
 func hasUsageData(usage UsageData) bool {
-	return usage.TotalTokens > 0 || usage.LlmChatCompletionCount > 0 || usage.ToolCallCount > 0
+	return usage.TotalTokens > 0 || usage.LlmChatCompletionCount > 0 || usage.ToolCallCount > 0 || strings.TrimSpace(usage.EstimatedCostCurrency) != ""
 }
 
 func (s *FileStore) ListRuns(chatID string) ([]RunSummary, error) {

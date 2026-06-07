@@ -232,3 +232,149 @@ func TestChatUsageBreakdownUsesReplayChatWhenSummaryLags(t *testing.T) {
 		t.Fatalf("expected replay chat usage to replace stale summary, got %#v", breakdown.Chat)
 	}
 }
+
+func TestChatUsageBreakdownSupplementsCostFromReplayWhenSummaryLacksCost(t *testing.T) {
+	breakdown := chatUsageBreakdown(
+		&chat.UsageData{
+			PromptTokens:           100,
+			CompletionTokens:       50,
+			TotalTokens:            150,
+			ReasoningTokens:        8,
+			CachedTokens:           30,
+			PromptCacheHitTokens:   30,
+			LlmChatCompletionCount: 1,
+			ToolCallCount:          3,
+		},
+		nil,
+		chat.ReplayUsage{
+			LastRunID: "run-replay",
+			LastRun:   chat.UsageData{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150, LlmChatCompletionCount: 1, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.06},
+			Chat:      chat.UsageData{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150, LlmChatCompletionCount: 1, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.06},
+		},
+	)
+
+	if breakdown == nil || breakdown.Chat == nil {
+		t.Fatalf("expected usage breakdown, got %#v", breakdown)
+	}
+	if breakdown.Chat.EstimatedCost == nil || breakdown.Chat.EstimatedCost.Total != 0.06 {
+		t.Fatalf("expected chat estimated cost from replay, got %#v", breakdown.Chat)
+	}
+	if breakdown.Chat.EstimatedCost.Currency != "CNY" {
+		t.Fatalf("expected chat cost currency CNY, got %q", breakdown.Chat.EstimatedCost.Currency)
+	}
+	if breakdown.Chat.ToolCallCount != 3 {
+		t.Fatalf("expected chat ToolCallCount from summary (3), got %d", breakdown.Chat.ToolCallCount)
+	}
+	if breakdown.Chat.CompletionTokensDetails == nil || breakdown.Chat.CompletionTokensDetails.ReasoningTokens != 8 {
+		t.Fatalf("expected chat ReasoningTokens from summary, got %#v", breakdown.Chat.CompletionTokensDetails)
+	}
+	if breakdown.Chat.PromptTokensDetails == nil || breakdown.Chat.PromptTokensDetails.CacheHitTokens != 30 {
+		t.Fatalf("expected chat cache hit tokens from summary, got %#v", breakdown.Chat.PromptTokensDetails)
+	}
+	if breakdown.LastRun == nil || breakdown.LastRun.EstimatedCost == nil || breakdown.LastRun.EstimatedCost.Total != 0.06 {
+		t.Fatalf("expected last run estimated cost from replay, got %#v", breakdown.LastRun)
+	}
+}
+
+func TestChatUsageBreakdownPrefersRunSummaryCostOverReplay(t *testing.T) {
+	breakdown := chatUsageBreakdown(
+		nil,
+		[]chat.RunSummary{
+			{
+				RunID: "run-complete",
+				Usage: chat.UsageData{
+					ModelKey:               "mock-model",
+					PromptTokens:           10,
+					CompletionTokens:       5,
+					TotalTokens:            15,
+					ReasoningTokens:        3,
+					EstimatedCostCurrency:  "CNY",
+					EstimatedCostTotal:     0.12,
+					LlmChatCompletionCount: 1,
+				},
+			},
+		},
+		chat.ReplayUsage{
+			LastRunID: "run-complete",
+			LastRun:   chat.UsageData{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, LlmChatCompletionCount: 1, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.12},
+			Chat:      chat.UsageData{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, LlmChatCompletionCount: 1, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.06},
+		},
+	)
+
+	if breakdown == nil || breakdown.LastRun == nil {
+		t.Fatalf("expected usage breakdown, got %#v", breakdown)
+	}
+	if breakdown.LastRun.EstimatedCost == nil || breakdown.LastRun.EstimatedCost.Total != 0.12 {
+		t.Fatalf("expected run summary cost 0.12, got %#v", breakdown.LastRun.EstimatedCost)
+	}
+}
+
+func TestChatUsageBreakdownSupplementsRunCostFromReplayWhenRunSummaryLacksCost(t *testing.T) {
+	breakdown := chatUsageBreakdown(
+		nil,
+		[]chat.RunSummary{
+			{
+				RunID: "run-no-cost",
+				Usage: chat.UsageData{
+					PromptTokens:           10,
+					CompletionTokens:       5,
+					TotalTokens:            15,
+					ReasoningTokens:        3,
+					CachedTokens:           8,
+					PromptCacheHitTokens:   8,
+					LlmChatCompletionCount: 1,
+					ToolCallCount:          2,
+				},
+			},
+		},
+		chat.ReplayUsage{
+			LastRunID: "run-no-cost",
+			LastRun:   chat.UsageData{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, LlmChatCompletionCount: 1, EstimatedCostCurrency: "USD", EstimatedCostTotal: 0.035},
+			Chat:      chat.UsageData{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, LlmChatCompletionCount: 1},
+		},
+	)
+
+	if breakdown == nil || breakdown.LastRun == nil {
+		t.Fatalf("expected usage breakdown, got %#v", breakdown)
+	}
+	if breakdown.LastRun.EstimatedCost == nil || breakdown.LastRun.EstimatedCost.Total != 0.035 {
+		t.Fatalf("expected run cost from replay (0.035), got %#v", breakdown.LastRun.EstimatedCost)
+	}
+	if breakdown.LastRun.EstimatedCost.Currency != "USD" {
+		t.Fatalf("expected run cost currency USD, got %q", breakdown.LastRun.EstimatedCost.Currency)
+	}
+	if breakdown.LastRun.ToolCallCount != 2 {
+		t.Fatalf("expected run ToolCallCount from summary (2), got %d", breakdown.LastRun.ToolCallCount)
+	}
+	if breakdown.LastRun.CompletionTokensDetails == nil || breakdown.LastRun.CompletionTokensDetails.ReasoningTokens != 3 {
+		t.Fatalf("expected run ReasoningTokens from summary, got %#v", breakdown.LastRun.CompletionTokensDetails)
+	}
+	if breakdown.LastRun.PromptTokensDetails == nil || breakdown.LastRun.PromptTokensDetails.CacheHitTokens != 8 {
+		t.Fatalf("expected run cache hit tokens from summary, got %#v", breakdown.LastRun.PromptTokensDetails)
+	}
+}
+
+func TestChatUsageBreakdownReplayOnlyAwaitingRunReturnsCost(t *testing.T) {
+	breakdown := chatUsageBreakdown(
+		nil,
+		nil,
+		chat.ReplayUsage{
+			LastRunID: "run-awaiting",
+			LastRun:   chat.UsageData{PromptTokens: 500, CompletionTokens: 100, TotalTokens: 600, LlmChatCompletionCount: 1, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.25},
+			Chat:      chat.UsageData{PromptTokens: 500, CompletionTokens: 100, TotalTokens: 600, LlmChatCompletionCount: 1, EstimatedCostCurrency: "CNY", EstimatedCostTotal: 0.25},
+		},
+	)
+
+	if breakdown == nil || breakdown.LastRun == nil {
+		t.Fatalf("expected usage breakdown, got %#v", breakdown)
+	}
+	if breakdown.LastRun.EstimatedCost == nil || breakdown.LastRun.EstimatedCost.Total != 0.25 {
+		t.Fatalf("expected awaiting run cost 0.25, got %#v", breakdown.LastRun)
+	}
+	if breakdown.LastRun.EstimatedCost.Currency != "CNY" {
+		t.Fatalf("expected awaiting run cost currency CNY, got %q", breakdown.LastRun.EstimatedCost.Currency)
+	}
+	if breakdown.Chat == nil || breakdown.Chat.EstimatedCost == nil || breakdown.Chat.EstimatedCost.Total != 0.25 {
+		t.Fatalf("expected chat cost 0.25, got %#v", breakdown.Chat)
+	}
+}

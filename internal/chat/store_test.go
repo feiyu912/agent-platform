@@ -5275,6 +5275,230 @@ func TestLoadChatReadsLegacySnakeCaseUsageFromStepLevel(t *testing.T) {
 	}
 }
 
+func TestLoadChatReadsEstimatedCostFromStepLevel(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-step-cost", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-step-cost", QueryLine{
+		ChatID:    "chat-step-cost",
+		RunID:     "run-step-cost",
+		UpdatedAt: 1000,
+		Query:     map[string]any{"chatId": "chat-step-cost", "message": "hello"},
+		Type:      "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+
+	if err := store.AppendStepLine("chat-step-cost", StepLine{
+		ChatID:    "chat-step-cost",
+		RunID:     "run-step-cost",
+		UpdatedAt: 1003,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{{
+			Role:    "assistant",
+			Content: textContent("answer"),
+		}},
+		Usage: map[string]any{
+			"promptTokens":           100,
+			"completionTokens":       50,
+			"totalTokens":            150,
+			"llmChatCompletionCount": 1,
+			"estimatedCost": map[string]any{
+				"currency":       "CNY",
+				"inputCacheHit":  0.01,
+				"inputCacheMiss": 0.02,
+				"output":         0.03,
+				"total":          0.06,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append step line: %v", err)
+	}
+
+	detail, err := store.LoadChat("chat-step-cost")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+
+	if detail.ReplayUsage.LastRunID != "run-step-cost" {
+		t.Fatalf("expected last run ID run-step-cost, got %q", detail.ReplayUsage.LastRunID)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostCurrency != "CNY" {
+		t.Fatalf("expected last run cost currency CNY, got %q", detail.ReplayUsage.LastRun.EstimatedCostCurrency)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostTotal != 0.06 {
+		t.Fatalf("expected last run cost total 0.06, got %f", detail.ReplayUsage.LastRun.EstimatedCostTotal)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostInputHit != 0.01 {
+		t.Fatalf("expected last run cost input hit 0.01, got %f", detail.ReplayUsage.LastRun.EstimatedCostInputHit)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostInputMiss != 0.02 {
+		t.Fatalf("expected last run cost input miss 0.02, got %f", detail.ReplayUsage.LastRun.EstimatedCostInputMiss)
+	}
+	if absFloat(detail.ReplayUsage.LastRun.EstimatedCostOutput-0.03) > 0.0001 {
+		t.Fatalf("expected last run cost output ~0.03, got %f", detail.ReplayUsage.LastRun.EstimatedCostOutput)
+	}
+	if detail.ReplayUsage.Chat.EstimatedCostCurrency != "CNY" {
+		t.Fatalf("expected chat cost currency CNY, got %q", detail.ReplayUsage.Chat.EstimatedCostCurrency)
+	}
+	if detail.ReplayUsage.Chat.EstimatedCostTotal != 0.06 {
+		t.Fatalf("expected chat cost total 0.06, got %f", detail.ReplayUsage.Chat.EstimatedCostTotal)
+	}
+}
+
+func TestLoadChatAccumulatesMultipleStepEstimatedCosts(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-multi-cost", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-multi-cost", QueryLine{
+		ChatID:    "chat-multi-cost",
+		RunID:     "run-multi-cost",
+		UpdatedAt: 1000,
+		Query:     map[string]any{"chatId": "chat-multi-cost", "message": "hello"},
+		Type:      "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+
+	for i, cost := range []map[string]any{
+		{"currency": "USD", "inputCacheHit": 0.005, "inputCacheMiss": 0.01, "output": 0.02, "total": 0.035},
+		{"currency": "USD", "inputCacheHit": 0.003, "inputCacheMiss": 0.005, "output": 0.01, "total": 0.018},
+	} {
+		if err := store.AppendStepLine("chat-multi-cost", StepLine{
+			ChatID:    "chat-multi-cost",
+			RunID:     "run-multi-cost",
+			UpdatedAt: int64(1004 + i),
+			Type:      "react",
+			Seq:       i + 1,
+			Messages: []StoredMessage{{
+				Role:    "assistant",
+				Content: textContent("answer"),
+			}},
+			Usage: map[string]any{
+				"promptTokens":           60,
+				"completionTokens":       30,
+				"totalTokens":            90,
+				"llmChatCompletionCount": 1,
+				"estimatedCost":          cost,
+			},
+		}); err != nil {
+			t.Fatalf("append step line %d: %v", i, err)
+		}
+	}
+
+	detail, err := store.LoadChat("chat-multi-cost")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+
+	if detail.ReplayUsage.LastRun.EstimatedCostCurrency != "USD" {
+		t.Fatalf("expected last run cost currency USD, got %q", detail.ReplayUsage.LastRun.EstimatedCostCurrency)
+	}
+	if absFloat(detail.ReplayUsage.LastRun.EstimatedCostTotal-0.053) > 0.0001 {
+		t.Fatalf("expected last run cost total ~0.053, got %f", detail.ReplayUsage.LastRun.EstimatedCostTotal)
+	}
+	if absFloat(detail.ReplayUsage.LastRun.EstimatedCostInputHit-0.008) > 0.0001 {
+		t.Fatalf("expected last run cost input hit ~0.008, got %f", detail.ReplayUsage.LastRun.EstimatedCostInputHit)
+	}
+	if absFloat(detail.ReplayUsage.LastRun.EstimatedCostInputMiss-0.015) > 0.0001 {
+		t.Fatalf("expected last run cost input miss ~0.015, got %f", detail.ReplayUsage.LastRun.EstimatedCostInputMiss)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostOutput != 0.03 {
+		t.Fatalf("expected last run cost output 0.03, got %f", detail.ReplayUsage.LastRun.EstimatedCostOutput)
+	}
+	if detail.ReplayUsage.Chat.EstimatedCostCurrency != "USD" {
+		t.Fatalf("expected chat cost currency USD, got %q", detail.ReplayUsage.Chat.EstimatedCostCurrency)
+	}
+	if absFloat(detail.ReplayUsage.Chat.EstimatedCostTotal-0.053) > 0.0001 {
+		t.Fatalf("expected chat cost total ~0.053, got %f", detail.ReplayUsage.Chat.EstimatedCostTotal)
+	}
+}
+
+func TestLoadChatAccumulatesEstimatedCostWithoutTokens(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new file store: %v", err)
+	}
+
+	if _, _, err := store.EnsureChat("chat-cost-only", "agent", "", "hello"); err != nil {
+		t.Fatalf("ensure chat: %v", err)
+	}
+
+	if err := store.AppendQueryLine("chat-cost-only", QueryLine{
+		ChatID:    "chat-cost-only",
+		RunID:     "run-cost-only",
+		UpdatedAt: 1000,
+		Query:     map[string]any{"chatId": "chat-cost-only", "message": "hello"},
+		Type:      "query",
+	}); err != nil {
+		t.Fatalf("append query line: %v", err)
+	}
+
+	// Step with ONLY estimatedCost (no provider tokens)
+	if err := store.AppendStepLine("chat-cost-only", StepLine{
+		ChatID:    "chat-cost-only",
+		RunID:     "run-cost-only",
+		UpdatedAt: 1003,
+		Type:      "react",
+		Seq:       1,
+		Messages: []StoredMessage{{
+			Role:    "assistant",
+			Content: textContent("answer"),
+		}},
+		Usage: map[string]any{
+			"estimatedCost": map[string]any{
+				"currency":       "CNY",
+				"inputCacheHit":  0.005,
+				"inputCacheMiss": 0.01,
+				"output":         0.02,
+				"total":          0.035,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append step line: %v", err)
+	}
+
+	detail, err := store.LoadChat("chat-cost-only")
+	if err != nil {
+		t.Fatalf("load chat: %v", err)
+	}
+
+	if detail.ReplayUsage.LastRun.EstimatedCostCurrency != "CNY" {
+		t.Fatalf("expected cost currency CNY, got %q", detail.ReplayUsage.LastRun.EstimatedCostCurrency)
+	}
+	if absFloat(detail.ReplayUsage.LastRun.EstimatedCostTotal-0.035) > 0.0001 {
+		t.Fatalf("expected last run cost total ~0.035, got %f", detail.ReplayUsage.LastRun.EstimatedCostTotal)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostInputHit != 0.005 {
+		t.Fatalf("expected cost input hit 0.005, got %f", detail.ReplayUsage.LastRun.EstimatedCostInputHit)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostInputMiss != 0.01 {
+		t.Fatalf("expected cost input miss 0.01, got %f", detail.ReplayUsage.LastRun.EstimatedCostInputMiss)
+	}
+	if detail.ReplayUsage.LastRun.EstimatedCostOutput != 0.02 {
+		t.Fatalf("expected cost output 0.02, got %f", detail.ReplayUsage.LastRun.EstimatedCostOutput)
+	}
+	if detail.ReplayUsage.Chat.EstimatedCostCurrency != "CNY" {
+		t.Fatalf("expected chat cost currency CNY, got %q", detail.ReplayUsage.Chat.EstimatedCostCurrency)
+	}
+	if absFloat(detail.ReplayUsage.Chat.EstimatedCostTotal-0.035) > 0.0001 {
+		t.Fatalf("expected chat cost total ~0.035, got %f", detail.ReplayUsage.Chat.EstimatedCostTotal)
+	}
+}
+
 func TestLoadChatIgnoresApprovalAwaitingAskEventLines(t *testing.T) {
 	store, err := NewFileStore(t.TempDir())
 	if err != nil {
@@ -5662,4 +5886,11 @@ func TestStepWriterBatchedArtifactPublishUpdatesArtifactState(t *testing.T) {
 	if detail.Artifact.Items[1].ArtifactID != "artifact_2" || detail.Artifact.Items[1].SHA256 != "def456" {
 		t.Fatalf("unexpected second artifact %#v", detail.Artifact.Items[1])
 	}
+}
+
+func absFloat(f float64) float64 {
+	if f < 0 {
+		return -f
+	}
+	return f
 }

@@ -111,6 +111,8 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 	var chatTotalCachedTokens, chatTotalReasoningTokens, chatTotalPromptCacheHitTokens, chatTotalPromptCacheMissTokens int
 	var chatTotalLlmChatCompletionCount int
 	var chatTotalToolCallCount int
+	var chatTotalEstimatedCostCurrency string
+	var chatTotalEstimatedCostInputHit, chatTotalEstimatedCostInputMiss, chatTotalEstimatedCostOutput, chatTotalEstimatedCostTotal float64
 	var latestContextWindow map[string]any
 	taskQueries := map[string]replayedSubTaskQuery{}
 	legacyConfirmIDs := map[string]bool{}
@@ -296,6 +298,23 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.chatTotalLlmChatCompletionCount = chatTotalLlmChatCompletionCount
 				rd.chatTotalToolCallCount = chatTotalToolCallCount
 			}
+			currency, inputHit, inputMiss, output, total := extractStepCost(stepUsage)
+			if currency != "" {
+				if rd.estimatedCostCurrency == "" {
+					rd.estimatedCostCurrency = currency
+				}
+				rd.estimatedCostInputHit += inputHit
+				rd.estimatedCostInputMiss += inputMiss
+				rd.estimatedCostOutput += output
+				rd.estimatedCostTotal += total
+				if chatTotalEstimatedCostCurrency == "" {
+					chatTotalEstimatedCostCurrency = currency
+				}
+				chatTotalEstimatedCostInputHit += inputHit
+				chatTotalEstimatedCostInputMiss += inputMiss
+				chatTotalEstimatedCostOutput += output
+				chatTotalEstimatedCostTotal += total
+			}
 			if replayDebugEvents && (hasProviderUsagePayload(stepUsage) || len(stepContextWindow) > 0) {
 				runCumulativePost := map[string]int{
 					"promptTokens":           rd.totalPromptTokens,
@@ -445,6 +464,11 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				PromptCacheMissTokens:  chatTotalPromptCacheMissTokens,
 				LlmChatCompletionCount: chatTotalLlmChatCompletionCount,
 				ToolCallCount:          chatTotalToolCallCount,
+				EstimatedCostCurrency:  chatTotalEstimatedCostCurrency,
+				EstimatedCostInputHit:  chatTotalEstimatedCostInputHit,
+				EstimatedCostInputMiss: chatTotalEstimatedCostInputMiss,
+				EstimatedCostOutput:    chatTotalEstimatedCostOutput,
+				EstimatedCostTotal:     chatTotalEstimatedCostTotal,
 			},
 		},
 		Plan:     plan,
@@ -481,6 +505,11 @@ func replayRunUsageData(rd *chatRunData) UsageData {
 		PromptCacheMissTokens:  rd.totalPromptCacheMissTokens,
 		LlmChatCompletionCount: rd.totalLlmChatCompletionCount,
 		ToolCallCount:          rd.totalToolCallCount,
+		EstimatedCostCurrency:  rd.estimatedCostCurrency,
+		EstimatedCostInputHit:  rd.estimatedCostInputHit,
+		EstimatedCostInputMiss: rd.estimatedCostInputMiss,
+		EstimatedCostOutput:    rd.estimatedCostOutput,
+		EstimatedCostTotal:     rd.estimatedCostTotal,
 	}
 }
 
@@ -510,6 +539,23 @@ func isPendingAwaitingRun(summary Summary, runID string) bool {
 	}
 	pendingRunID := strings.TrimSpace(summary.PendingAwaiting.RunID)
 	return pendingRunID != "" && pendingRunID == strings.TrimSpace(runID)
+}
+
+func extractStepCost(usage map[string]any) (currency string, inputHit, inputMiss, output, total float64) {
+	estimatedCost, _ := usage["estimatedCost"].(map[string]any)
+	if estimatedCost == nil {
+		return
+	}
+	currency, _ = estimatedCost["currency"].(string)
+	currency = strings.TrimSpace(currency)
+	if currency == "" {
+		return
+	}
+	inputHit, _ = estimatedCost["inputCacheHit"].(float64)
+	inputMiss, _ = estimatedCost["inputCacheMiss"].(float64)
+	output, _ = estimatedCost["output"].(float64)
+	total, _ = estimatedCost["total"].(float64)
+	return
 }
 
 func taskToolIDFromLine(line map[string]any) string {

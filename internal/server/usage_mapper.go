@@ -10,7 +10,7 @@ import (
 )
 
 func mapUsageDataPtr(usage *chat.UsageData) *api.ChatUsageData {
-	if usage == nil || (usage.TotalTokens == 0 && usage.LlmChatCompletionCount == 0 && usage.ToolCallCount == 0) {
+	if usage == nil || (usage.TotalTokens == 0 && usage.LlmChatCompletionCount == 0 && usage.ToolCallCount == 0 && strings.TrimSpace(usage.EstimatedCostCurrency) == "") {
 		return nil
 	}
 	mapped := mapUsageData(*usage)
@@ -77,7 +77,14 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, re
 	lastRun := latestRunUsageFromSummaries(runs)
 	if replayRunID := strings.TrimSpace(replayUsage.LastRunID); replayRunID != "" {
 		if completedRun := runUsageForID(runs, replayRunID); completedRun != nil {
-			lastRun = completedRun
+			if completedRun.EstimatedCost != nil {
+				lastRun = completedRun
+			} else if strings.TrimSpace(replayUsage.LastRun.EstimatedCostCurrency) != "" {
+				applyEstimatedCost(completedRun, replayUsage.LastRun)
+				lastRun = completedRun
+			} else {
+				lastRun = completedRun
+			}
 		} else if mapped := mapUsageDataPtr(&replayUsage.LastRun); mapped != nil {
 			lastRun = mapped
 		}
@@ -86,6 +93,12 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, re
 	chatUsage := mapUsageDataPtr(summaryUsage)
 	if replayChatUsageIsNewer(replayUsage.Chat, summaryUsage) {
 		chatUsage = mapUsageDataPtr(&replayUsage.Chat)
+	} else if replayChatCostShouldSupplement(replayUsage.Chat, summaryUsage) {
+		if chatUsage != nil {
+			applyEstimatedCost(chatUsage, replayUsage.Chat)
+		} else {
+			chatUsage = mapUsageDataPtr(&replayUsage.Chat)
+		}
 	}
 
 	if lastRun == nil && chatUsage == nil {
@@ -95,6 +108,32 @@ func chatUsageBreakdown(summaryUsage *chat.UsageData, runs []chat.RunSummary, re
 		LastRun: lastRun,
 		Chat:    chatUsage,
 	}
+}
+
+func applyEstimatedCost(target *api.ChatUsageData, source chat.UsageData) {
+	if strings.TrimSpace(source.EstimatedCostCurrency) == "" {
+		return
+	}
+	target.EstimatedCost = &api.EstimatedCost{
+		Currency:       source.EstimatedCostCurrency,
+		InputCacheHit:  source.EstimatedCostInputHit,
+		InputCacheMiss: source.EstimatedCostInputMiss,
+		Output:         source.EstimatedCostOutput,
+		Total:          source.EstimatedCostTotal,
+	}
+}
+
+func replayChatCostShouldSupplement(replay chat.UsageData, summary *chat.UsageData) bool {
+	if strings.TrimSpace(replay.EstimatedCostCurrency) == "" {
+		return false
+	}
+	if mapUsageDataPtr(summary) == nil {
+		return false
+	}
+	if summary.EstimatedCostCurrency != "" {
+		return false
+	}
+	return replay.TotalTokens >= summary.TotalTokens
 }
 
 func latestRunUsageFromSummaries(runs []chat.RunSummary) *api.ChatUsageData {
