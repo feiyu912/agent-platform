@@ -247,12 +247,15 @@ type SteerResponse struct {
 }
 
 type InterruptRequest struct {
-	RequestID string `json:"requestId,omitempty"`
-	ChatID    string `json:"chatId,omitempty"`
-	RunID     string `json:"runId"`
-	AgentKey  string `json:"agentKey,omitempty"`
-	TeamID    string `json:"teamId,omitempty"`
-	Message   string `json:"message,omitempty"`
+	RequestID       string `json:"requestId,omitempty"`
+	ChatID          string `json:"chatId,omitempty"`
+	RunID           string `json:"runId"`
+	AgentKey        string `json:"agentKey,omitempty"`
+	TeamID          string `json:"teamId,omitempty"`
+	Message         string `json:"message,omitempty"`
+	InterruptSource string `json:"source,omitempty"`
+	InterruptReason string `json:"reason,omitempty"`
+	InterruptDetail string `json:"detail,omitempty"`
 }
 
 type InterruptResponse struct {

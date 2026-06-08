@@ -79,7 +79,7 @@ func (s *Server) handleInterrupt(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.Success(response))
 		return
 	}
-	ack := s.deps.Runs.Interrupt(req)
+	ack := s.deps.Runs.Interrupt(httpAPIUserInterruptRequest(req))
 	writeJSON(w, http.StatusOK, api.Success(api.InterruptResponse{
 		Accepted: ack.Accepted,
 		Status:   ack.Status,

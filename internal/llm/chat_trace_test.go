@@ -165,6 +165,66 @@ func TestLLMChatTraceWritesReasoningContent(t *testing.T) {
 	}
 }
 
+func TestLLMChatTraceWritesInterruptInfo(t *testing.T) {
+	recordDir := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	control := contracts.NewRunControl(context.Background(), "run_trace")
+	ctx := contracts.WithRunControl(context.Background(), control)
+	engine := newTraceTestEngine(t, recordDir, server.URL, nil)
+	stream, err := engine.newRunStream(ctx, api.QueryRequest{ChatID: "chat_1", Message: "Hi"}, traceTestSession(), false)
+	if err != nil {
+		t.Fatalf("newRunStream: %v", err)
+	}
+	defer stream.Close()
+
+	if _, err := stream.Next(); err != nil {
+		t.Fatalf("stream first delta: %v", err)
+	}
+	control.Interrupt(contracts.InterruptInfo{
+		Source:    contracts.InterruptSourceHTTPAPI,
+		Reason:    contracts.InterruptReasonUserCancelled,
+		Detail:    "interrupt requested by HTTP API",
+		RequestID: "request_1",
+		ChatID:    "chat_1",
+	})
+	for i := 0; i < 4; i++ {
+		_, err := stream.Next()
+		if errors.Is(err, contracts.ErrRunInterrupted) {
+			break
+		}
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatalf("stream after interrupt: %v", err)
+		}
+		if i == 3 {
+			t.Fatalf("expected stream to report interruption")
+		}
+	}
+
+	trace := readTraceFile(t, recordDir, 1)
+	if trace["status"] != "interrupted" || trace["error"] != "run interrupted" {
+		t.Fatalf("unexpected interrupted trace: %#v", trace)
+	}
+	interrupt := trace["interrupt"].(map[string]any)
+	if interrupt["source"] != contracts.InterruptSourceHTTPAPI || interrupt["reason"] != contracts.InterruptReasonUserCancelled {
+		t.Fatalf("unexpected interrupt info: %#v", interrupt)
+	}
+	if interrupt["detail"] != "interrupt requested by HTTP API" || interrupt["requestId"] != "request_1" || interrupt["chatId"] != "chat_1" {
+		t.Fatalf("unexpected interrupt metadata: %#v", interrupt)
+	}
+	if interrupt["interruptedAt"] == "" {
+		t.Fatalf("expected interruptedAt: %#v", interrupt)
+	}
+}
+
 func TestLLMChatTraceWritesProviderError(t *testing.T) {
 	recordDir := t.TempDir()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

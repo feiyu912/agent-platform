@@ -437,7 +437,7 @@ func (s *llmRunStream) checkBudgetBeforeModelCall() map[string]any {
 			ErrorCategoryTimeout,
 			map[string]any{
 				"elapsedMs": time.Since(s.execCtx.StartedAt).Milliseconds(),
-				"timeout": budget.Timeout,
+				"timeout":   budget.Timeout,
 			},
 		)
 	}
@@ -557,7 +557,13 @@ func (s *llmRunStream) handleInterruptIfNeeded() error {
 		s.cancelSent = true
 		s.emitPendingUsageDelta()
 		if s.currentTurn != nil && s.currentTurn.trace != nil {
-			s.currentTurn.trace.completeInterrupted()
+			info := InterruptInfo{}
+			if s.runControl != nil {
+				if snapshot, ok := s.runControl.InterruptInfo(); ok {
+					info = snapshot
+				}
+			}
+			s.currentTurn.trace.completeInterrupted(info)
 		}
 		s.currentTurn = nil
 		s.pending = append(s.pending, DeltaRunCancel{RunID: s.session.RunID})

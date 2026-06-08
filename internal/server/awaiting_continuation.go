@@ -74,7 +74,7 @@ func (s *Server) startAwaitingContinuation(deferred DeferredAwaiting, submitReq 
 	runCtx, control, _ := s.deps.Runs.Register(context.Background(), session)
 	eventBus, ok := s.deps.Runs.EventBus(runID)
 	if !ok {
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: runID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(req, contracts.InterruptReasonEventBusUnavailable, "run event bus unavailable"))
 		return false, fmt.Errorf("run event bus unavailable")
 	}
 	s.broadcast("run.started", map[string]any{

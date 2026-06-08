@@ -140,7 +140,11 @@ func (m *InMemoryRunManager) Interrupt(req api.InterruptRequest) InterruptAck {
 	if !ok {
 		return InterruptAck{Accepted: false, Status: "unmatched", Detail: "No active run found"}
 	}
-	if !state.control.Interrupt() {
+	info := InterruptInfoFromRequest(req)
+	if strings.TrimSpace(info.ChatID) == "" {
+		info.ChatID = state.run.ChatID
+	}
+	if !state.control.Interrupt(info) {
 		return InterruptAck{Accepted: false, Status: "unmatched", Detail: "Run is no longer active"}
 	}
 	return InterruptAck{Accepted: true, Status: "accepted", Detail: "Interrupt accepted"}
@@ -375,7 +379,12 @@ func (m *InMemoryRunManager) reapExpiredRuns() {
 				},
 			})
 		}
-		if !state.control.Interrupt() {
+		if !state.control.Interrupt(InterruptInfo{
+			Source: InterruptSourceReaper,
+			Reason: InterruptReasonRunExpired,
+			Detail: "run expired while detached from observers",
+			ChatID: state.run.ChatID,
+		}) {
 			log.Printf("[runctl] reaper skip interrupt run=%s state=%s", state.run.RunID, state.control.State())
 		}
 	}

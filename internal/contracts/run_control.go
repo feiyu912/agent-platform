@@ -19,12 +19,75 @@ const (
 	defaultRunMaxObserversPerRun    = 16
 )
 
+const (
+	InterruptSourceHTTPAPI     = "http_api"
+	InterruptSourceWSAPI       = "ws_api"
+	InterruptSourceProxyWS     = "proxy_ws"
+	InterruptSourceServerSetup = "server_setup"
+	InterruptSourceReaper      = "reaper"
+	InterruptSourceUnknown     = "unknown"
+)
+
+const (
+	InterruptReasonUserCancelled        = "user_cancelled"
+	InterruptReasonProxyInterrupt       = "proxy_interrupt"
+	InterruptReasonRunExpired           = "run_expired"
+	InterruptReasonEventBusUnavailable  = "event_bus_unavailable"
+	InterruptReasonObserverAttachFailed = "observer_attach_failed"
+	InterruptReasonStreamWriterFailed   = "stream_writer_failed"
+	InterruptReasonRunInterrupted       = "run_interrupted"
+)
+
 type runControlContextKey struct{}
 
 type SubmitResult struct {
 	Request api.SubmitRequest
 	Status  string
 	Detail  string
+}
+
+type InterruptInfo struct {
+	Source        string
+	Reason        string
+	Detail        string
+	RequestID     string
+	ChatID        string
+	InterruptedAt time.Time
+}
+
+func InterruptInfoFromRequest(req api.InterruptRequest) InterruptInfo {
+	detail := strings.TrimSpace(req.InterruptDetail)
+	if detail == "" {
+		detail = strings.TrimSpace(req.Message)
+	}
+	return InterruptInfo{
+		Source:    req.InterruptSource,
+		Reason:    req.InterruptReason,
+		Detail:    detail,
+		RequestID: req.RequestID,
+		ChatID:    req.ChatID,
+	}
+}
+
+func NormalizeInterruptInfo(info InterruptInfo) InterruptInfo {
+	info.Source = strings.TrimSpace(info.Source)
+	info.Reason = strings.TrimSpace(info.Reason)
+	info.Detail = strings.TrimSpace(info.Detail)
+	info.RequestID = strings.TrimSpace(info.RequestID)
+	info.ChatID = strings.TrimSpace(info.ChatID)
+	if info.Source == "" {
+		info.Source = InterruptSourceUnknown
+	}
+	if info.Reason == "" {
+		info.Reason = InterruptReasonRunInterrupted
+	}
+	if info.Detail == "" {
+		info.Detail = "Run interrupted"
+	}
+	if info.InterruptedAt.IsZero() {
+		info.InterruptedAt = time.Now()
+	}
+	return info
 }
 
 type submitWaiter struct {
@@ -71,6 +134,7 @@ type RunControl struct {
 	pendingSubmits  map[string]SubmitResult
 	resolvedSubmits map[string]SubmitResult
 	awaitingSubmits map[string]AwaitingSubmitContext
+	interruptInfo   InterruptInfo
 	state           RunLoopState
 	accessLevel     string
 	accessVersion   int64
@@ -130,17 +194,33 @@ func (c *RunControl) Interrupted() bool {
 	return c != nil && c.interrupted.Load()
 }
 
+func (c *RunControl) InterruptInfo() (InterruptInfo, bool) {
+	if c == nil || !c.interrupted.Load() {
+		return InterruptInfo{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if strings.TrimSpace(c.interruptInfo.Source) == "" && strings.TrimSpace(c.interruptInfo.Reason) == "" {
+		return NormalizeInterruptInfo(InterruptInfo{}), true
+	}
+	return c.interruptInfo, true
+}
+
 func (c *RunControl) Finished() bool {
 	return c != nil && c.finished.Load()
 }
 
-func (c *RunControl) Interrupt() bool {
+func (c *RunControl) Interrupt(info InterruptInfo) bool {
 	if c == nil {
 		return false
 	}
 	if !c.interrupted.CompareAndSwap(false, true) {
 		return false
 	}
+	info = NormalizeInterruptInfo(info)
+	c.mu.Lock()
+	c.interruptInfo = info
+	c.mu.Unlock()
 	c.TransitionState(RunLoopStateCancelled)
 	c.cancel()
 	c.closeWaiters("interrupted", "Run interrupted")

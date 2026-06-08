@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-platform/internal/contracts"
 	"agent-platform/internal/observability"
 )
 
@@ -175,21 +176,21 @@ func (t *llmChatTrace) appendToolResult(invocation *preparedToolInvocation, cont
 }
 
 func (t *llmChatTrace) completeOK(content string, reasoningContent string, toolCalls []openAIToolCall, finishReason string, usage *openAIUsage) {
-	t.complete("ok", "", content, reasoningContent, toolCalls, finishReason, usage)
+	t.complete("ok", "", content, reasoningContent, toolCalls, finishReason, usage, nil)
 }
 
 func (t *llmChatTrace) completeError(err error) {
 	if err == nil {
 		return
 	}
-	t.complete("error", err.Error(), "", "", nil, "", nil)
+	t.complete("error", err.Error(), "", "", nil, "", nil, nil)
 }
 
-func (t *llmChatTrace) completeInterrupted() {
-	t.complete("interrupted", "run interrupted", "", "", nil, "", nil)
+func (t *llmChatTrace) completeInterrupted(info contracts.InterruptInfo) {
+	t.complete("interrupted", "run interrupted", "", "", nil, "", nil, &info)
 }
 
-func (t *llmChatTrace) complete(status string, errText string, content string, reasoningContent string, toolCalls []openAIToolCall, finishReason string, usage *openAIUsage) {
+func (t *llmChatTrace) complete(status string, errText string, content string, reasoningContent string, toolCalls []openAIToolCall, finishReason string, usage *openAIUsage, interruptInfo *contracts.InterruptInfo) {
 	if t == nil || !t.enabled {
 		return
 	}
@@ -208,6 +209,9 @@ func (t *llmChatTrace) complete(status string, errText string, content string, r
 	if strings.TrimSpace(errText) != "" {
 		t.payload["error"] = errText
 	}
+	if interruptInfo != nil {
+		t.payload["interrupt"] = traceInterruptInfo(*interruptInfo)
+	}
 	response := map[string]any{
 		"content":      content,
 		"finishReason": finishReason,
@@ -223,6 +227,23 @@ func (t *llmChatTrace) complete(status string, errText string, content string, r
 	}
 	t.payload["response"] = response
 	t.writeLocked()
+}
+
+func traceInterruptInfo(info contracts.InterruptInfo) map[string]any {
+	info = contracts.NormalizeInterruptInfo(info)
+	out := map[string]any{
+		"source":        info.Source,
+		"reason":        info.Reason,
+		"detail":        info.Detail,
+		"interruptedAt": info.InterruptedAt.Format(time.RFC3339Nano),
+	}
+	if info.RequestID != "" {
+		out["requestId"] = info.RequestID
+	}
+	if info.ChatID != "" {
+		out["chatId"] = info.ChatID
+	}
+	return out
 }
 
 func traceResponseToolCalls(toolCalls []openAIToolCall) []any {

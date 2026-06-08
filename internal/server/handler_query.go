@@ -61,7 +61,7 @@ func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepar
 	eventBus, ok := s.deps.Runs.EventBus(prepared.req.RunID)
 	if !ok {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonEventBusUnavailable, "run event bus unavailable"))
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, "run event bus unavailable"))
 		return
 	}
@@ -78,7 +78,7 @@ func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepar
 	})
 	if err != nil {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonStreamWriterFailed, err.Error()))
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
 		return
 	}
@@ -88,7 +88,7 @@ func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepar
 	observer, err := s.deps.Runs.AttachObserver(prepared.req.RunID, 0)
 	if err != nil {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonObserverAttachFailed, err.Error()))
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
 		return
 	}

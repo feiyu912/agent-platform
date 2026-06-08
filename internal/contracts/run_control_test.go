@@ -50,6 +50,37 @@ func TestInMemoryRunManagerRegisterDetachesFromParentContext(t *testing.T) {
 	}
 }
 
+func TestRunControlInterruptInfoPreservesFirstCause(t *testing.T) {
+	control := NewRunControl(context.Background(), "run_1")
+	first := InterruptInfo{
+		Source:    InterruptSourceHTTPAPI,
+		Reason:    InterruptReasonUserCancelled,
+		Detail:    "first cancel",
+		RequestID: "request_1",
+		ChatID:    "chat_1",
+	}
+	if !control.Interrupt(first) {
+		t.Fatalf("expected first interrupt to be accepted")
+	}
+	if control.Interrupt(InterruptInfo{
+		Source: InterruptSourceReaper,
+		Reason: InterruptReasonRunExpired,
+		Detail: "second cancel",
+	}) {
+		t.Fatalf("did not expect second interrupt to be accepted")
+	}
+	info, ok := control.InterruptInfo()
+	if !ok {
+		t.Fatalf("expected interrupt info")
+	}
+	if info.Source != InterruptSourceHTTPAPI || info.Reason != InterruptReasonUserCancelled || info.Detail != "first cancel" {
+		t.Fatalf("unexpected interrupt info: %#v", info)
+	}
+	if info.RequestID != "request_1" || info.ChatID != "chat_1" || info.InterruptedAt.IsZero() {
+		t.Fatalf("unexpected interrupt metadata: %#v", info)
+	}
+}
+
 func TestRunControlAwaitSubmitPausesTimeoutWithoutObserver(t *testing.T) {
 	control := NewRunControl(context.Background(), "run_1")
 	control.SetMaxDisconnectedWait(500 * time.Millisecond)
@@ -309,6 +340,13 @@ func TestInMemoryRunManagerReaperPublishesExpiredRunErrorBeforeInterrupt(t *test
 
 	if !control.Interrupted() {
 		t.Fatalf("expected run to be interrupted by reaper")
+	}
+	info, ok := control.InterruptInfo()
+	if !ok {
+		t.Fatalf("expected reaper interrupt info")
+	}
+	if info.Source != InterruptSourceReaper || info.Reason != InterruptReasonRunExpired || info.ChatID != "chat_1" {
+		t.Fatalf("unexpected reaper interrupt info: %#v", info)
 	}
 
 	observer, err := eventBus.Subscribe(0)

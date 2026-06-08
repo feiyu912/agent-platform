@@ -9,6 +9,7 @@ import (
 
 	"agent-platform/internal/api"
 	"agent-platform/internal/chat"
+	"agent-platform/internal/contracts"
 	"agent-platform/internal/stream"
 	"agent-platform/internal/ws"
 )
@@ -66,7 +67,7 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 	eventBus, ok := s.deps.Runs.EventBus(prepared.req.RunID)
 	if !ok {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonEventBusUnavailable, "run event bus unavailable"))
 		conn.ReleaseStream(req.ID)
 		conn.SendError(req.ID, "internal_error", 500, "run event bus unavailable", nil)
 		return
@@ -74,7 +75,7 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 	observer, attachErr := s.deps.Runs.AttachObserver(prepared.req.RunID, 0)
 	if attachErr != nil {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonObserverAttachFailed, attachErr.Error()))
 		conn.ReleaseStream(req.ID)
 		s.sendWSAttachError(conn, req.ID, prepared.req.RunID, prepared.req.ChatID, attachErr)
 		return
@@ -318,7 +319,7 @@ func (s *Server) wsInterrupt(_ context.Context, conn *ws.Conn, req ws.RequestFra
 		conn.CompleteRequest(req.ID)
 		return
 	}
-	ack := s.deps.Runs.Interrupt(payload)
+	ack := s.deps.Runs.Interrupt(wsAPIUserInterruptRequest(payload))
 	conn.SendResponse(req.Type, req.ID, 0, "success", api.InterruptResponse{
 		Accepted: ack.Accepted,
 		Status:   ack.Status,

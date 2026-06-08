@@ -231,17 +231,21 @@ func (s *Server) forwardProxyInterrupt(req api.InterruptRequest) (api.InterruptR
 	if strings.TrimSpace(req.AgentKey) != strings.TrimSpace(route.agentKey) {
 		return api.InterruptResponse{}, &statusError{status: http.StatusForbidden, message: "agentKey does not match run"}, true
 	}
+	forwarded := proxyWSInterruptRequest(req)
 	payload := map[string]any{
-		"requestId": req.RequestID,
-		"runId":     req.RunID,
+		"requestId": forwarded.RequestID,
+		"runId":     forwarded.RunID,
 		"chatId":    route.chatID,
 		"agentKey":  route.agentKey,
-		"message":   req.Message,
+		"message":   forwarded.Message,
+		"source":    forwarded.InterruptSource,
+		"reason":    forwarded.InterruptReason,
+		"detail":    forwarded.InterruptDetail,
 	}
 	if !sendProxyRouteMessage(route, map[string]any{
 		"frame":   "request",
 		"type":    "request.interrupt",
-		"id":      req.RequestID,
+		"id":      forwarded.RequestID,
 		"payload": payload,
 	}) {
 		return api.InterruptResponse{

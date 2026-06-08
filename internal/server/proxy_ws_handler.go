@@ -72,7 +72,7 @@ func (s *Server) wsProxyQuery(
 	eventBus, ok := s.deps.Runs.EventBus(prepared.req.RunID)
 	if !ok {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonEventBusUnavailable, "run event bus unavailable"))
 		conn.ReleaseStream(req.ID)
 		conn.SendError(req.ID, "internal_error", 500, "run event bus unavailable", nil)
 		return
@@ -80,7 +80,7 @@ func (s *Server) wsProxyQuery(
 	observer, attachErr := s.deps.Runs.AttachObserver(prepared.req.RunID, 0)
 	if attachErr != nil {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonObserverAttachFailed, attachErr.Error()))
 		conn.ReleaseStream(req.ID)
 		s.sendWSAttachError(conn, req.ID, prepared.req.RunID, prepared.req.ChatID, attachErr)
 		return
@@ -124,7 +124,7 @@ func (s *Server) handleProxyWebSocketQuery(w http.ResponseWriter, r *http.Reques
 	eventBus, ok := s.deps.Runs.EventBus(prepared.req.RunID)
 	if !ok {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonEventBusUnavailable, "run event bus unavailable"))
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, "run event bus unavailable"))
 		return
 	}
@@ -136,7 +136,7 @@ func (s *Server) handleProxyWebSocketQuery(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonStreamWriterFailed, err.Error()))
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
 		return
 	}
@@ -146,7 +146,7 @@ func (s *Server) handleProxyWebSocketQuery(w http.ResponseWriter, r *http.Reques
 	observer, attachErr := s.deps.Runs.AttachObserver(prepared.req.RunID, 0)
 	if attachErr != nil {
 		releaseQuery(prepared.release)
-		s.deps.Runs.Interrupt(api.InterruptRequest{RunID: prepared.req.RunID})
+		s.deps.Runs.Interrupt(serverSetupInterruptRequest(prepared.req, contracts.InterruptReasonObserverAttachFailed, attachErr.Error()))
 		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, attachErr.Error()))
 		return
 	}
