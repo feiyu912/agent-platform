@@ -42,7 +42,6 @@ func (s *llmRunStream) newChatTrace(runSeq int, prepared preparedProviderRequest
 		"protocol":    strings.TrimSpace(s.model.Protocol),
 		"toolChoice":  strings.TrimSpace(effectiveToolChoice),
 		"request":     prepared.RequestBody,
-		"tools":       traceToolsFromRequest(prepared.RequestBody),
 		"toolCalls":   []any{},
 		"toolResults": []any{},
 		"response":    map[string]any{},
@@ -53,7 +52,7 @@ func (s *llmRunStream) newChatTrace(runSeq int, prepared preparedProviderRequest
 	return &llmChatTrace{
 		enabled:       true,
 		maskSensitive: cfg.MaskSensitive,
-		path:          filepath.Join(cfg.RecordDir, traceFileName(s.session.RunID, runSeq)),
+		path:          filepath.Join(cfg.RecordDir, safeTraceChatID(s.session.ChatID), ".llm-records", traceFileName(s.session.RunID, runSeq)),
 		payload:       payload,
 	}
 }
@@ -69,8 +68,16 @@ func traceFileName(runID string, runSeq int) string {
 }
 
 func safeTraceRunID(runID string) string {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
+	return safeTracePathSegment(runID)
+}
+
+func safeTraceChatID(chatID string) string {
+	return safeTracePathSegment(chatID)
+}
+
+func safeTracePathSegment(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
 		return "unknown"
 	}
 	replacer := strings.NewReplacer(
@@ -78,21 +85,11 @@ func safeTraceRunID(runID string) string {
 		"\\", "_",
 		string(filepath.Separator), "_",
 	)
-	safe := strings.TrimSpace(replacer.Replace(runID))
+	safe := strings.TrimSpace(replacer.Replace(value))
 	if safe == "" || safe == "." || safe == ".." {
 		return "unknown"
 	}
 	return safe
-}
-
-func traceToolsFromRequest(request map[string]any) any {
-	if request == nil {
-		return nil
-	}
-	if tools, ok := request["tools"]; ok {
-		return tools
-	}
-	return nil
 }
 
 func traceToolMessageContent(msg openAIMessage) string {
@@ -177,22 +174,22 @@ func (t *llmChatTrace) appendToolResult(invocation *preparedToolInvocation, cont
 	t.writeLocked()
 }
 
-func (t *llmChatTrace) completeOK(content string, finishReason string, usage *openAIUsage) {
-	t.complete("ok", "", content, finishReason, usage)
+func (t *llmChatTrace) completeOK(content string, reasoningContent string, toolCalls []openAIToolCall, finishReason string, usage *openAIUsage) {
+	t.complete("ok", "", content, reasoningContent, toolCalls, finishReason, usage)
 }
 
 func (t *llmChatTrace) completeError(err error) {
 	if err == nil {
 		return
 	}
-	t.complete("error", err.Error(), "", "", nil)
+	t.complete("error", err.Error(), "", "", nil, "", nil)
 }
 
 func (t *llmChatTrace) completeInterrupted() {
-	t.complete("interrupted", "run interrupted", "", "", nil)
+	t.complete("interrupted", "run interrupted", "", "", nil, "", nil)
 }
 
-func (t *llmChatTrace) complete(status string, errText string, content string, finishReason string, usage *openAIUsage) {
+func (t *llmChatTrace) complete(status string, errText string, content string, reasoningContent string, toolCalls []openAIToolCall, finishReason string, usage *openAIUsage) {
 	if t == nil || !t.enabled {
 		return
 	}
@@ -215,11 +212,32 @@ func (t *llmChatTrace) complete(status string, errText string, content string, f
 		"content":      content,
 		"finishReason": finishReason,
 	}
+	if reasoningContent != "" {
+		response["reasoning_content"] = reasoningContent
+	}
+	if len(toolCalls) > 0 {
+		response["tool_calls"] = traceResponseToolCalls(toolCalls)
+	}
 	if usage != nil {
 		response["usage"] = usage
 	}
 	t.payload["response"] = response
 	t.writeLocked()
+}
+
+func traceResponseToolCalls(toolCalls []openAIToolCall) []any {
+	out := make([]any, 0, len(toolCalls))
+	for _, call := range toolCalls {
+		out = append(out, map[string]any{
+			"id":   strings.TrimSpace(call.ID),
+			"type": strings.TrimSpace(call.Type),
+			"function": map[string]any{
+				"name":      strings.TrimSpace(call.Function.Name),
+				"arguments": call.Function.Arguments,
+			},
+		})
+	}
+	return out
 }
 
 func (t *llmChatTrace) writeLocked() {
@@ -245,7 +263,7 @@ func maskTracePayload(payload map[string]any) map[string]any {
 	out := make(map[string]any, len(payload))
 	for key, value := range payload {
 		switch key {
-		case "request", "tools", "toolCalls", "toolResults", "response":
+		case "request", "toolCalls", "toolResults", "response":
 			out[key] = maskTraceValue(value)
 		default:
 			out[key] = value

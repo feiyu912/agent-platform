@@ -65,7 +65,7 @@ func TestLoadDefaults(t *testing.T) {
 			if cfg.Logging.LLMInteraction.RecordEnabled {
 				t.Fatalf("expected llm chat record disabled by default")
 			}
-			if cfg.Logging.LLMInteraction.RecordDir != filepath.Join("runtime", "chats", "llm") {
+			if cfg.Logging.LLMInteraction.RecordDir != filepath.Join("runtime", "chats") {
 				t.Fatalf("unexpected llm chat record dir: %q", cfg.Logging.LLMInteraction.RecordDir)
 			}
 			if cfg.Defaults.Budget.Hitl.Timeout != 0 {
@@ -1956,7 +1956,7 @@ func TestLoadLLMChatRecordFromDebugEnv(t *testing.T) {
 		if !cfg.Logging.LLMInteraction.RecordEnabled {
 			t.Fatalf("expected llm chat record enabled from env")
 		}
-		if cfg.Logging.LLMInteraction.RecordDir != filepath.Join("runtime", "chats", "llm") {
+		if cfg.Logging.LLMInteraction.RecordDir != filepath.Join("runtime", "chats") {
 			t.Fatalf("unexpected llm chat record dir: %q", cfg.Logging.LLMInteraction.RecordDir)
 		}
 	})

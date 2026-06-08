@@ -112,7 +112,7 @@ func (c *Config) applyEnv() {
 	c.Logging.LLMInteraction.Enabled = boolEnv("LOGGING_AGENT_LLM_INTERACTION_ENABLED", c.Logging.LLMInteraction.Enabled)
 	c.Logging.LLMInteraction.MaskSensitive = boolEnv("LOGGING_AGENT_LLM_INTERACTION_MASK_SENSITIVE", c.Logging.LLMInteraction.MaskSensitive)
 	if strings.TrimSpace(c.Logging.LLMInteraction.RecordDir) == "" {
-		c.Logging.LLMInteraction.RecordDir = filepath.Join(c.Paths.ChatsDir, "llm")
+		c.Logging.LLMInteraction.RecordDir = c.Paths.ChatsDir
 	}
 	c.Logging.LLMInteraction.RecordEnabled = boolEnv("DEBUG_LLM_CHAT_RECORD", c.Logging.LLMInteraction.RecordEnabled)
 

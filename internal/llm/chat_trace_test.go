@@ -49,11 +49,14 @@ func TestLLMChatTraceWritesSimpleCompletion(t *testing.T) {
 	if request["model"] != "mock-model-id" {
 		t.Fatalf("unexpected request body: %#v", request)
 	}
+	if _, ok := trace["tools"]; ok {
+		t.Fatalf("did not expect top-level tools field: %#v", trace["tools"])
+	}
 	response := trace["response"].(map[string]any)
 	if response["content"] != "hello world" || response["finishReason"] != "stop" {
 		t.Fatalf("unexpected response: %#v", response)
 	}
-	if _, err := os.Stat(filepath.Join(recordDir, "run_trace_002.json")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(traceFilePath(recordDir, "chat_1", 2)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("did not expect run_trace_002.json, stat err=%v", err)
 	}
 }
@@ -91,13 +94,38 @@ func TestLLMChatTraceWritesToolLoopFiles(t *testing.T) {
 	if first["status"] != "ok" {
 		t.Fatalf("first status=%#v trace=%#v", first["status"], first)
 	}
+	if _, ok := first["tools"]; ok {
+		t.Fatalf("did not expect top-level tools field: %#v", first["tools"])
+	}
+	firstRequest := first["request"].(map[string]any)
+	tools := firstRequest["tools"].([]any)
+	if len(tools) != 1 {
+		t.Fatalf("expected request.tools to remain available, got %#v", firstRequest["tools"])
+	}
 	toolCalls := first["toolCalls"].([]any)
 	if len(toolCalls) != 1 || toolCalls[0].(map[string]any)["toolName"] != "datetime" {
 		t.Fatalf("unexpected tool calls: %#v", toolCalls)
 	}
+	response := first["response"].(map[string]any)
+	responseToolCalls := response["tool_calls"].([]any)
+	if len(responseToolCalls) != 1 {
+		t.Fatalf("expected response.tool_calls, got %#v", response)
+	}
+	responseToolCall := responseToolCalls[0].(map[string]any)
+	function := responseToolCall["function"].(map[string]any)
+	if responseToolCall["id"] != "call_1" || function["name"] != "datetime" || function["arguments"] != "{}" {
+		t.Fatalf("unexpected response.tool_calls: %#v", responseToolCalls)
+	}
 	toolResults := first["toolResults"].([]any)
 	if len(toolResults) != 1 || !strings.Contains(toolResults[0].(map[string]any)["content"].(string), "2026-05-26") {
 		t.Fatalf("unexpected tool results: %#v", toolResults)
+	}
+	entries, err := os.ReadDir(filepath.Join(recordDir, "chat_1", ".llm-records"))
+	if err != nil {
+		t.Fatalf("read llm records dir: %v", err)
+	}
+	if len(entries) != 2 || entries[0].Name() != "run_trace_001.json" || entries[1].Name() != "run_trace_002.json" {
+		t.Fatalf("unexpected trace file ordering: %#v", entries)
 	}
 	second := readTraceFile(t, recordDir, 2)
 	request := second["request"].(map[string]any)
@@ -111,6 +139,29 @@ func TestLLMChatTraceWritesToolLoopFiles(t *testing.T) {
 	}
 	if !foundToolMessage {
 		t.Fatalf("expected second request to include tool result message: %#v", messages)
+	}
+}
+
+func TestLLMChatTraceWritesReasoningContent(t *testing.T) {
+	recordDir := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"thinking\"}}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"...\",\"content\":\"answer\"},\"finish_reason\":\"stop\"}]}\n\n"))
+	}))
+	defer server.Close()
+
+	engine := newTraceTestEngine(t, recordDir, server.URL, nil)
+	stream, err := engine.newRunStream(context.Background(), api.QueryRequest{ChatID: "chat_1", Message: "Hi"}, traceTestSession(), false)
+	if err != nil {
+		t.Fatalf("newRunStream: %v", err)
+	}
+	drainTraceTestStream(t, stream)
+
+	trace := readTraceFile(t, recordDir, 1)
+	response := trace["response"].(map[string]any)
+	if response["content"] != "answer" || response["reasoning_content"] != "thinking..." {
+		t.Fatalf("unexpected response with reasoning: %#v", response)
 	}
 }
 
@@ -280,7 +331,7 @@ func drainTraceTestStream(t *testing.T, stream contracts.AgentStream) {
 
 func readTraceFile(t *testing.T, recordDir string, seq int) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(recordDir, traceFileName("run_trace", seq)))
+	data, err := os.ReadFile(traceFilePath(recordDir, "chat_1", seq))
 	if err != nil {
 		t.Fatalf("read trace file: %v", err)
 	}
@@ -289,6 +340,10 @@ func readTraceFile(t *testing.T, recordDir string, seq int) map[string]any {
 		t.Fatalf("decode trace file: %v", err)
 	}
 	return decoded
+}
+
+func traceFilePath(recordDir string, chatID string, seq int) string {
+	return filepath.Join(recordDir, chatID, ".llm-records", traceFileName("run_trace", seq))
 }
 
 func serverHTTPClient() *http.Client {

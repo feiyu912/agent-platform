@@ -137,7 +137,7 @@ func defaultConfig() Config {
 				Enabled:       true,
 				MaskSensitive: false,
 				RecordEnabled: false,
-				RecordDir:     filepath.Join(paths.ChatsDir, "llm"),
+				RecordDir:     paths.ChatsDir,
 			},
 		},
 		CORS: CORSConfig{

@@ -353,7 +353,7 @@ func (s *llmRunStream) finishCurrentTurn() error {
 	}
 	if turn.trace != nil {
 		turn.trace.appendToolCalls(toolCalls)
-		turn.trace.completeOK(content, strings.TrimSpace(turn.finishReason), turn.usage)
+		turn.trace.completeOK(content, turn.reasoning.String(), toolCalls, strings.TrimSpace(turn.finishReason), turn.usage)
 	}
 
 	s.emitPendingUsageDelta()
