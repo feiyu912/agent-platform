@@ -439,7 +439,7 @@ func TestDispatcherEmitsApprovalModeAwaitAskWithQuestions(t *testing.T) {
 				"description":         "推送主分支",
 				"options":             []any{map[string]any{"label": "同意", "decision": "approve"}},
 				"allowFreeText":       true,
-				"freeTextPlaceholder": "可选：填写理由",
+				"freeTextPlaceholder": "拒绝，请告知如何调整",
 			},
 		},
 	})
@@ -529,7 +529,7 @@ func TestDispatcherSkipsDuplicateAwaitAskForSameAwaitingID(t *testing.T) {
 				"description":         "放开 a.sh 权限",
 				"options":             []any{map[string]any{"label": "同意", "decision": "approve"}},
 				"allowFreeText":       true,
-				"freeTextPlaceholder": "可选：填写理由",
+				"freeTextPlaceholder": "拒绝，请告知如何调整",
 			},
 		},
 	})
@@ -547,7 +547,7 @@ func TestDispatcherSkipsDuplicateAwaitAskForSameAwaitingID(t *testing.T) {
 				"description":         "放开 a.sh 权限",
 				"options":             []any{map[string]any{"label": "同意", "decision": "approve"}},
 				"allowFreeText":       true,
-				"freeTextPlaceholder": "可选：填写理由",
+				"freeTextPlaceholder": "拒绝，请告知如何调整",
 			},
 		},
 	})

@@ -791,7 +791,7 @@ func TestAwaitHITLSubmitAndExecuteUsesRuleTimeoutOverride(t *testing.T) {
 					"description":         "删除镜像",
 					"options":             buildApprovalOptions(),
 					"allowFreeText":       true,
-					"freeTextPlaceholder": "可选：填写理由",
+					"freeTextPlaceholder": "拒绝，请告知如何调整",
 				},
 			},
 		},
@@ -1487,7 +1487,7 @@ func TestBashHITLApprovalUsesAwaitingForAllViewports(t *testing.T) {
 					t.Fatalf("did not expect level in approval awaiting.ask payload, got %#v", firstApproval)
 				}
 				options, _ := firstApproval["options"].([]any)
-				if len(options) != 3 {
+				if len(options) != 2 {
 					t.Fatalf("expected 3 approval options, got %#v", firstApproval)
 				}
 				if option, ok := options[0].(map[string]any); !ok || option["decision"] != "approve" {
@@ -1662,7 +1662,7 @@ func TestBashSecuritySoftBlockEmitsApprovalWithoutChecker(t *testing.T) {
 		t.Fatalf("expected stable bash security rule key, got %#v", approval)
 	}
 	options, _ := approval["options"].([]any)
-	if len(options) != 3 {
+	if len(options) != 2 {
 		t.Fatalf("expected bash security approval to include rule option, got %#v", options)
 	}
 	foundRule := false
@@ -3677,7 +3677,7 @@ func TestAwaitHITLSubmitAndExecute_RejectEmitsCancelledAnswer(t *testing.T) {
 					"description":         "删除镜像",
 					"options":             buildApprovalOptions(),
 					"allowFreeText":       true,
-					"freeTextPlaceholder": "可选：填写理由",
+					"freeTextPlaceholder": "拒绝，请告知如何调整",
 				},
 			},
 		},
@@ -4241,7 +4241,7 @@ func TestPrepareQueuedBashApprovalBatch_MergesAllBuiltinApprovalsInSingleAwait(t
 			t.Fatalf("expected approval description, got %#v", approval)
 		}
 		options, _ := approval["options"].([]any)
-		if len(options) != 3 || approval["allowFreeText"] != true {
+		if len(options) != 2 || approval["allowFreeText"] != true {
 			t.Fatalf("expected approval options and free text metadata, got %#v", approval)
 		}
 	}

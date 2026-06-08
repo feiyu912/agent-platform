@@ -363,7 +363,7 @@ func (s *llmRunStream) buildApprovalAskItem(invocation *preparedToolInvocation) 
 		"description":         description,
 		"options":             s.approvalOptionsForInvocation(invocation),
 		"allowFreeText":       true,
-		"freeTextPlaceholder": "可选：填写理由",
+		"freeTextPlaceholder": "拒绝，请告知如何调整",
 	}
 	result := hitl.InterceptResult{}
 	if combinedWriteApproval {
@@ -453,11 +453,6 @@ func buildApprovalOptions() []any {
 			"decision":    "approve_rule_run",
 			"description": "本次 run 内所有同一拦截规则命中的命令自动放行，不再询问",
 		},
-		map[string]any{
-			"label":       "拒绝",
-			"decision":    "reject",
-			"description": "终止这条命令",
-		},
 	}
 }
 
@@ -472,11 +467,6 @@ func buildFileAccessApprovalOptions() []any {
 			"label":       "同意（本次运行同规则都放行）",
 			"decision":    "approve_rule_run",
 			"description": "本次 run 内同一拦截规则命中的文件访问自动放行，不再询问",
-		},
-		map[string]any{
-			"label":       "拒绝",
-			"decision":    "reject",
-			"description": "终止这次文件访问",
 		},
 	}
 }

@@ -310,8 +310,23 @@ ${error_log_json}
       {
         "key": "AUTH_ENABLED",
         "value": "true"
+      },
+      {
+        "key": "AUTH_LOCAL_PUBLIC_KEY_FILE",
+        "value": "configs/local-public-key.pem"
       }
-    ]
+    ],
+    "capabilities": {
+      "provides": [],
+      "requires": [
+        {
+          "phase": "preStart",
+          "capability": "auth.publicKey",
+          "action": "copyFile",
+          "target": "configs/local-public-key.pem"
+        }
+      ]
+    }
   }
 }
 EOF
