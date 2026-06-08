@@ -35,6 +35,7 @@ type AgentDefinition struct {
 	Icon             any
 	Description      string
 	Role             string
+	Greetings        []string
 	Wonders          []string
 	ModelKey         string
 	Mode             string
@@ -275,6 +276,7 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 			Icon:         def.Icon,
 			Mode:         apiMode,
 			WorkspaceDir: def.Workspace.Root,
+			Greetings:    append([]string(nil), def.Greetings...),
 			Description:  def.Description,
 			Role:         def.Role,
 			Meta: map[string]any{

@@ -72,6 +72,8 @@ GET /ws -> request / response / stream / push / error frames
 
 `/api/agents?includeChats=N` 附带的 chat 摘要可能包含局部 `error`，用于展示单个 chat 的可恢复/可诊断异常而不让列表整体失败。当前 `multiple active runs found for chat` 会返回 `error: { "code": "active_run_conflict", "message": "multiple active runs found for chat", "chatId": "...", "runIds": ["..."] }`，此时该 chat 不包含 `activeRun`。
 
+`/api/agents` 与 `/api/agent` 会返回 agent 配置中的 `greetings` 数组。客户端可将它作为开场/占位介绍，并随机挑选一条显示在聊天输入框 placeholder 或空状态里。`/api/agent` 仍返回 `wonders`，用于展示可直接提交的具体 query 示例。
+
 ### Archive
 
 | Method | Path | 参数 | 响应 |

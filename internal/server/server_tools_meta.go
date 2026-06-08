@@ -234,6 +234,7 @@ func (s *Server) buildAgentDetailResponse(def catalog.AgentDefinition) api.Agent
 		Icon:        def.Icon,
 		Description: def.Description,
 		Role:        def.Role,
+		Greetings:   append([]string(nil), def.Greetings...),
 		Wonders:     append([]string(nil), def.Wonders...),
 		Model:       modelName,
 		Mode:        catalog.AgentModeForAPI(def.Mode),

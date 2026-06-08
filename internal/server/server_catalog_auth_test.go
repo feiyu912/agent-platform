@@ -42,6 +42,13 @@ func TestAgentEndpointReturnsDetail(t *testing.T) {
 	if response.Data.Mode != "REACT" {
 		t.Fatalf("expected REACT mode, got %#v", response.Data)
 	}
+	wantGreetings := []string{
+		"我可以帮你演示平台工具、审批交互和运行时上下文。",
+		"你可以把我当作一个用于验证 agent-platform 能力的测试智能体。",
+	}
+	if !reflect.DeepEqual(response.Data.Greetings, wantGreetings) {
+		t.Fatalf("expected greetings in detail response, got %#v", response.Data.Greetings)
+	}
 	wantWonders := []string{
 		"帮我演示提问式确认",
 		"帮我演示 Bash HITL 审批确认\n并说明用户接下来会看到什么",
@@ -232,6 +239,12 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 					"name: Coder Agent",
 					"description: should stay out of summary json",
 					"role: Code assistant",
+					"greetings:",
+					"  - 我可以帮你检查代码变更、制定计划，并在确认后执行修改。",
+					"  - 我擅长处理测试失败、项目配置和小步代码迭代。",
+					"wonders:",
+					"  - 帮我检查当前工作区的变更并给出修改建议",
+					"  - 帮我跑测试并修复失败项",
 					"mode: CODER",
 					"modelConfig:",
 					"  modelKey: agent-model",
@@ -289,6 +302,13 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 	if coder.DefaultModelKey != "execute-model" || coder.DefaultReasoningEffort != "HIGH" {
 		t.Fatalf("coder defaults = %#v", coder)
 	}
+	wantGreetings := []string{
+		"我可以帮你检查代码变更、制定计划，并在确认后执行修改。",
+		"我擅长处理测试失败、项目配置和小步代码迭代。",
+	}
+	if !reflect.DeepEqual(coder.Greetings, wantGreetings) {
+		t.Fatalf("coder greetings = %#v, want %#v", coder.Greetings, wantGreetings)
+	}
 	if coder.Role != "Code assistant" {
 		t.Fatalf("coder role = %q, want Code assistant", coder.Role)
 	}
@@ -297,6 +317,9 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"role":"Code assistant"`) {
 		t.Fatalf("agents response should include role, got %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `"wonders"`) {
+		t.Fatalf("agents response should omit wonders from summary, got %s", rec.Body.String())
 	}
 	visibility, ok := coder.Meta["visibility"].(map[string]any)
 	if !ok {

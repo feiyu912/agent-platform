@@ -269,6 +269,7 @@ func parseAgentFileRaw(path string) (AgentDefinition, map[string]any, error) {
 		Icon:             root["icon"],
 		Description:      stringNode(root["description"]),
 		Role:             stringNode(root["role"]),
+		Greetings:        parseAgentGreetings(root),
 		Wonders:          normalizeWonderStrings(root["wonders"]),
 		Mode:             NormalizeAgentModeForRuntime(stringNode(root["mode"])),
 		VisibilityScopes: parseAgentVisibilityScopes(root["visibility"]),
@@ -617,7 +618,18 @@ func runtimeRequiresBash(runtime map[string]any) bool {
 	return ok && len(env) > 0
 }
 
+func parseAgentGreetings(root map[string]any) []string {
+	if items := normalizeAgentTextList(root["greetings"]); len(items) > 0 {
+		return items
+	}
+	return normalizeAgentTextList(root["greeting"])
+}
+
 func normalizeWonderStrings(value any) []string {
+	return normalizeAgentTextList(value)
+}
+
+func normalizeAgentTextList(value any) []string {
 	raw := listStrings(value)
 	if len(raw) == 0 {
 		return nil

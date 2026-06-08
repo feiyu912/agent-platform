@@ -420,6 +420,7 @@ type AgentSummary struct {
 	WorkspaceDir           string                `json:"workspaceDir,omitempty"`
 	DefaultModelKey        string                `json:"defaultModelKey,omitempty"`
 	DefaultReasoningEffort string                `json:"defaultReasoningEffort,omitempty"`
+	Greetings              []string              `json:"greetings,omitempty"`
 	Description            string                `json:"-"`
 	Role                   string                `json:"role,omitempty"`
 	Stats                  AgentChatStats        `json:"stats"`
@@ -438,6 +439,7 @@ type AgentDetailResponse struct {
 	Icon         any              `json:"icon,omitempty"`
 	Description  string           `json:"description,omitempty"`
 	Role         string           `json:"role,omitempty"`
+	Greetings    []string         `json:"greetings,omitempty"`
 	Wonders      []string         `json:"wonders,omitempty"`
 	Model        string           `json:"model"`
 	Mode         string           `json:"mode"`
@@ -535,8 +537,8 @@ type AgentEditorOption struct {
 }
 
 type AgentEditorProxyConfigSchema struct {
-	Fields           []AgentEditorProxyConfigField `json:"fields"`
-	DefaultTimeout int                          `json:"defaultTimeout"`
+	Fields         []AgentEditorProxyConfigField `json:"fields"`
+	DefaultTimeout int                           `json:"defaultTimeout"`
 }
 
 type AgentEditorProxyConfigField struct {
