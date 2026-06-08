@@ -35,6 +35,7 @@ type StepWriter struct {
 	latestArtifact *ArtifactState
 	taskBuffers    map[string]*taskStepBuffer
 	closedTaskIDs  map[string]bool
+	stepLiveSeq    int64
 
 	// tool/action name tracking (for tool.result → StoredMessage.Name)
 	toolNames     map[string]string
@@ -50,6 +51,7 @@ type StepWriter struct {
 	pendingAwaiting         []map[string]any
 	pendingApproval         *StepApproval
 	pendingSubmit           map[string]any
+	pendingSubmitLiveSeq    int64
 	pendingUsage            map[string]any
 	pendingContextWindowMax int
 	pendingEstimated        int
@@ -117,7 +119,6 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			ReasoningID:      event.String("reasoningId"),
 			MsgID:            w.currentMsgID,
 			Ts:               &ts,
-			LiveSeq:          event.Seq,
 		})
 
 	case "content.snapshot":
@@ -130,7 +131,6 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			ContentID: event.String("contentId"),
 			MsgID:     w.currentMsgID,
 			Ts:        &ts,
-			LiveSeq:   event.Seq,
 		})
 
 	case "tool.snapshot":
@@ -154,10 +154,9 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 					Arguments: event.String("arguments"),
 				},
 			}},
-			ToolID:  toolID,
-			MsgID:   w.currentMsgID,
-			Ts:      &ts,
-			LiveSeq: event.Seq,
+			ToolID: toolID,
+			MsgID:  w.currentMsgID,
+			Ts:     &ts,
 		})
 
 	case "tool.result":
@@ -165,6 +164,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		toolID := event.String("toolId")
 		ts := event.Timestamp
 		w.appendStoredMessage(stream.EventData{
+			Seq:       event.Seq,
 			Type:      event.Type,
 			Timestamp: event.Timestamp,
 			Payload: map[string]any{
@@ -177,7 +177,6 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			Content:    textContent(formatResult(event.Value("result"))),
 			ToolID:     toolID,
 			Ts:         &ts,
-			LiveSeq:    event.Seq,
 		})
 		w.needNewMsgID = true
 
@@ -219,7 +218,6 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			ActionID: actionID,
 			MsgID:    w.currentMsgID,
 			Ts:       &ts,
-			LiveSeq:  event.Seq,
 		})
 
 	case "action.result":
@@ -227,6 +225,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		actionID := event.String("actionId")
 		ts := event.Timestamp
 		w.appendStoredMessage(stream.EventData{
+			Seq:       event.Seq,
 			Type:      event.Type,
 			Timestamp: event.Timestamp,
 			Payload: map[string]any{
@@ -239,12 +238,12 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			Content:    textContent(formatResult(event.Value("result"))),
 			ActionID:   actionID,
 			Ts:         &ts,
-			LiveSeq:    event.Seq,
 		})
 		w.needNewMsgID = true
 
 	case "plan.create", "plan.update":
 		w.updatePlan(event)
+		w.stepLiveSeq = maxLiveSeq(w.stepLiveSeq, event.Seq)
 
 	case "task.start":
 		w.flushCurrentStep()
@@ -259,6 +258,7 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		}
 		buffer.taskStatus = ""
 		buffer.taskSubAgentKey = event.String("subAgentKey")
+		buffer.liveSeq = maxLiveSeq(buffer.liveSeq, event.Seq)
 	case "task.complete", "task.cancel", "task.error":
 		taskID := event.String("taskId")
 		if strings.TrimSpace(taskID) == "" {
@@ -273,12 +273,14 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 		default:
 			buffer.taskStatus = "completed"
 		}
+		buffer.liveSeq = maxLiveSeq(buffer.liveSeq, event.Seq)
 		w.flushTaskStep(taskID)
 		delete(w.taskBuffers, taskID)
 		w.closedTaskIDs[taskID] = true
 
 	case "artifact.publish":
 		w.updateArtifact(event)
+		w.stepLiveSeq = maxLiveSeq(w.stepLiveSeq, event.Seq)
 
 	case "debug.preCall", "debug.postCall":
 		if inner, ok := event.Value("data").(map[string]any); ok {
@@ -286,9 +288,12 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 				if w.closedTaskIDs[taskID] {
 					break
 				}
-				w.captureTaskDebugData(w.ensureTaskBuffer(taskID), event.Type, inner)
+				buffer := w.ensureTaskBuffer(taskID)
+				w.captureTaskDebugData(buffer, event.Type, inner)
+				buffer.liveSeq = maxLiveSeq(buffer.liveSeq, event.Seq)
 			} else {
 				w.captureRootDebugData(event.Type, inner)
+				w.stepLiveSeq = maxLiveSeq(w.stepLiveSeq, event.Seq)
 			}
 		}
 	case "usage.snapshot":
@@ -296,9 +301,12 @@ func (w *StepWriter) OnEvent(event stream.EventData) {
 			if w.closedTaskIDs[taskID] {
 				break
 			}
-			w.captureTaskUsageSnapshot(w.ensureTaskBuffer(taskID), event)
+			buffer := w.ensureTaskBuffer(taskID)
+			w.captureTaskUsageSnapshot(buffer, event)
+			buffer.liveSeq = maxLiveSeq(buffer.liveSeq, event.Seq)
 		} else {
 			w.captureRootUsageSnapshot(event)
+			w.stepLiveSeq = maxLiveSeq(w.stepLiveSeq, event.Seq)
 		}
 
 	case "run.complete", "run.cancel", "run.error":
@@ -347,10 +355,10 @@ func (w *StepWriter) handleRequestQuery(event stream.EventData) {
 	query := map[string]any{}
 	// Copy all payload fields into query, excluding seq/type/timestamp
 	for key, val := range event.Payload {
+		if key == "liveSeq" || key == "seq" {
+			continue
+		}
 		query[key] = val
-	}
-	if event.Seq > 0 {
-		query["liveSeq"] = event.Seq
 	}
 
 	_ = w.store.AppendQueryLine(w.chatID, QueryLine{
@@ -358,6 +366,7 @@ func (w *StepWriter) handleRequestQuery(event stream.EventData) {
 		ChatID:    w.chatID,
 		RunID:     w.runID,
 		UpdatedAt: time.Now().UnixMilli(),
+		LiveSeq:   event.Seq,
 		Query:     query,
 		Systems:   append([]QueryLineSystemInit(nil), w.pendingSystemInits...),
 	})
@@ -380,9 +389,11 @@ func (w *StepWriter) appendStoredMessage(event stream.EventData, message StoredM
 			buffer.taskStage = w.currentStage
 		}
 		buffer.messages = upsertStoredMessage(buffer.messages, message)
+		buffer.liveSeq = maxLiveSeq(buffer.liveSeq, event.Seq)
 		return
 	}
 	w.messages = upsertStoredMessage(w.messages, message)
+	w.stepLiveSeq = maxLiveSeq(w.stepLiveSeq, event.Seq)
 }
 
 func (w *StepWriter) captureRootUsageSnapshot(event stream.EventData) {
@@ -485,6 +496,7 @@ func (w *StepWriter) flushCurrentStepAt(updatedAt int64) {
 		ChatID:    w.chatID,
 		RunID:     w.runID,
 		UpdatedAt: updatedAt,
+		LiveSeq:   w.stepLiveSeq,
 		Messages:  messages,
 	}
 	if len(w.pendingAwaiting) > 0 {
@@ -527,6 +539,7 @@ func (w *StepWriter) flushCurrentStepAt(updatedAt int64) {
 
 	_ = w.store.AppendStepLine(w.chatID, line)
 	w.messages = nil
+	w.stepLiveSeq = 0
 	w.pendingUsage = nil
 	w.pendingContextWindowMax = 0
 	w.pendingEstimated = 0

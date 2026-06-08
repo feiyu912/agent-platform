@@ -142,12 +142,16 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 
 		switch lineType {
 		case "query":
+			lineLiveSeq := int64FromAny(line["liveSeq"])
 			query, _ := line["query"].(map[string]any)
 			if query == nil {
 				query = map[string]any{}
 			}
 			payload := map[string]any{}
 			for k, v := range query {
+				if k == "seq" || k == "liveSeq" {
+					continue
+				}
 				payload[k] = v
 			}
 			taskID, _ := line["taskId"].(string)
@@ -157,6 +161,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			if _, ok := payload["chatId"]; !ok {
 				payload["chatId"] = chatID
 			}
+			addReplayLiveSeq(payload, lineLiveSeq)
 
 			rd := ensureRun(runs, &runOrder, runID)
 			if strings.TrimSpace(taskID) != "" {
@@ -177,6 +182,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			})
 
 		case "react", "plan-execute", "step":
+			lineLiveSeq := int64FromAny(line["liveSeq"])
 			rd := ensureRun(runs, &runOrder, runID)
 
 			if rawPlan, ok := line["plan"].(map[string]any); ok {
@@ -216,7 +222,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.events = append(rd.events, events...)
 			}
 			msgs, _ := line["messages"].([]any)
-			awaitingReplay := newStepAwaitingReplay(line["awaiting"], runID)
+			awaitingReplay := newStepAwaitingReplay(line["awaiting"], runID, lineLiveSeq)
 			stepUsage, _ := line["usage"].(map[string]any)
 			stepContextWindow, _ := line["contextWindow"].(map[string]any)
 			stepContextWindow = contextWindowWithUsageModel(stepContextWindow, stepUsage)
@@ -259,7 +265,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				if msgMap == nil {
 					continue
 				}
-				for _, ev := range storedMessageToEvents(msgMap, runID, taskID, stage, nextSeq) {
+				for _, ev := range storedMessageToEvents(msgMap, runID, taskID, stage, lineLiveSeq, nextSeq) {
 					rd.events = append(rd.events, ev)
 					if ev.Type == "tool.snapshot" {
 						rd.events = append(rd.events, awaitingReplay.consumeForTool(ev.String("toolId"))...)
@@ -346,19 +352,26 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 				rd.events = append(rd.events, events...)
 			}
 		case "submit":
+			lineLiveSeq := int64FromAny(line["liveSeq"])
 			rd := ensureRun(runs, &runOrder, runID)
 			submit, _ := line["submit"].(map[string]any)
 			answer, _ := line["answer"].(map[string]any)
 			if len(submit) > 0 {
+				submit = cloneStringAnyMap(submit)
+				clearReplayCursorFields(submit)
 				if _, ok := submit["runId"]; !ok && runID != "" {
 					submit["runId"] = runID
 				}
+				addReplayLiveSeq(submit, lineLiveSeq)
 				rd.events = append(rd.events, stream.EventDataFromMap(submit))
 			}
 			if len(answer) > 0 {
+				answer = cloneStringAnyMap(answer)
+				clearReplayCursorFields(answer)
 				if _, ok := answer["runId"]; !ok && runID != "" {
 					answer["runId"] = runID
 				}
+				addReplayLiveSeq(answer, lineLiveSeq)
 				rd.events = append(rd.events, stream.EventDataFromMap(answer))
 			}
 		case "planning":
@@ -371,10 +384,13 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			event.Seq = nextSeq()
 			rd.events = append(rd.events, *event)
 		case "event", "steer":
+			lineLiveSeq := int64FromAny(line["liveSeq"])
 			event, _ := line["event"].(map[string]any)
 			if len(event) == 0 {
 				continue
 			}
+			event = cloneStringAnyMap(event)
+			clearReplayCursorFields(event)
 			if suppressLegacyConfirmReplay(event, legacyConfirmIDs) {
 				continue
 			}
@@ -384,6 +400,7 @@ func parseChatNewFormat(summary Summary, lines []map[string]any, rawMessages []m
 			if _, ok := event["runId"]; !ok && runID != "" {
 				event["runId"] = runID
 			}
+			addReplayLiveSeq(event, lineLiveSeq)
 			rd := ensureRun(runs, &runOrder, runID)
 			rd.events = append(rd.events, stream.EventDataFromMap(event))
 		}

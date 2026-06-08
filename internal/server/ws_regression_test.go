@@ -388,10 +388,10 @@ func TestLoadChatDetailActiveRunLastSeqUsesPersistedLiveSeqCursor(t *testing.T) 
 		ChatID:    "chat-live-cursor",
 		RunID:     "run-live-cursor",
 		UpdatedAt: 1001,
+		LiveSeq:   1,
 		Query: map[string]any{
 			"chatId":  "chat-live-cursor",
 			"message": "still running",
-			"liveSeq": int64(1),
 		},
 		Type: "query",
 	}); err != nil {
@@ -401,13 +401,13 @@ func TestLoadChatDetailActiveRunLastSeqUsesPersistedLiveSeqCursor(t *testing.T) 
 		ChatID:    "chat-live-cursor",
 		RunID:     "run-live-cursor",
 		UpdatedAt: 1002,
+		LiveSeq:   3,
 		Type:      "react",
 		Seq:       1,
 		Messages: []chat.StoredMessage{
 			{
 				Role:    "assistant",
 				Content: []chat.ContentPart{{Type: "text", Text: "partial"}},
-				LiveSeq: 3,
 			},
 		},
 	}); err != nil {

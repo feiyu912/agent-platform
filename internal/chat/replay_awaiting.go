@@ -8,7 +8,7 @@ type stepAwaitingReplay struct {
 	consumed       map[int]bool
 }
 
-func newStepAwaitingReplay(rawAwaiting any, runID string) *stepAwaitingReplay {
+func newStepAwaitingReplay(rawAwaiting any, runID string, liveSeq int64) *stepAwaitingReplay {
 	awaitingList, _ := rawAwaiting.([]any)
 	replay := &stepAwaitingReplay{
 		items:          make([]map[string]any, 0, len(awaitingList)),
@@ -22,9 +22,11 @@ func newStepAwaitingReplay(rawAwaiting any, runID string) *stepAwaitingReplay {
 		}
 
 		normalized := cloneStringAnyMap(item)
+		clearReplayCursorFields(normalized)
 		if _, ok := normalized["runId"]; !ok && runID != "" {
 			normalized["runId"] = runID
 		}
+		addReplayLiveSeq(normalized, liveSeq)
 
 		idx := len(replay.items)
 		replay.items = append(replay.items, normalized)

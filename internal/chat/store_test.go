@@ -929,7 +929,7 @@ func TestStoredMessageToEventsAddsReasoningLabel(t *testing.T) {
 		"role":              "assistant",
 		"_reasoningId":      runID + "_r_2",
 		"reasoning_content": []any{map[string]any{"type": "text", "text": "thinking"}},
-	}, runID, "task_1", "plan", func() int64 { return 1 })
+	}, runID, "task_1", "plan", 0, func() int64 { return 1 })
 
 	if len(events) != 1 {
 		t.Fatalf("expected one event, got %#v", events)
@@ -1032,7 +1032,7 @@ func TestStoredMessageToEventsPreservesTimestamp(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			events := storedMessageToEvents(tc.msg, "run_1", "task_1", "execute", func() int64 { return 1 })
+			events := storedMessageToEvents(tc.msg, "run_1", "task_1", "execute", 0, func() int64 { return 1 })
 			if len(events) != 1 {
 				t.Fatalf("expected one event, got %#v", events)
 			}
@@ -1344,8 +1344,14 @@ func TestStepWriterPersistsLiveSeqAndReplaysIt(t *testing.T) {
 		switch line["_type"] {
 		case "query":
 			query, _ := line["query"].(map[string]any)
-			if got := int64FromAny(query["liveSeq"]); got != 1 {
-				t.Fatalf("expected query liveSeq=1, got %#v", query)
+			if got := int64FromAny(line["liveSeq"]); got != 1 {
+				t.Fatalf("expected query line liveSeq=1, got %#v", line)
+			}
+			if _, ok := query["liveSeq"]; ok {
+				t.Fatalf("did not expect nested query liveSeq, got %#v", query)
+			}
+			if _, ok := query["seq"]; ok {
+				t.Fatalf("did not expect nested query seq, got %#v", query)
 			}
 		case "react":
 			stepLines = append(stepLines, line)
@@ -1358,44 +1364,64 @@ func TestStepWriterPersistsLiveSeqAndReplaysIt(t *testing.T) {
 	if len(stepLines) != 2 {
 		t.Fatalf("expected two step lines, got %#v", lines)
 	}
+	if got := int64FromAny(stepLines[0]["liveSeq"]); got != 4 {
+		t.Fatalf("expected first step line liveSeq=4, got %#v", stepLines[0])
+	}
+	if got := int64FromAny(stepLines[1]["liveSeq"]); got != 5 {
+		t.Fatalf("expected second step line liveSeq=5, got %#v", stepLines[1])
+	}
 	messages, _ := stepLines[0]["messages"].([]any)
 	if len(messages) != 2 {
 		t.Fatalf("expected content and tool messages in first step, got %#v", stepLines[0])
 	}
-	if got := int64FromAny(messages[0].(map[string]any)["_liveSeq"]); got != 2 {
-		t.Fatalf("expected content _liveSeq=2, got %#v", messages[0])
-	}
-	if got := int64FromAny(messages[1].(map[string]any)["_liveSeq"]); got != 3 {
-		t.Fatalf("expected tool snapshot _liveSeq=3, got %#v", messages[1])
+	for _, rawMessage := range messages {
+		message := rawMessage.(map[string]any)
+		if _, ok := message["liveSeq"]; ok {
+			t.Fatalf("did not expect message liveSeq, got %#v", message)
+		}
 	}
 	awaiting, _ := stepLines[0]["awaiting"].([]any)
 	if len(awaiting) != 1 {
 		t.Fatalf("expected awaiting in first step, got %#v", stepLines[0])
 	}
-	if got := int64FromAny(awaiting[0].(map[string]any)["liveSeq"]); got != 4 {
-		t.Fatalf("expected awaiting liveSeq=4, got %#v", awaiting[0])
+	awaitingEvent := awaiting[0].(map[string]any)
+	if _, ok := awaitingEvent["liveSeq"]; ok {
+		t.Fatalf("did not expect nested awaiting liveSeq, got %#v", awaitingEvent)
+	}
+	if _, ok := awaitingEvent["seq"]; ok {
+		t.Fatalf("did not expect nested awaiting seq, got %#v", awaitingEvent)
 	}
 	resultMessages, _ := stepLines[1]["messages"].([]any)
 	if len(resultMessages) != 1 {
 		t.Fatalf("expected result message in second step, got %#v", stepLines[1])
 	}
-	if got := int64FromAny(resultMessages[0].(map[string]any)["_liveSeq"]); got != 5 {
-		t.Fatalf("expected tool result _liveSeq=5, got %#v", resultMessages[0])
+	resultMessage := resultMessages[0].(map[string]any)
+	if _, ok := resultMessage["liveSeq"]; ok {
+		t.Fatalf("did not expect result message liveSeq, got %#v", resultMessage)
 	}
 	submit, _ := submitLine["submit"].(map[string]any)
 	answer, _ := submitLine["answer"].(map[string]any)
-	if got := int64FromAny(submit["liveSeq"]); got != 6 {
-		t.Fatalf("expected submit liveSeq=6, got %#v", submit)
+	if got := int64FromAny(submitLine["liveSeq"]); got != 7 {
+		t.Fatalf("expected submit line liveSeq=7, got %#v", submitLine)
+	}
+	if _, ok := submit["liveSeq"]; ok {
+		t.Fatalf("did not expect nested submit liveSeq, got %#v", submit)
 	}
 	if _, ok := submit["seq"]; ok {
 		t.Fatalf("did not expect persisted submit seq, got %#v", submit)
 	}
-	if got := int64FromAny(answer["liveSeq"]); got != 7 {
-		t.Fatalf("expected answer liveSeq=7, got %#v", answer)
+	if _, ok := answer["liveSeq"]; ok {
+		t.Fatalf("did not expect nested answer liveSeq, got %#v", answer)
+	}
+	if _, ok := answer["seq"]; ok {
+		t.Fatalf("did not expect persisted answer seq, got %#v", answer)
 	}
 	steerEvent, _ := steerLine["event"].(map[string]any)
-	if got := int64FromAny(steerEvent["liveSeq"]); got != 8 {
-		t.Fatalf("expected steer liveSeq=8, got %#v", steerEvent)
+	if got := int64FromAny(steerLine["liveSeq"]); got != 8 {
+		t.Fatalf("expected steer line liveSeq=8, got %#v", steerLine)
+	}
+	if _, ok := steerEvent["liveSeq"]; ok {
+		t.Fatalf("did not expect nested steer liveSeq, got %#v", steerEvent)
 	}
 	if _, ok := steerEvent["seq"]; ok {
 		t.Fatalf("did not expect persisted steer seq, got %#v", steerEvent)
@@ -1407,11 +1433,11 @@ func TestStepWriterPersistsLiveSeqAndReplaysIt(t *testing.T) {
 	}
 	wantLiveSeq := map[string]int64{
 		"request.query":    1,
-		"content.snapshot": 2,
-		"tool.snapshot":    3,
+		"content.snapshot": 4,
+		"tool.snapshot":    4,
 		"awaiting.ask":     4,
 		"tool.result":      5,
-		"request.submit":   6,
+		"request.submit":   7,
 		"awaiting.answer":  7,
 		"request.steer":    8,
 	}
@@ -1425,8 +1451,8 @@ func TestStepWriterPersistsLiveSeqAndReplaysIt(t *testing.T) {
 		if got := int64FromAny(event.Value("liveSeq")); got != want {
 			t.Fatalf("expected %s liveSeq=%d, got %#v", event.Type, want, event)
 		}
-		if event.Seq <= 0 || event.Seq == want {
-			t.Fatalf("expected replay seq to be independent from liveSeq for %s, got %#v", event.Type, event)
+		if event.Seq <= 0 {
+			t.Fatalf("expected replay seq for %s, got %#v", event.Type, event)
 		}
 	}
 	for eventType := range wantLiveSeq {

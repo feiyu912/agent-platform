@@ -72,11 +72,12 @@ type QueryLineSystemInit struct {
 }
 
 // QueryLine represents a _type:"query" line in chatId.jsonl.
-// Field order matches Java: chatId, runId, updatedAt, query, systems, _type.
+// Field order matches Java: chatId, runId, updatedAt, liveSeq, query, systems, _type.
 type QueryLine struct {
 	ChatID      string                `json:"chatId"`
 	RunID       string                `json:"runId"`
 	UpdatedAt   int64                 `json:"updatedAt"`
+	LiveSeq     int64                 `json:"liveSeq,omitempty"`
 	TaskID      string                `json:"taskId,omitempty"`
 	TaskName    string                `json:"taskName,omitempty"`
 	TaskToolID  string                `json:"taskToolId,omitempty"`
@@ -101,6 +102,7 @@ type StepLine struct {
 	ChatID          string           `json:"chatId"`
 	RunID           string           `json:"runId"`
 	UpdatedAt       int64            `json:"updatedAt"`
+	LiveSeq         int64            `json:"liveSeq,omitempty"`
 	TaskID          string           `json:"taskId,omitempty"`
 	TaskStatus      string           `json:"taskStatus,omitempty"`
 	TaskSubAgentKey string           `json:"taskSubAgentKey,omitempty"`
@@ -138,6 +140,7 @@ type EventLine struct {
 	ChatID    string         `json:"chatId"`
 	RunID     string         `json:"runId"`
 	UpdatedAt int64          `json:"updatedAt"`
+	LiveSeq   int64          `json:"liveSeq,omitempty"`
 	Event     map[string]any `json:"event"`
 	Type      string         `json:"_type"`
 }
@@ -146,6 +149,7 @@ type SubmitLine struct {
 	ChatID    string         `json:"chatId"`
 	RunID     string         `json:"runId"`
 	UpdatedAt int64          `json:"updatedAt"`
+	LiveSeq   int64          `json:"liveSeq,omitempty"`
 	Submit    map[string]any `json:"submit,omitempty"`
 	Answer    map[string]any `json:"answer,omitempty"`
 	Type      string         `json:"_type"`
@@ -169,7 +173,6 @@ type StoredMessage struct {
 	MsgID            string           `json:"_msgId,omitempty"`
 	ToolID           string           `json:"_toolId,omitempty"`
 	ActionID         string           `json:"_actionId,omitempty"`
-	LiveSeq          int64            `json:"_liveSeq,omitempty"`
 }
 
 type ContentPart struct {

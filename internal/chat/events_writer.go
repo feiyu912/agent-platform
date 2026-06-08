@@ -11,10 +11,11 @@ import (
 
 func (s *FileStore) AppendEvent(chatID string, event stream.EventData) error {
 	return s.appendJSONLine(s.chatJSONLPath(chatID), EventLine{
-		Type:   "event",
-		ChatID: chatID,
-		RunID:  event.String("runId"),
-		Event:  eventMapWithLiveSeq(event),
+		Type:    "event",
+		ChatID:  chatID,
+		RunID:   event.String("runId"),
+		LiveSeq: event.Seq,
+		Event:   eventPayloadWithoutSeq(event),
 	})
 }
 

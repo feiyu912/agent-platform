@@ -2,18 +2,33 @@ package chat
 
 import "agent-platform/internal/stream"
 
-func eventMapWithLiveSeq(event stream.EventData) map[string]any {
+func eventPayloadWithoutSeq(event stream.EventData) map[string]any {
 	payload := event.Map()
-	if event.Seq > 0 {
-		payload["liveSeq"] = event.Seq
-	}
-	delete(payload, "seq")
+	clearReplayCursorFields(payload)
 	return payload
 }
 
-func addLiveSeq(payload map[string]any, liveSeq int64) {
+func addReplayLiveSeq(payload map[string]any, liveSeq int64) {
 	if payload == nil || liveSeq <= 0 {
 		return
 	}
 	payload["liveSeq"] = liveSeq
+}
+
+func maxLiveSeq(values ...int64) int64 {
+	var max int64
+	for _, value := range values {
+		if value > max {
+			max = value
+		}
+	}
+	return max
+}
+
+func clearReplayCursorFields(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	delete(payload, "seq")
+	delete(payload, "liveSeq")
 }

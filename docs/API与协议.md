@@ -68,7 +68,7 @@ GET /ws -> request / response / stream / push / error frames
 
 `/api/chats` 的 chat 摘要在存在可恢复等待项时包含 `awaiting`：`awaitingId`、`runId`、`mode`、`status:"awaiting"`、`createdAt`。
 
-`/api/chat` 返回 active run 时，`activeRun.lastSeq` 是本次 chat detail 已返回历史 events 覆盖到的 live stream 游标，客户端应用这些 events 后可把它作为 `/api/attach.lastSeq`。它不是内存 run 当前最新 seq；内存最新 seq 只用于服务端运行状态。
+`/api/chat` 返回 active run 时，`activeRun.lastSeq` 是本次 chat detail 已返回历史 events 覆盖到的 live stream 游标，客户端应用这些 events 后可把它作为 `/api/attach.lastSeq`。它来自 `chatId.jsonl` 每行顶层 `liveSeq` 的 replay 结果，不是内存 run 当前最新 seq；内存最新 seq 只用于服务端运行状态。
 
 `/api/agents?includeChats=N` 附带的 chat 摘要可能包含局部 `error`，用于展示单个 chat 的可恢复/可诊断异常而不让列表整体失败。当前 `multiple active runs found for chat` 会返回 `error: { "code": "active_run_conflict", "message": "multiple active runs found for chat", "chatId": "...", "runIds": ["..."] }`，此时该 chat 不包含 `activeRun`。
 
@@ -302,7 +302,7 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 | `reason` | stream | stream 结束或中断原因 |
 | `lastSeq` | stream | 已发送事件序号，可用于 attach |
 
-历史重建事件的 `seq` 是展示序号；当事件包含 `liveSeq` 时，`liveSeq` 才表示该历史事件覆盖到的原始 live stream 序号。
+历史重建事件的 `seq` 是展示序号。`chatId.jsonl` 使用每行顶层 `liveSeq` 记录该行覆盖到的原始 live stream 序号；replay 时会把它注入到对应的历史事件 payload，供 attach cursor 使用。
 
 ### WS Route
 

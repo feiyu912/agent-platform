@@ -6,10 +6,9 @@ import (
 	"agent-platform/internal/stream"
 )
 
-func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, nextSeq func() int64) []stream.EventData {
+func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, liveSeq int64, nextSeq func() int64) []stream.EventData {
 	role, _ := msg["role"].(string)
 	ts := int64FromAny(msg["ts"])
-	liveSeq := int64FromAny(msg["_liveSeq"])
 	var events []stream.EventData
 
 	switch role {
@@ -25,7 +24,7 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 					"taskId":         taskID,
 					"reasoningLabel": stream.ReasoningLabelForID(reasoningID),
 				}
-				addLiveSeq(payload, liveSeq)
+				addReplayLiveSeq(payload, liveSeq)
 				events = append(events, stream.EventData{
 					Seq:       nextSeq(),
 					Type:      "reasoning.snapshot",
@@ -44,7 +43,7 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 					"text":      text,
 					"taskId":    taskID,
 				}
-				addLiveSeq(payload, liveSeq)
+				addReplayLiveSeq(payload, liveSeq)
 				events = append(events, stream.EventData{
 					Seq:       nextSeq(),
 					Type:      "content.snapshot",
@@ -77,7 +76,7 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 						"taskId":     taskID,
 						"arguments":  fnArgs,
 					}
-					addLiveSeq(payload, liveSeq)
+					addReplayLiveSeq(payload, liveSeq)
 					events = append(events, stream.EventData{
 						Seq:       nextSeq(),
 						Type:      "action.snapshot",
@@ -96,7 +95,7 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 						"taskId":    taskID,
 						"arguments": fnArgs,
 					}
-					addLiveSeq(payload, liveSeq)
+					addReplayLiveSeq(payload, liveSeq)
 					events = append(events, stream.EventData{
 						Seq:       nextSeq(),
 						Type:      "tool.snapshot",
@@ -118,7 +117,7 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 				"actionId": toolCallID,
 				"result":   text,
 			}
-			addLiveSeq(payload, liveSeq)
+			addReplayLiveSeq(payload, liveSeq)
 			events = append(events, stream.EventData{
 				Seq:       nextSeq(),
 				Type:      "action.result",
@@ -134,7 +133,7 @@ func storedMessageToEvents(msg map[string]any, runID, taskID, stage string, next
 				"toolId": id,
 				"result": text,
 			}
-			addLiveSeq(payload, liveSeq)
+			addReplayLiveSeq(payload, liveSeq)
 			events = append(events, stream.EventData{
 				Seq:       nextSeq(),
 				Type:      "tool.result",
