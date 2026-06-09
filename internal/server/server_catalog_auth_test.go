@@ -302,13 +302,6 @@ func TestAgentsEndpointReturnsCatalogFieldsAndScopeFiltering(t *testing.T) {
 	if coder.DefaultModelKey != "execute-model" || coder.DefaultReasoningEffort != "HIGH" {
 		t.Fatalf("coder defaults = %#v", coder)
 	}
-	wantGreetings := []string{
-		"我可以帮你检查代码变更、制定计划，并在确认后执行修改。",
-		"我擅长处理测试失败、项目配置和小步代码迭代。",
-	}
-	if !reflect.DeepEqual(coder.Greetings, wantGreetings) {
-		t.Fatalf("coder greetings = %#v, want %#v", coder.Greetings, wantGreetings)
-	}
 	if coder.Role != "Code assistant" {
 		t.Fatalf("coder role = %q, want Code assistant", coder.Role)
 	}

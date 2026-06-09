@@ -36,6 +36,7 @@ type Store interface {
 	// AppendSystemInitLine is retained for legacy imports/backfills. Main write paths store system snapshots inline on QueryLine.Systems.
 	AppendSystemInitLine(chatID string, line SystemInitLine) error
 	LoadRawMessages(chatID string, k int) ([]map[string]any, error)
+	LoadJSONLContent(chatID string) (string, error)
 	OnRunCompleted(completion RunCompletion) error
 	ListChats(lastRunID string, agentKey string) ([]Summary, error)
 	RecentChatsByAgent(agentKey string, limit int) ([]Summary, error)

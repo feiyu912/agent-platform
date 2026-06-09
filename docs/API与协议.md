@@ -65,6 +65,7 @@ GET /ws -> request / response / stream / push / error frames
 | POST | `/api/chat/rename` | body: `chatId`、`chatName` | 重命名结果 |
 | POST | `/api/chat/archive` | body: `chatId`、`reason` | 归档结果 |
 | GET | `/api/chat/export` | query: `chatId` | Markdown 导出 |
+| GET | `/api/chat/jsonl` | query: `chatId` | 原始 chat JSONL 文本；active 不存在时回退 archive |
 
 `/api/chats` 的 chat 摘要在存在可恢复等待项时包含 `awaiting`：`awaitingId`、`runId`、`mode`、`status:"awaiting"`、`createdAt`。
 
@@ -72,7 +73,7 @@ GET /ws -> request / response / stream / push / error frames
 
 `/api/agents?includeChats=N` 附带的 chat 摘要可能包含局部 `error`，用于展示单个 chat 的可恢复/可诊断异常而不让列表整体失败。当前 `multiple active runs found for chat` 会返回 `error: { "code": "active_run_conflict", "message": "multiple active runs found for chat", "chatId": "...", "runIds": ["..."] }`，此时该 chat 不包含 `activeRun`。
 
-`/api/agents` 与 `/api/agent` 会返回 agent 配置中的 `greetings` 数组。客户端可将它作为开场/占位介绍，并随机挑选一条显示在聊天输入框 placeholder 或空状态里。`/api/agent` 仍返回 `wonders`，用于展示可直接提交的具体 query 示例。
+`/api/agent` 会返回 agent 配置中的 `greetings` 与 `wonders` 数组。客户端可将 `greetings` 作为开场/占位介绍，并随机挑选一条显示在聊天输入框 placeholder 或空状态里；`wonders` 用于展示可直接提交的具体 query 示例。`/api/agents` 是列表摘要接口，不返回 `greetings` 或 `wonders`。
 
 ### Archive
 
@@ -331,6 +332,7 @@ resource ticket、JWT 与 CORS 见 [鉴权与安全边界](鉴权与安全边界
 | `/api/chat/delete` | `chatId` | `response` |
 | `/api/chat/rename` | `chatId`、`chatName` | `response` |
 | `/api/chat/archive` | `chatId`、`reason` | `response` |
+| `/api/chat/jsonl` | `chatId` | 不支持 WS；HTTP 文本数据面 |
 | `/api/archives` | `agentKey`、`limit`、`offset` | `response` |
 | `/api/archive` | `chatId` | `response` |
 | `/api/archives/search` | `query`、`agentKey`、`limit` | `response` |

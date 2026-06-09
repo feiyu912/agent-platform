@@ -867,13 +867,6 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 	if worker.DefaultModelKey != "execute-model" || worker.DefaultReasoningEffort != "HIGH" {
 		t.Fatalf("CODER defaults should prefer execute settings, got %#v", worker)
 	}
-	wantGreetings := []string{
-		"I can inspect your codebase and plan the next change.",
-		"I can run tests, explain failures, and patch the fix.",
-	}
-	if !reflect.DeepEqual(worker.Greetings, wantGreetings) {
-		t.Fatalf("CODER summary greetings = %#v, want %#v", worker.Greetings, wantGreetings)
-	}
 	if worker.Role != "Code worker" {
 		t.Fatalf("CODER summary role = %q, want Code worker", worker.Role)
 	}
@@ -883,9 +876,11 @@ func TestAgentsSummaryIncludesCatalogFieldsAndFiltersScope(t *testing.T) {
 	}
 	if !strings.Contains(string(workerData), `"defaultModelKey":"execute-model"`) ||
 		!strings.Contains(string(workerData), `"defaultReasoningEffort":"HIGH"`) ||
-		!strings.Contains(string(workerData), `"greetings":["I can inspect your codebase and plan the next change.","I can run tests, explain failures, and patch the fix."]`) ||
 		!strings.Contains(string(workerData), `"role":"Code worker"`) {
 		t.Fatalf("CODER summary JSON should include root defaults, got %s", workerData)
+	}
+	if strings.Contains(string(workerData), `"greetings"`) {
+		t.Fatalf("CODER summary JSON should omit greetings, got %s", workerData)
 	}
 	if strings.Contains(string(workerData), `"wonders"`) {
 		t.Fatalf("CODER summary JSON should omit wonders, got %s", workerData)

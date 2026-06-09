@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // readJSONLines reads a JSONL file. Uses json.Decoder so it handles both
@@ -36,4 +37,22 @@ func readJSONLines(path string) ([]map[string]any, error) {
 		}
 	}
 	return items, nil
+}
+
+func (s *FileStore) LoadJSONLContent(chatID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	chatID = strings.TrimSpace(chatID)
+	if !ValidChatID(chatID) {
+		return "", os.ErrPermission
+	}
+	summary, err := s.loadSummary(chatID)
+	if err != nil {
+		return "", err
+	}
+	if summary == nil {
+		return "", ErrChatNotFound
+	}
+	return readFileStringIfExists(s.chatJSONLPath(chatID))
 }

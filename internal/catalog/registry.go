@@ -276,7 +276,6 @@ func (r *FileRegistry) Agents(scope string) []api.AgentSummary {
 			Icon:         def.Icon,
 			Mode:         apiMode,
 			WorkspaceDir: def.Workspace.Root,
-			Greetings:    append([]string(nil), def.Greetings...),
 			Description:  def.Description,
 			Role:         def.Role,
 			Meta: map[string]any{

@@ -420,7 +420,6 @@ type AgentSummary struct {
 	WorkspaceDir           string                `json:"workspaceDir,omitempty"`
 	DefaultModelKey        string                `json:"defaultModelKey,omitempty"`
 	DefaultReasoningEffort string                `json:"defaultReasoningEffort,omitempty"`
-	Greetings              []string              `json:"greetings,omitempty"`
 	Description            string                `json:"-"`
 	Role                   string                `json:"role,omitempty"`
 	Stats                  AgentChatStats        `json:"stats"`

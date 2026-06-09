@@ -325,6 +325,25 @@ func (s *ArchiveStore) LoadArchived(chatID string) (*ArchivedChat, error) {
 	return archived, nil
 }
 
+func (s *ArchiveStore) LoadJSONLContent(chatID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	chatID = strings.TrimSpace(chatID)
+	if !ValidChatID(chatID) {
+		return "", os.ErrPermission
+	}
+	var content string
+	err := s.db.QueryRow("SELECT JSONL_CONTENT_ FROM ARCHIVED_CHATS WHERE CHAT_ID_=?", chatID).Scan(&content)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrChatNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return content, nil
+}
+
 func (s *ArchiveStore) SearchArchived(query, agentKey string, limit int) ([]ArchiveSearchHit, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -45,6 +45,36 @@ func (s *Server) handleChatExport(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(markdown))
 }
 
+func (s *Server) handleChatJSONL(w http.ResponseWriter, r *http.Request) {
+	chatID := strings.TrimSpace(r.URL.Query().Get("chatId"))
+	if chatID == "" {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "chatId is required"))
+		return
+	}
+	if !chat.ValidChatID(chatID) {
+		writeJSON(w, http.StatusBadRequest, api.Failure(http.StatusBadRequest, "invalid chatId"))
+		return
+	}
+
+	content, err := s.deps.Chats.LoadJSONLContent(chatID)
+	if errors.Is(err, chat.ErrChatNotFound) && s.deps.Archives != nil {
+		content, err = s.deps.Archives.LoadJSONLContent(chatID)
+	}
+	if errors.Is(err, chat.ErrChatNotFound) {
+		writeJSON(w, http.StatusNotFound, api.Failure(http.StatusNotFound, "chat not found"))
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, api.Failure(http.StatusInternalServerError, err.Error()))
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename=%q`, safeJSONLFilename(chatID)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(content))
+}
+
 func renderChatMarkdown(chatName string, agentKey string, events []stream.EventData) string {
 	var out strings.Builder
 	title := strings.TrimSpace(chatName)
@@ -117,4 +147,17 @@ func safeExportFilename(chatName string, chatID string) string {
 		base = "chat"
 	}
 	return base + ".md"
+}
+
+func safeJSONLFilename(chatID string) string {
+	base := strings.TrimSpace(chatID)
+	if base == "" {
+		base = "chat"
+	}
+	replacer := strings.NewReplacer("/", "_", `\`, "_", ":", "_", "*", "_", "?", "_", `"`, "_", "<", "_", ">", "_", "|", "_", "\n", "_", "\r", "_")
+	base = strings.Trim(replacer.Replace(base), " ._")
+	if base == "" {
+		base = "chat"
+	}
+	return base + ".jsonl"
 }
