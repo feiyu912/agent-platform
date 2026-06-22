@@ -14,7 +14,7 @@ import (
 )
 
 func (s *Server) startAwaitingContinuation(deferred DeferredAwaiting, submitReq api.SubmitRequest, answer map[string]any) (bool, error) {
-	if s == nil || s.deps.Runs == nil || s.deps.Chats == nil || s.deps.Agent == nil || s.deps.Registry == nil {
+	if s == nil || s.deps.Runs == nil || s.deps.Chats == nil || s.deps.Registry == nil || (s.deps.EngineSelector == nil && s.deps.Agent == nil) {
 		return false, nil
 	}
 	mode := strings.ToLower(firstNonBlank(deferred.Mode, stringValue(answer["mode"])))
@@ -70,6 +70,10 @@ func (s *Server) startAwaitingContinuation(deferred DeferredAwaiting, submitReq 
 		log.Printf("[server][awaiting] prepare continuation system init failed chatId=%s runId=%s err=%v", chatID, runID, err)
 	}
 	session.HistoryMessages = awaitingContinuationHistory(session.HistoryMessages, runID, submitReq.AwaitingID, mode, answer)
+	selectedEngine, engineName, err := s.selectQueryEngine(context.Background(), req, session, agentDef)
+	if err != nil {
+		return false, err
+	}
 
 	runCtx, control, _ := s.deps.Runs.Register(context.Background(), session)
 	eventBus, ok := s.deps.Runs.EventBus(runID)
@@ -88,6 +92,8 @@ func (s *Server) startAwaitingContinuation(deferred DeferredAwaiting, submitReq 
 		summary:     *summary,
 		created:     false,
 		agentDef:    agentDef,
+		engine:      selectedEngine,
+		engineName:  engineName,
 		session:     session,
 		continueRun: true,
 	}
@@ -103,7 +109,7 @@ func (s *Server) startAwaitingContinuation(deferred DeferredAwaiting, submitReq 
 		Session:            session,
 		StartedAtMillis:    startedAt,
 		Summary:            *summary,
-		Agent:              s.deps.Agent,
+		Agent:              prepared.engine,
 		Registry:           s.deps.Registry,
 		Assembler:          assembler,
 		Mapper:             mapper,

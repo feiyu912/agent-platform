@@ -97,7 +97,7 @@ func (s *Server) wsQuery(ctx context.Context, conn *ws.Conn, req ws.RequestFrame
 		Request:            prepared.req,
 		Session:            prepared.session,
 		Summary:            prepared.summary,
-		Agent:              s.deps.Agent,
+		Agent:              prepared.engine,
 		Registry:           s.deps.Registry,
 		Assembler:          assembler,
 		Mapper:             mapper,

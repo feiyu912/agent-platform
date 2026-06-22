@@ -31,6 +31,7 @@ type Dependencies struct {
 	Models                 *models.ModelRegistry
 	Runs                   contracts.RunManager
 	Agent                  contracts.AgentEngine
+	EngineSelector         contracts.AgentEngineSelector
 	Tools                  contracts.ToolExecutor
 	Sandbox                contracts.SandboxClient
 	MCP                    contracts.McpClient
