@@ -36,13 +36,13 @@ func (e *ZenForgeInitializationError) Is(target error) bool {
 }
 
 type Factory interface {
-	New(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error)
+	New() (contracts.AgentEngine, error)
 }
 
-type FactoryFunc func(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error)
+type FactoryFunc func() (contracts.AgentEngine, error)
 
-func (f FactoryFunc) New(ctx context.Context, input contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
-	return f(ctx, input)
+func (f FactoryFunc) New() (contracts.AgentEngine, error) {
+	return f()
 }
 
 type Selector struct {
@@ -70,7 +70,7 @@ func NewSelector(cfg config.ZenForgeConfig, legacy contracts.AgentEngine, factor
 	}, nil
 }
 
-func (s *Selector) Select(ctx context.Context, input contracts.EngineSelectionInput) (contracts.EngineSelection, error) {
+func (s *Selector) Select(_ context.Context, input contracts.EngineSelectionInput) (contracts.EngineSelection, error) {
 	if s.route(input) == LegacyName {
 		return contracts.EngineSelection{Name: LegacyName, Engine: s.legacy}, nil
 	}
@@ -80,7 +80,7 @@ func (s *Selector) Select(ctx context.Context, input contracts.EngineSelectionIn
 			s.zenForgeErr = errors.New("zenforge engine factory is required")
 			return
 		}
-		s.zenForgeEngine, s.zenForgeErr = s.factory.New(ctx, input)
+		s.zenForgeEngine, s.zenForgeErr = s.factory.New()
 		if s.zenForgeErr == nil && isNilAgentEngine(s.zenForgeEngine) {
 			s.zenForgeErr = errors.New("zenforge engine factory returned nil engine")
 		}

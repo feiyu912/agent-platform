@@ -27,7 +27,7 @@ func (fakeAgentStream) Close() error                        { return nil }
 func TestSelectorDefaultsToLegacyWithoutInitializingZenForge(t *testing.T) {
 	legacy := &fakeAgentEngine{id: LegacyName}
 	var calls atomic.Int32
-	selector := mustSelector(t, config.ZenForgeConfig{FallbackOnInitError: true}, legacy, FactoryFunc(func(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
+	selector := mustSelector(t, config.ZenForgeConfig{FallbackOnInitError: true}, legacy, FactoryFunc(func() (contracts.AgentEngine, error) {
 		calls.Add(1)
 		return &fakeAgentEngine{id: ZenForgeName}, nil
 	}))
@@ -48,7 +48,7 @@ func TestSelectorOverridePrecedence(t *testing.T) {
 		ChatOverrides:  map[string]string{"chat": LegacyName},
 		RunOverrides:   map[string]string{"run": ZenForgeName},
 	}
-	selector := mustSelector(t, cfg, legacy, FactoryFunc(func(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
+	selector := mustSelector(t, cfg, legacy, FactoryFunc(func() (contracts.AgentEngine, error) {
 		return zenforge, nil
 	}))
 	input := contracts.EngineSelectionInput{Session: contracts.QuerySession{AgentKey: "agent", ChatID: "chat", RunID: "run"}}
@@ -64,22 +64,30 @@ func TestSelectorOverridePrecedence(t *testing.T) {
 	}
 }
 
-func TestSelectorPassesIdentityInputToLazyFactory(t *testing.T) {
+func TestSelectorCanceledRequestContextDoesNotAffectGlobalInitialization(t *testing.T) {
 	legacy := &fakeAgentEngine{id: LegacyName}
-	want := contracts.EngineSelectionInput{
-		Request: api.QueryRequest{RequestID: "request", RunID: "request-run", ChatID: "request-chat", AgentKey: "request-agent"},
-		Session: contracts.QuerySession{RunID: "run", ChatID: "chat", AgentKey: "agent"},
-	}
-	var got contracts.EngineSelectionInput
-	selector := mustSelector(t, config.ZenForgeConfig{Enabled: true}, legacy, FactoryFunc(func(_ context.Context, input contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
-		got = input
-		return &fakeAgentEngine{id: ZenForgeName}, nil
+	zenforge := &fakeAgentEngine{id: ZenForgeName}
+	var calls atomic.Int32
+	selector := mustSelector(t, config.ZenForgeConfig{Enabled: true}, legacy, FactoryFunc(func() (contracts.AgentEngine, error) {
+		calls.Add(1)
+		return zenforge, nil
 	}))
-	if _, err := selector.Select(context.Background(), want); err != nil {
-		t.Fatalf("select: %v", err)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	selection, err := selector.Select(canceled, contracts.EngineSelectionInput{
+		Request: api.QueryRequest{RequestID: "first-request"},
+		Session: contracts.QuerySession{RunID: "first-run"},
+	})
+	if err != nil || selection.Name != ZenForgeName || selection.Engine != zenforge {
+		t.Fatalf("canceled request context polluted initialization: %#v, %v", selection, err)
 	}
-	if got.Request.RequestID != want.Request.RequestID || got.Session.RunID != want.Session.RunID || got.Session.ChatID != want.Session.ChatID || got.Session.AgentKey != want.Session.AgentKey {
-		t.Fatalf("factory input mismatch: %#v", got)
+	selection, err = selector.Select(context.Background(), contracts.EngineSelectionInput{
+		Request: api.QueryRequest{RequestID: "second-request"},
+		Session: contracts.QuerySession{RunID: "second-run"},
+	})
+	if err != nil || selection.Engine != zenforge || calls.Load() != 1 {
+		t.Fatalf("global engine was not cached independently of request identity: %#v, calls=%d, err=%v", selection, calls.Load(), err)
 	}
 }
 
@@ -88,7 +96,7 @@ func TestSelectorInitializationFallback(t *testing.T) {
 	legacy := &fakeAgentEngine{id: LegacyName}
 	for _, fallback := range []bool{true, false} {
 		t.Run(map[bool]string{true: "enabled", false: "disabled"}[fallback], func(t *testing.T) {
-			selector := mustSelector(t, config.ZenForgeConfig{Enabled: true, FallbackOnInitError: fallback}, legacy, FactoryFunc(func(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
+			selector := mustSelector(t, config.ZenForgeConfig{Enabled: true, FallbackOnInitError: fallback}, legacy, FactoryFunc(func() (contracts.AgentEngine, error) {
 				return nil, initErr
 			}))
 			selection, err := selector.Select(context.Background(), contracts.EngineSelectionInput{})
@@ -109,7 +117,7 @@ func TestSelectorConcurrentInitializationRunsOnce(t *testing.T) {
 	legacy := &fakeAgentEngine{id: LegacyName}
 	zenforge := &fakeAgentEngine{id: ZenForgeName}
 	var calls atomic.Int32
-	selector := mustSelector(t, config.ZenForgeConfig{Enabled: true}, legacy, FactoryFunc(func(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
+	selector := mustSelector(t, config.ZenForgeConfig{Enabled: true}, legacy, FactoryFunc(func() (contracts.AgentEngine, error) {
 		calls.Add(1)
 		return zenforge, nil
 	}))
@@ -145,7 +153,7 @@ func TestSelectorConcurrentInitializationFailureIsCached(t *testing.T) {
 	legacy := &fakeAgentEngine{id: LegacyName}
 	initErr := errors.New("init failed")
 	var calls atomic.Int32
-	selector := mustSelector(t, config.ZenForgeConfig{Enabled: true}, legacy, FactoryFunc(func(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
+	selector := mustSelector(t, config.ZenForgeConfig{Enabled: true}, legacy, FactoryFunc(func() (contracts.AgentEngine, error) {
 		calls.Add(1)
 		return nil, initErr
 	}))
@@ -171,7 +179,7 @@ func TestSelectorConcurrentInitializationFailureIsCached(t *testing.T) {
 func TestSelectorOwnsOverrideMaps(t *testing.T) {
 	legacy := &fakeAgentEngine{id: LegacyName}
 	overrides := map[string]string{"agent": ZenForgeName}
-	selector := mustSelector(t, config.ZenForgeConfig{AgentOverrides: overrides}, legacy, FactoryFunc(func(context.Context, contracts.EngineSelectionInput) (contracts.AgentEngine, error) {
+	selector := mustSelector(t, config.ZenForgeConfig{AgentOverrides: overrides}, legacy, FactoryFunc(func() (contracts.AgentEngine, error) {
 		return &fakeAgentEngine{id: ZenForgeName}, nil
 	}))
 	overrides["agent"] = LegacyName
