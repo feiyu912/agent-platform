@@ -123,6 +123,80 @@ func (c *Config) applyEnv() {
 	c.WebSocket.MaxObservesPerConn = intEnv("AGENT_WS_MAX_OBSERVES_PER_CONN", c.WebSocket.MaxObservesPerConn)
 }
 
+func (c *Config) applyZenForgeEnv() error {
+	var err error
+	if c.ZenForge.Enabled, err = strictBoolEnv("ZENFORGE_ENABLED", c.ZenForge.Enabled); err != nil {
+		return err
+	}
+	if c.ZenForge.FallbackOnInitError, err = strictBoolEnv("ZENFORGE_FALLBACK_ON_INIT_ERROR", c.ZenForge.FallbackOnInitError); err != nil {
+		return err
+	}
+	if c.ZenForge.AgentOverrides, err = overrideMapEnv("ZENFORGE_AGENT_OVERRIDES", c.ZenForge.AgentOverrides); err != nil {
+		return err
+	}
+	if c.ZenForge.ChatOverrides, err = overrideMapEnv("ZENFORGE_CHAT_OVERRIDES", c.ZenForge.ChatOverrides); err != nil {
+		return err
+	}
+	if c.ZenForge.RunOverrides, err = overrideMapEnv("ZENFORGE_RUN_OVERRIDES", c.ZenForge.RunOverrides); err != nil {
+		return err
+	}
+	return nil
+}
+
+func strictBoolEnv(key string, fallback bool) (bool, error) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true, nil
+	case "0", "false", "no", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s must be a boolean, got %q", key, raw)
+	}
+}
+
+func overrideMapEnv(key string, fallback map[string]string) (map[string]string, error) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return cloneStringMap(fallback), nil
+	}
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("%s must not be empty", key)
+	}
+	result := make(map[string]string)
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			return nil, fmt.Errorf("%s contains an empty entry", key)
+		}
+		rawName, rawValue, found := strings.Cut(entry, "=")
+		name := strings.TrimSpace(rawName)
+		value := strings.ToLower(strings.TrimSpace(rawValue))
+		if !found || name == "" || value == "" {
+			return nil, fmt.Errorf("%s entry %q must use non-empty key=legacy|zenforge", key, entry)
+		}
+		if value != "legacy" && value != "zenforge" {
+			return nil, fmt.Errorf("%s entry %q must select legacy or zenforge", key, entry)
+		}
+		if _, exists := result[name]; exists {
+			return nil, fmt.Errorf("%s contains duplicate key %q", key, name)
+		}
+		result[name] = value
+	}
+	return result, nil
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	cloned := make(map[string]string, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
+}
+
 func stringEnv(key string, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		value = strings.TrimSpace(value)

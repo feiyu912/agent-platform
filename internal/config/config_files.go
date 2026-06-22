@@ -79,6 +79,15 @@ func (c *Config) applyRuntimeFile(path string) error {
 	if len(values) == 0 {
 		return nil
 	}
+	if raw, exists := values["zenforge"]; exists {
+		zenForge, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s: zenforge must be a map", path)
+		}
+		if err := c.applyZenForgeValues(path, zenForge); err != nil {
+			return err
+		}
+	}
 	if containerHub, ok := values["container-hub"].(map[string]any); ok && len(containerHub) > 0 {
 		if err := c.applyContainerHubValues(path, containerHub); err != nil {
 			return err
@@ -110,6 +119,75 @@ func (c *Config) applyRuntimeFile(path string) error {
 		c.applyRuntimeBudgetValues(budget)
 	}
 	return nil
+}
+
+func (c *Config) applyZenForgeValues(path string, values map[string]any) error {
+	if raw, ok := values["enabled"]; ok {
+		value, ok := strictBoolValue(raw)
+		if !ok {
+			return fmt.Errorf("%s: zenforge.enabled must be a boolean", path)
+		}
+		c.ZenForge.Enabled = value
+	}
+	if raw, ok := values["fallback-on-init-error"]; ok {
+		value, ok := strictBoolValue(raw)
+		if !ok {
+			return fmt.Errorf("%s: zenforge.fallback-on-init-error must be a boolean", path)
+		}
+		c.ZenForge.FallbackOnInitError = value
+	}
+
+	var err error
+	if raw, ok := values["agent-overrides"]; ok {
+		c.ZenForge.AgentOverrides, err = parseZenForgeOverrideMap(path, "agent-overrides", raw)
+		if err != nil {
+			return err
+		}
+	}
+	if raw, ok := values["chat-overrides"]; ok {
+		c.ZenForge.ChatOverrides, err = parseZenForgeOverrideMap(path, "chat-overrides", raw)
+		if err != nil {
+			return err
+		}
+	}
+	if raw, ok := values["run-overrides"]; ok {
+		c.ZenForge.RunOverrides, err = parseZenForgeOverrideMap(path, "run-overrides", raw)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func strictBoolValue(raw any) (bool, bool) {
+	switch value := raw.(type) {
+	case bool:
+		return value, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "true":
+			return true, true
+		case "false":
+			return false, true
+		}
+	}
+	return false, false
+}
+
+func parseZenForgeOverrideMap(path string, field string, raw any) (map[string]string, error) {
+	values, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s: zenforge.%s must be a map", path, field)
+	}
+	overrides := make(map[string]string, len(values))
+	for rawKey, rawValue := range values {
+		value, ok := rawValue.(string)
+		if !ok {
+			return nil, fmt.Errorf("%s: zenforge.%s[%q] must be legacy or zenforge", path, field, rawKey)
+		}
+		overrides[rawKey] = value
+	}
+	return overrides, nil
 }
 
 func (c *Config) applyBillingValues(values map[string]any) {

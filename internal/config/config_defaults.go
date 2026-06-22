@@ -216,6 +216,13 @@ func defaultConfig() Config {
 			WriteQueueSize:      256,
 			MaxObservesPerConn:  8,
 		},
+		ZenForge: ZenForgeConfig{
+			Enabled:             false,
+			FallbackOnInitError: true,
+			AgentOverrides:      map[string]string{},
+			ChatOverrides:       map[string]string{},
+			RunOverrides:        map[string]string{},
+		},
 	}
 }
 
@@ -284,6 +291,20 @@ func defaultAccessPolicyConfig() AccessPolicyConfig {
 }
 
 func (c *Config) normalize() error {
+	var err error
+	c.ZenForge.AgentOverrides, err = normalizeZenForgeOverrides("zenforge.agent-overrides", c.ZenForge.AgentOverrides)
+	if err != nil {
+		return err
+	}
+	c.ZenForge.ChatOverrides, err = normalizeZenForgeOverrides("zenforge.chat-overrides", c.ZenForge.ChatOverrides)
+	if err != nil {
+		return err
+	}
+	c.ZenForge.RunOverrides, err = normalizeZenForgeOverrides("zenforge.run-overrides", c.ZenForge.RunOverrides)
+	if err != nil {
+		return err
+	}
+
 	c.Paths.RegistriesDir = filepath.Clean(c.Paths.RegistriesDir)
 	c.Paths.ToolsDir = filepath.Clean(c.Paths.ToolsDir)
 	c.Paths.OwnerDir = filepath.Clean(c.Paths.OwnerDir)
@@ -347,6 +368,25 @@ func (c *Config) normalize() error {
 		return err
 	}
 	return nil
+}
+
+func normalizeZenForgeOverrides(field string, source map[string]string) (map[string]string, error) {
+	normalized := make(map[string]string, len(source))
+	for rawKey, rawValue := range source {
+		key := strings.TrimSpace(rawKey)
+		value := strings.ToLower(strings.TrimSpace(rawValue))
+		if key == "" {
+			return nil, fmt.Errorf("%s contains an empty key", field)
+		}
+		if value != "legacy" && value != "zenforge" {
+			return nil, fmt.Errorf("%s[%q] must be legacy or zenforge, got %q", field, key, rawValue)
+		}
+		if _, exists := normalized[key]; exists {
+			return nil, fmt.Errorf("%s contains duplicate key %q", field, key)
+		}
+		normalized[key] = value
+	}
+	return normalized, nil
 }
 
 func normalizeDesktopBridgeConfig(cfg DesktopBridgeConfig) DesktopBridgeConfig {
