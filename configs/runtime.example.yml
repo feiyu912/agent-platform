@@ -1,14 +1,5 @@
 # Runtime integration config. Copy to configs/runtime.yml to customize locally.
 
-# Optional ZenForge engine rollout. The default remains legacy.
-# Override precedence: run > chat > agent > global enabled flag.
-zenforge:
-  enabled: false
-  fallback-on-init-error: false
-  agent-overrides: {}
-  chat-overrides: {}
-  run-overrides: {}
-
 budget:
   timeout: 300
   model:

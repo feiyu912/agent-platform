@@ -4,8 +4,6 @@
 
 `POST /api/query` 成功时返回 SSE event stream。服务端按 provider 原始流式 chunk 逐步映射为 `content.delta`、`tool.*`、`reasoning.*` 等事件，结束时写入 `data: [DONE]`。默认行为是逐事件 flush。
 
-启用 ZenForge 时，selector 在 query 准备阶段确定引擎，HTTP sync/async、SSE 与 WebSocket 都使用该固定结果。`fallback-on-init-error` 只覆盖 ZenForge 初始化失败；`Stream` 已调用后发生的错误会由当前流正常上报，不会改用 `legacy` 重跑。attach 只订阅已注册 run 的 event bus，不会重新选择引擎；持久化 awaiting continuation 会按原 run/session 标识重新执行同一选择规则。
-
 H2A render 是传输层缓冲能力，用于控制前端渲染节奏。启用相关缓冲参数后，客户端看到的输出可能不再表现为逐 token 或逐事件抵达。
 
 ## 核心流程
