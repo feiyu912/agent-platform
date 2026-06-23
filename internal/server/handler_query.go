@@ -104,7 +104,7 @@ func (s *Server) handleQueryAsync(w http.ResponseWriter, r *http.Request, prepar
 		Request:            prepared.req,
 		Session:            prepared.session,
 		Summary:            prepared.summary,
-		Agent:              prepared.engine,
+		Agent:              s.deps.Agent,
 		Registry:           s.deps.Registry,
 		Assembler:          assembler,
 		Mapper:             mapper,
@@ -224,7 +224,7 @@ func (s *Server) handleQuerySync(w http.ResponseWriter, ctx context.Context, pre
 		}
 	}
 
-	agentStream, err := prepared.engine.Stream(runCtx, prepared.req, prepared.session)
+	agentStream, err := s.deps.Agent.Stream(runCtx, prepared.req, prepared.session)
 	if err != nil {
 		control.TransitionState(contracts.RunLoopStateFailed)
 		for _, event := range assembler.Fail(err) {

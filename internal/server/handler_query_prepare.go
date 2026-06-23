@@ -21,8 +21,6 @@ type preparedQuery struct {
 	summary            chat.Summary
 	created            bool
 	agentDef           catalog.AgentDefinition
-	engine             contracts.AgentEngine
-	engineName         string
 	session            contracts.QuerySession
 	memoryUsageSummary *api.MemoryUsageSummary
 	systemInitLines    []chat.QueryLineSystemInit
@@ -196,44 +194,18 @@ func (s *Server) completeQueryPreparation(ctx context.Context, admission queryAd
 	if err != nil {
 		return preparedQuery{}, err
 	}
-	engine, engineName, err := s.selectQueryEngine(ctx, req, session, agentDef)
-	if err != nil {
-		return preparedQuery{}, err
-	}
 
 	return preparedQuery{
 		req:                req,
 		summary:            summary,
 		created:            created,
 		agentDef:           agentDef,
-		engine:             engine,
-		engineName:         engineName,
 		session:            session,
 		memoryUsageSummary: session.MemoryUsageSummary,
 		systemInitLines:    systemInitLines,
 		resourceBaseURL:    admission.resourceBaseURL,
 		release:            release,
 	}, nil
-}
-
-func (s *Server) selectQueryEngine(ctx context.Context, req api.QueryRequest, session contracts.QuerySession, agentDef catalog.AgentDefinition) (contracts.AgentEngine, string, error) {
-	if isProxyRoutedAgent(agentDef) {
-		return nil, "", nil
-	}
-	if s.deps.EngineSelector == nil {
-		return s.deps.Agent, "legacy", nil
-	}
-	selection, err := s.deps.EngineSelector.Select(ctx, contracts.EngineSelectionInput{
-		Request: req,
-		Session: session,
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	if selection.Engine == nil {
-		return nil, "", &statusError{status: http.StatusServiceUnavailable, message: "selected agent engine is not configured"}
-	}
-	return selection.Engine, strings.TrimSpace(selection.Name), nil
 }
 
 func (s *Server) prepareQuery(r *http.Request) (preparedQuery, error) {

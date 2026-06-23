@@ -18,7 +18,6 @@ import (
 	"agent-platform/internal/chat"
 	"agent-platform/internal/config"
 	"agent-platform/internal/contracts"
-	"agent-platform/internal/engine"
 	"agent-platform/internal/frontendtools"
 	"agent-platform/internal/gateway"
 	"agent-platform/internal/llm"
@@ -54,8 +53,6 @@ type automationStopper interface {
 }
 
 var automationStopTimeout = 3 * time.Second
-
-const zenForgeStateDirName = ".zenforge"
 
 func New(rootCtx context.Context) (*App, error) {
 	appInitStartedAt := time.Now()
@@ -187,12 +184,7 @@ func New(rootCtx context.Context) (*App, error) {
 		sqliteMemoryStore.SetRuntimeResolver(memoryRuntimeResolver(cfg, registry, modelRegistry))
 	}
 
-	engineHTTPClient := &http.Client{}
-	legacyAgentEngine := llm.NewLLMAgentEngineWithHTTPClient(cfg, modelRegistry, toolExecutor, frontendRegistry, sandboxClient, engineHTTPClient)
-	agentEngineSelector, err := newAgentEngineSelector(cfg, legacyAgentEngine, modelRegistry, toolExecutor, engineHTTPClient)
-	if err != nil {
-		return nil, fmt.Errorf("init agent engine selector: %w", err)
-	}
+	agentEngine := llm.NewLLMAgentEngine(cfg, modelRegistry, toolExecutor, frontendRegistry, sandboxClient)
 	wsHub := ws.NewHub()
 	var notifications contracts.NotificationSink = wsHub
 	// gatewayResolver 在 Registry 构建完成后（server 依赖就绪之后）绑定。
@@ -261,20 +253,19 @@ func New(rootCtx context.Context) (*App, error) {
 
 	serverStartedAt := time.Now()
 	srv, err = server.New(server.Dependencies{
-		Config:         cfg,
-		Chats:          chatStore,
-		Archives:       archiveStore,
-		Archiver:       archiver,
-		Memory:         memoryStore,
-		Registry:       registry,
-		Models:         modelRegistry,
-		Runs:           runManager,
-		Agent:          legacyAgentEngine,
-		EngineSelector: agentEngineSelector,
-		Tools:          toolExecutor,
-		Sandbox:        sandboxClient,
-		MCP:            mcpClient,
-		FrontendTools:  frontendRegistry,
+		Config:        cfg,
+		Chats:         chatStore,
+		Archives:      archiveStore,
+		Archiver:      archiver,
+		Memory:        memoryStore,
+		Registry:      registry,
+		Models:        modelRegistry,
+		Runs:          runManager,
+		Agent:         agentEngine,
+		Tools:         toolExecutor,
+		Sandbox:       sandboxClient,
+		MCP:           mcpClient,
+		FrontendTools: frontendRegistry,
 		Viewport: viewport.NewServiceWithServers(
 			viewport.NewRegistry(viewport.DefaultRoot(cfg.Paths.RegistriesDir)),
 			viewport.NewSyncer(viewport.NewServerRegistry(viewport.DefaultServersRoot(cfg.Paths.RegistriesDir)), nil),
@@ -345,28 +336,6 @@ func New(rootCtx context.Context) (*App, error) {
 		automationExecutions: automationExecutionStore,
 		lspManager:           lspManager,
 	}, nil
-}
-
-func newAgentEngineSelector(
-	cfg config.Config,
-	legacy contracts.AgentEngine,
-	modelRegistry *models.ModelRegistry,
-	toolExecutor contracts.ToolExecutor,
-	httpClient *http.Client,
-) (contracts.AgentEngineSelector, error) {
-	factory := engine.FactoryFunc(func() (contracts.AgentEngine, error) {
-		return llm.NewZenForgeAgentEngine(llm.ZenForgeEngineConfig{
-			Models:         modelRegistry,
-			Tools:          toolExecutor,
-			HTTPClient:     httpClient,
-			PersistenceDir: zenForgePersistenceDir(cfg.Paths.ChatsDir),
-		})
-	})
-	return engine.NewSelector(cfg.ZenForge, legacy, factory)
-}
-
-func zenForgePersistenceDir(chatsDir string) string {
-	return filepath.Join(chatsDir, zenForgeStateDirName)
 }
 
 func (a *App) Close() error {
