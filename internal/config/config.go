@@ -38,19 +38,10 @@ type Config struct {
 	FileTools       FileToolsConfig
 	Run             RunConfig
 	WebSocket       WebSocketConfig
-	ZenForge        ZenForgeConfig
 	// Gateways 是多 gateway 反向连接列表（wecom / feishu / ding / ...）。
 	Gateways []GatewayEntry
 	// Channels 是 channel 元数据与 agent 准入配置；每条可合成一条 gateway entry。
 	Channels []ChannelConfig
-}
-
-type ZenForgeConfig struct {
-	Enabled             bool
-	FallbackOnInitError bool
-	AgentOverrides      map[string]string
-	ChatOverrides       map[string]string
-	RunOverrides        map[string]string
 }
 
 type ServerConfig struct {
@@ -488,9 +479,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.applyEnv()
-	if err := cfg.applyZenForgeEnv(); err != nil {
-		return Config{}, err
-	}
 	if err := cfg.normalize(); err != nil {
 		return Config{}, err
 	}

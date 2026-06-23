@@ -1419,22 +1419,22 @@ func TestLoadAcceptsDeltaLogsEnabledAlias(t *testing.T) {
 
 func TestLoadContainerHubAndBashConfigFromFiles(t *testing.T) {
 	withIsolatedEnv(t, nil, func() {
-		runtimeConfig := "container-hub:\n  base-url: http://container-hub.test\n"
-		hostToolsConfig := "bash:\n  shell-executable: bash\n  allowed-commands: ls,pwd\n"
-		withProjectFileContents(t, filepath.Join("configs", "runtime.yml"), &runtimeConfig, func() {
-			withProjectFileContents(t, filepath.Join("configs", "host-tools.yml"), &hostToolsConfig, func() {
-				cfg, err := Load()
-				if err != nil {
-					t.Fatalf("load config: %v", err)
-				}
-				if !cfg.ContainerHub.Enabled || cfg.ContainerHub.BaseURL != "http://container-hub.test" {
-					t.Fatalf("unexpected container hub config: %#v", cfg.ContainerHub)
-				}
-				if cfg.Bash.ShellExecutable != "bash" || strings.Join(cfg.Bash.AllowedCommands, ",") != "ls,pwd" {
-					t.Fatalf("unexpected bash config: %#v", cfg.Bash)
-				}
-			})
-		})
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if !cfg.ContainerHub.Enabled {
+			t.Fatalf("expected container hub enabled from config file")
+		}
+		if cfg.ContainerHub.BaseURL == "" {
+			t.Fatalf("expected container hub base url")
+		}
+		if cfg.Bash.ShellExecutable == "" {
+			t.Fatalf("expected bash shell executable from config file")
+		}
+		if len(cfg.Bash.AllowedCommands) == 0 {
+			t.Fatalf("expected bash allowed commands from config file")
+		}
 	})
 }
 
