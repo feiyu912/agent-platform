@@ -507,9 +507,6 @@ func TestInvokeHostBashSoftSecurityRequiresApproval(t *testing.T) {
 	if result.Error != "bash_security_approval_required" {
 		t.Fatalf("expected bash_security_approval_required, got %#v", result)
 	}
-	if result.Structured["fingerprint"] == "" || result.Structured["ruleKey"] == "" || result.Structured["command"] != "printf ok > owner.md" {
-		t.Fatalf("security approval metadata missing: %#v", result.Structured)
-	}
 }
 
 func TestInvokeHostBashConsumesMatchingSoftSecurityApproval(t *testing.T) {
@@ -617,9 +614,6 @@ func TestInvokeHostBashAccessPolicyRequiresApprovalForOutsidePath(t *testing.T) 
 	}
 	if result.Error != "bash_access_approval_required" {
 		t.Fatalf("expected bash_access_approval_required, got %#v", result)
-	}
-	if result.Structured["fingerprint"] == "" || result.Structured["ruleKey"] == "" || result.Structured["command"] != "cat "+secret {
-		t.Fatalf("access approval metadata missing: %#v", result.Structured)
 	}
 }
 

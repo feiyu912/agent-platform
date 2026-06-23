@@ -35,7 +35,7 @@ func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[strin
 	case bashsec.ReviewAllow:
 	case bashsec.ReviewRequiresApproval:
 		if !consumeBashSecurityApproval(execCtx, securityReview.Fingerprint) {
-			return bashApprovalRequired("bash_security_approval_required", command, securityReview.Reason, securityReview.Fingerprint, securityReview.RuleKey), nil
+			return ToolExecutionResult{Output: securityReview.Reason, Error: "bash_security_approval_required", ExitCode: -1}, nil
 		}
 	default:
 		return ToolExecutionResult{Output: securityReview.Reason, Error: "bash_security_blocked", ExitCode: -1}, nil
@@ -57,7 +57,7 @@ func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[strin
 	case accesspolicy.DecisionAllow, accesspolicy.DecisionAutoApproved:
 	case accesspolicy.DecisionRequiresApproval:
 		if !accesspolicy.ConsumeApproval(execCtx, accessReview) {
-			return bashApprovalRequired("bash_access_approval_required", command, accessReview.Reason, accessReview.Fingerprint, accessReview.RuleKey), nil
+			return ToolExecutionResult{Output: accessReview.Reason, Error: "bash_access_approval_required", ExitCode: -1}, nil
 		}
 	default:
 		return ToolExecutionResult{Output: accessReview.Reason, Error: "bash_access_blocked", ExitCode: -1}, nil
@@ -120,14 +120,6 @@ func (t *RuntimeToolExecutor) invokeHostBash(ctx context.Context, args map[strin
 		appendBashAccessPolicyMetadata(&result, accessReview, stdout, stderr, workingDir, exitCode)
 	}
 	return result, nil
-}
-
-func bashApprovalRequired(code, command, message, fingerprint, ruleKey string) ToolExecutionResult {
-	structured := map[string]any{
-		"error": code, "message": strings.TrimSpace(message), "command": strings.TrimSpace(command),
-		"fingerprint": strings.TrimSpace(fingerprint), "ruleKey": strings.TrimSpace(ruleKey),
-	}
-	return ToolExecutionResult{Output: strings.TrimSpace(message), Structured: structured, Error: code, ExitCode: -1}
 }
 
 func cleanupBashOutputFile(file *os.File) {
