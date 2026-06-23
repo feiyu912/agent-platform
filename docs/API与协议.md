@@ -4,6 +4,8 @@
 
 运行时提供 HTTP REST、SSE 与 WebSocket 三类协议入口。REST 承载 catalog、chat、automation、memory、resource 等请求；`POST /api/query` 使用 SSE 返回实时 run stream；`GET /ws` 是 WebSocket 控制面，复用一批 `/api/*` route，并用 `stream` frame 承载实时事件。
 
+普通 agent 的 query 在准备阶段只选择一次执行引擎，并把结果固定到本次请求。HTTP sync、HTTP async/SSE 和 WebSocket query 使用同一选择规则；approval submit、attach 以及从持久化 awaiting 恢复的 continuation 继续使用对应 run 的选择边界。选定引擎开始 `Stream` 后不做运行期 fallback。proxy agent 不进入 ZenForge selector，继续使用已有 HTTP/WS proxy 路由。配置和灰度方式见 [ZenForge 引擎](ZenForge引擎.md)。
+
 所有非 SSE HTTP JSON 接口统一返回：
 
 ```json

@@ -59,7 +59,7 @@
 
 ### 前置要求
 
-- Go 1.22 或兼容版本
+- Go 1.26（唯一支持版本）
 - Docker / Docker Compose（如需容器运行）
 - 可用的 provider / model 注册文件（放在 `runtime/registries/`）
 
@@ -207,6 +207,28 @@ Provider `apiKey` 按明文字符串读取：
 
 详细配置见 [配置化说明](./docs/配置化说明.md)。
 
+### ZenForge 引擎灰度接入
+
+默认请求仍使用 `legacy` 引擎。可在 `configs/runtime.yml` 启用 ZenForge，并按 agent、chat、run 灰度；匹配优先级为 `run > chat > agent > global`，覆盖值只能是 `legacy` 或 `zenforge`：
+
+```yaml
+zenforge:
+  enabled: true
+  fallback-on-init-error: true
+  agent-overrides:
+    default_agent: zenforge
+  chat-overrides:
+    chat-canary: legacy
+  run-overrides:
+    run-canary: zenforge
+```
+
+环境变量等价入口为 `ZENFORGE_ENABLED`、`ZENFORGE_FALLBACK_ON_INIT_ERROR`、`ZENFORGE_AGENT_OVERRIDES`、`ZENFORGE_CHAT_OVERRIDES` 和 `ZENFORGE_RUN_OVERRIDES`；override 使用逗号分隔的 `key=legacy|zenforge`。
+
+`fallback-on-init-error` 仅在 ZenForge 单例初始化失败时回退到 `legacy`。请求选定引擎并开始 `Stream` 后，运行错误不会切换引擎。HTTP sync/async、SSE、WebSocket、approval submit、attach 与可恢复 awaiting continuation 均使用选定引擎；proxy agent 继续走原有 proxy 路由。ZenForge checkpoint/event 状态写入 `${CHATS_DIR}/.zenforge/`，启用前应确保该目录可写并纳入与 chat 一致的备份策略。
+
+完整的启用、迁移、验证和协议边界见 [ZenForge 引擎](./docs/ZenForge引擎.md)。
+
 ## 4. 部署
 
 ### 容器构建
@@ -302,6 +324,7 @@ docker compose logs -f
 ## 文档索引
 
 - [智能体配置说明](./docs/智能体配置说明.md)
+- [ZenForge 引擎](./docs/ZenForge引擎.md)
 - [配置化说明](./docs/配置化说明.md)
 - [工具目录权限](./docs/工具目录权限.md)
 - [真流式和H2A](./docs/真流式和H2A.md)
