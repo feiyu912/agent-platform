@@ -3996,13 +3996,7 @@ func TestAwaitHITLApprovalBatchAndContinue_HostUsesUnifiedBashToolName(t *testin
 		done <- stream.awaitHITLApprovalBatchAndContinue()
 	}()
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if stream.execCtx.CurrentToolName == "bash" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForRunState(t, runControl, contracts.RunLoopStateWaitingSubmit)
 	if stream.execCtx.CurrentToolName != "bash" {
 		t.Fatalf("expected CurrentToolName to be bash while awaiting approval, got %q", stream.execCtx.CurrentToolName)
 	}
